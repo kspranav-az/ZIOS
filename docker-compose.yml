@@ -3,8 +3,8 @@
 # Everything a developer or CI runner needs to run/test the platform locally,
 # without touching real third-party providers. Real integrations (LLM, STT/TTS,
 # WhatsApp, Razorpay, Google OAuth) are wired only in their scheduled phases —
-# see phases/README.md. Application services (api, web, ai-orchestrator) get
-# their own Dockerfiles and join this compose file in Phase 00.
+# see phases/README.md. Application services (api, ai-orchestrator) joined this
+# compose file in Phase 00.
 #
 # Usage:
 #   cp .env.example .env
@@ -21,11 +21,11 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
     ports:
-      - "${POSTGRES_PORT}:5432"
+      - '${POSTGRES_PORT}:5432'
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}']
       interval: 5s
       timeout: 3s
       retries: 10
@@ -33,13 +33,13 @@ services:
   redis:
     image: redis:7-alpine
     container_name: zios-redis
-    command: ["redis-server", "--appendonly", "yes"]
+    command: ['redis-server', '--appendonly', 'yes']
     ports:
-      - "${REDIS_PORT}:6379"
+      - '${REDIS_PORT}:6379'
     volumes:
       - redisdata:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ['CMD', 'redis-cli', 'ping']
       interval: 5s
       timeout: 3s
       retries: 10
@@ -48,17 +48,17 @@ services:
     # S3-compatible object storage (media, artifacts, reports)
     image: minio/minio:latest
     container_name: zios-minio
-    command: ["server", "/data", "--console-address", ":9001"]
+    command: ['server', '/data', '--console-address', ':9001']
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
     ports:
-      - "${MINIO_API_PORT}:9000"
-      - "${MINIO_CONSOLE_PORT}:9001"
+      - '${MINIO_API_PORT}:9000'
+      - '${MINIO_CONSOLE_PORT}:9001'
     volumes:
       - miniodata:/data
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      test: ['CMD', 'mc', 'ready', 'local']
       interval: 5s
       timeout: 3s
       retries: 10
@@ -89,10 +89,10 @@ services:
     image: axllent/mailpit:latest
     container_name: zios-mailpit
     ports:
-      - "${MAILPIT_SMTP_PORT}:1025"
-      - "${MAILPIT_UI_PORT}:8025"
+      - '${MAILPIT_SMTP_PORT}:1025'
+      - '${MAILPIT_UI_PORT}:8025'
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8025"]
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://localhost:8025']
       interval: 5s
       timeout: 3s
       retries: 10
@@ -101,18 +101,75 @@ services:
     # Self-hosted WebRTC SFU for voice/video interviews (Phase 07+)
     image: livekit/livekit-server:latest
     container_name: zios-livekit
-    command: ["--dev", "--bind", "0.0.0.0"]
+    command: ['--dev', '--bind', '0.0.0.0']
     ports:
-      - "${LIVEKIT_PORT}:7880"          # HTTP / WebSocket signalling
-      - "7881:7881"                     # RTC over TCP
-      - "50000-50060:50000-50060/udp"   # RTC over UDP (small dev range)
+      - '${LIVEKIT_PORT}:7880' # HTTP / WebSocket signalling
+      - '7881:7881' # RTC over TCP
+      - '50000-50060:50000-50060/udp' # RTC over UDP (small dev range)
     environment:
-      LIVEKIT_KEYS: "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"
+      LIVEKIT_KEYS: '${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}'
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:7880"]
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://localhost:7880']
       interval: 5s
       timeout: 3s
       retries: 10
+
+  api:
+    # NestJS modular monolith — Phase 00 skeleton (health endpoint only)
+    build:
+      context: .
+      dockerfile: services/api/Dockerfile
+    container_name: zios-api
+    environment:
+      NODE_ENV: production
+      PORT: '3000'
+      LOG_LEVEL: info
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_URL: redis://redis:6379
+    ports:
+      - '${API_PORT}:3000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3000/healthz').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+
+  ai-orchestrator:
+    # FastAPI AI orchestration worker service — Phase 00 skeleton
+    build:
+      context: services/ai-orchestrator
+    container_name: zios-ai-orchestrator
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - '${ORCHESTRATOR_PORT}:8000'
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'python',
+          '-c',
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=2)",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
 
 volumes:
   pgdata:
