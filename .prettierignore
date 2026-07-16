@@ -1,0 +1,11 @@
+node_modules
+dist
+build
+coverage
+.venv
+__pycache__
+.data
+AI-Interview-Platform
+pnpm-lock.yaml
+uv.lock
+CHANGELOG.md
