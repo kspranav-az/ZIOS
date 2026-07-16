@@ -28,7 +28,7 @@ Employers can sign up, land in an org workspace, and navigate a shell that alrea
 
 - `AuthProvider` port with `EmailOtpAdapter` now; `GoogleOAuthAdapter` slots in Phase 06 without touching call sites
 - Centralized authorization guard (no scattered `if role ==` checks — Blueprint §18.2); policy table for route → role
-- Frontend: React 19 + Vite + Tailwind 4 (same stack as the reference); UI tokens as CSS variables so the theme stays single-sourced
+- Frontend: React 19 + Vite + Tailwind 4 (same stack as the reference) but **TypeScript only — all components/modules are `.tsx`/`.ts`, zero `.jsx` files**; the reference clone's JSX is the design source, ported to strictly-typed TSX (typed props, typed theme tokens); UI tokens as CSS variables so the theme stays single-sourced
 
 ## Third-party integrations allowed this phase
 

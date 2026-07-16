@@ -51,6 +51,7 @@ Real third-party integrations are **scheduled, not incidental**. Each phase file
 
 ## 7. Architecture guardrails (from the Blueprint)
 
+- **Languages:** TypeScript strict for all JS/TS code — frontend files are `.tsx`/`.ts` only (no `.jsx` anywhere; the design reference's JSX is ported to typed TSX, never copied); Python (ruff + mypy) for the AI orchestration service.
 - Modular monolith core (NestJS) + separate AI orchestration workers (Python); hot planes (media/speech/eval) scale independently.
 - Bounded contexts own their schemas; no shared tables across contexts; cross-context communication via contracts/events (outbox pattern).
 - The interview session is a state machine and a saga, not request-response. Every state transition emits an event.

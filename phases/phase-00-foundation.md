@@ -10,7 +10,7 @@ Stand up a repo, toolchain, CI, and Docker-first dev environment that every late
 
 **In**
 - Monorepo scaffold (pnpm workspaces): `apps/` (web apps), `services/` (api, ai-orchestrator), `packages/` (shared-types, config), `infra/` (docker, migrations)
-- Toolchain: TypeScript strict everywhere; ESLint + Prettier + commitlint; Python 3.12 + ruff + mypy for the AI service; Husky pre-commit hooks
+- Toolchain: TypeScript strict everywhere (web apps are `.tsx`/`.ts` only — `.jsx` rejected by lint); ESLint + Prettier + commitlint; Python 3.12 + ruff + mypy for the AI service; Husky pre-commit hooks
 - Base `Dockerfile`s (multi-stage) for `api` (NestJS skeleton) and `ai-orchestrator` (FastAPI skeleton); both join `docker-compose.yml`
 - CI (GitHub Actions): lint → typecheck → unit tests → build images → integration tests against compose services; branch protection on `main`
 - Migration tooling (expand-migrate-contract) + initial schema migration for `org`, `user`
