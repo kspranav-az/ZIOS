@@ -8,12 +8,12 @@ Two products on one shared AI interview platform, built India-first:
 
 ## Read these first
 
-| Document | Role |
-|---|---|
-| [`docs/AI Interview Ecosystem PRD - MVP Employer Platform.md`](docs/AI%20Interview%20Ecosystem%20PRD%20-%20MVP%20Employer%20Platform.md) | **Governs scope.** The M1 contract: epics E1–E14, FR IDs, X1–X10 exit criteria, in/out scope. |
-| [`docs/AI Interview Ecosystem Blueprint.md`](docs/AI%20Interview%20Ecosystem%20Blueprint.md) | **Governs architecture depth** where the PRD is silent (AI architecture, cost model, compliance, long-term vision). |
-| [`phases/README.md`](phases/README.md) | Phase-wise implementation plan with verification/validation checklists and the git workflow between phases. |
-| [`AGENTS.md`](AGENTS.md) | Engineering conventions every contributor (human or agent) must follow. |
+| Document                                                                                                                                 | Role                                                                                                                |
+| ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| [`docs/AI Interview Ecosystem PRD - MVP Employer Platform.md`](docs/AI%20Interview%20Ecosystem%20PRD%20-%20MVP%20Employer%20Platform.md) | **Governs scope.** The M1 contract: epics E1–E14, FR IDs, X1–X10 exit criteria, in/out scope.                       |
+| [`docs/AI Interview Ecosystem Blueprint.md`](docs/AI%20Interview%20Ecosystem%20Blueprint.md)                                             | **Governs architecture depth** where the PRD is silent (AI architecture, cost model, compliance, long-term vision). |
+| [`phases/README.md`](phases/README.md)                                                                                                   | Phase-wise implementation plan with verification/validation checklists and the git workflow between phases.         |
+| [`AGENTS.md`](AGENTS.md)                                                                                                                 | Engineering conventions every contributor (human or agent) must follow.                                             |
 
 Where the two docs conflict on sequencing, **the PRD wins** (Meridian ships first; Ascend in M2).
 
@@ -33,6 +33,28 @@ docker compose ps           # wait until all services are healthy
 
 Real third-party providers (LLM, STT/TTS, WhatsApp, Razorpay, Google OAuth) are **deliberately deferred to their scheduled phases** — early phases build against provider-agnostic interfaces with local stubs. See `phases/README.md`.
 
+## Development
+
+Prerequisites: Node 22, pnpm 11, uv (Python tooling), Docker.
+
+```bash
+cp .env.example .env
+pnpm install            # workspace deps + git hooks
+docker compose up -d    # postgres · redis · minio(S3) · mailpit · livekit · api · ai-orchestrator
+docker compose ps       # wait until all services are healthy
+
+pnpm dev                # api (nest watch, :3000) + ai-orchestrator (uvicorn, :8000)
+pnpm test               # unit tests across all workspaces (vitest + pytest)
+pnpm lint               # eslint (incl. module-boundary rule) + ruff
+pnpm typecheck          # tsc --noEmit + mypy strict
+pnpm migrate            # apply pending DB migrations (alias: pnpm migrate up)
+pnpm migrate down       # roll back the last migration
+```
+
+Health checks: `curl localhost:3000/healthz` (api), `curl localhost:8000/healthz` (ai-orchestrator).
+
+Layout: `apps/` (web apps, Phase 01/03) · `services/api` (NestJS modular monolith) · `services/ai-orchestrator` (FastAPI) · `packages/` (shared-types, config) · `infra/migrations` (node-pg-migrate). Decisions live in [`docs/adr/`](docs/adr/).
+
 ## Status
 
-Pre-implementation. Phase 00 (engineering foundation) is the entry point: [`phases/phase-00-foundation.md`](phases/phase-00-foundation.md).
+Phase 00 (engineering foundation) scaffolded: pnpm-workspace monorepo, both skeleton services healthy in compose with structured JSON logging and correlation IDs, migration tooling (`org`/`app_user`), ESLint/Prettier/commitlint/Husky gates with a module-boundary lint rule, CI workflow, and ADRs 0001–0003. Entry point: [`phases/phase-00-foundation.md`](phases/phase-00-foundation.md).
