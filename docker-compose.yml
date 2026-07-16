@@ -1,0 +1,120 @@
+# InterviewOS — local development & test infrastructure
+#
+# Everything a developer or CI runner needs to run/test the platform locally,
+# without touching real third-party providers. Real integrations (LLM, STT/TTS,
+# WhatsApp, Razorpay, Google OAuth) are wired only in their scheduled phases —
+# see phases/README.md. Application services (api, web, ai-orchestrator) get
+# their own Dockerfiles and join this compose file in Phase 00.
+#
+# Usage:
+#   cp .env.example .env
+#   docker compose up -d
+#   docker compose ps          # all services should be healthy
+#   docker compose down -v     # reset all local data
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: zios-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "${POSTGRES_PORT}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: zios-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT}:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio:
+    # S3-compatible object storage (media, artifacts, reports)
+    image: minio/minio:latest
+    container_name: zios-minio
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    ports:
+      - "${MINIO_API_PORT}:9000"
+      - "${MINIO_CONSOLE_PORT}:9001"
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio-init:
+    # One-shot bucket provisioning; exits when done
+    image: minio/mc:latest
+    container_name: zios-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD};
+      mc mb --ignore-existing local/${MINIO_BUCKET_MEDIA};
+      mc mb --ignore-existing local/${MINIO_BUCKET_ARTIFACTS};
+      mc mb --ignore-existing local/${MINIO_BUCKET_REPORTS};
+      "
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_BUCKET_MEDIA: ${MINIO_BUCKET_MEDIA}
+      MINIO_BUCKET_ARTIFACTS: ${MINIO_BUCKET_ARTIFACTS}
+      MINIO_BUCKET_REPORTS: ${MINIO_BUCKET_REPORTS}
+
+  mailpit:
+    # Catches all outbound email in dev/test (invites, OTPs, reminders)
+    image: axllent/mailpit:latest
+    container_name: zios-mailpit
+    ports:
+      - "${MAILPIT_SMTP_PORT}:1025"
+      - "${MAILPIT_UI_PORT}:8025"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8025"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  livekit:
+    # Self-hosted WebRTC SFU for voice/video interviews (Phase 07+)
+    image: livekit/livekit-server:latest
+    container_name: zios-livekit
+    command: ["--dev", "--bind", "0.0.0.0"]
+    ports:
+      - "${LIVEKIT_PORT}:7880"          # HTTP / WebSocket signalling
+      - "7881:7881"                     # RTC over TCP
+      - "50000-50060:50000-50060/udp"   # RTC over UDP (small dev range)
+    environment:
+      LIVEKIT_KEYS: "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:7880"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:
+  redisdata:
+  miniodata:
