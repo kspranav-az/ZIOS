@@ -1,0 +1,11 @@
+{
+  "extends": "@zios/config/tsconfig/service.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "outDir": "dist",
+    "paths": {
+      "@/*": ["src/*"]
+    }
+  },
+  "include": ["src/**/*", "vitest.config.ts", "vitest.setup.ts"]
+}
