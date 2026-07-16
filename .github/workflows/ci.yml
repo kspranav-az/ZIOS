@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  checks:
+    name: Lint, typecheck, unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Build TypeScript packages
+        run: pnpm build
+
+  docker-build:
+    name: Build Docker images
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build api image
+        run: docker build -f services/api/Dockerfile -t zios-api:ci .
+
+      - name: Build ai-orchestrator image
+        run: docker build -f services/ai-orchestrator/Dockerfile -t zios-ai-orchestrator:ci services/ai-orchestrator
+
+  compose-smoke:
+    name: Compose smoke test
+    runs-on: ubuntu-latest
+    needs: [checks, docker-build]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare env
+        run: cp .env.example .env
+
+      - name: Start the full stack
+        run: docker compose up -d --build --wait
+
+      - name: Smoke-test health endpoints
+        run: |
+          curl -fsS http://localhost:3000/healthz | grep '"status":"ok"'
+          curl -fsS http://localhost:8000/healthz | grep '"status":"ok"'
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
