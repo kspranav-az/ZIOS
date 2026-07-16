@@ -37,6 +37,8 @@ Swap every stub for real AI behind a production-grade LLM gateway: JD generation
 
 **LLM providers (2), Google OAuth.** Nothing else.
 
+> **Mock-credential mode (this run):** gateway, routing, budgets, registry, guardrails and all adapters are built for real, but providers are `MockLlmAdapter` (fixture-driven generation/conductor/judges) and `MockOAuthAdapter` (dev login) passing the same contract suites. **Deferred until real keys:** X2 real generation quality · FR-E7-2 relevance ≥ 90% with a real model · judge-agreement/adjudication economics · X7 real COGS · real Google sign-in (FR-E1-1). The MVP-0 gate demo runs on mocks; the tag is recorded `v0.1.0-mvp0-mock` and the gate re-runs at credential handover.
+
 ## Testing strategy
 
 - Contract: stub vs real adapter parity on the shared suite

@@ -38,6 +38,8 @@ The differentiator: a natural, low-latency **voice interview** that works on Ind
 
 **STT provider, TTS provider, LiveKit (production credentials/config).** LLM already live from Phase 06.
 
+> **Mock-credential mode (this run):** LiveKit runs self-hosted in Docker, so rooms/media/recording are real. `MockSttAdapter` (scripted streaming partials + final transcripts) and `MockTtsAdapter` (synthetic audio streamed sentence-by-sentence) sit behind `SttPort`/`TtsPort` with realistic injected timings, so the turn loop, barge-in, degradation ladders, and recovery are genuinely exercised. **Deferred until real keys:** X6 real latency (P50 ≤ 1.5 s / P95 ≤ 2.5 s) · Hinglish WER budget · voice naturalness panel · X7 COGS. Exit gate becomes: voice interview completes E2E on a throttled-4G profile with the mock speech adapters and full turn-latency telemetry captured.
+
 ## Testing strategy
 
 - Contract: STT/TTS stub vs real adapters on shared suite (WER fixture set incl. Hinglish code-switch samples)

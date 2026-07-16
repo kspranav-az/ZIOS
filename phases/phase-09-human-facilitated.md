@@ -36,6 +36,8 @@ A human interviewer can run a scheduled live video interview on the same link in
 
 None new.
 
+> **Mock-credential mode (this run):** fully executable — rooms, cockpit, scheduling, .ics, and scorecards are all local/self-hosted. Transcription and auto-notes consume the Phase 07 mock speech adapters; only transcription *quality* (WER) and notes quality are credential-gated and re-checked at handover.
+
 ## Testing strategy
 
 - Unit: slot activation window (±10 min), coverage tracking, scorecard validation

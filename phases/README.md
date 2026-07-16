@@ -31,6 +31,17 @@ Early phases build against **ports (interfaces) + local stubs** so the entire pr
 | # | Phase | PRD coverage | Gate |
 |---|---|---|---|
 | 00 | [Engineering foundation](phase-00-foundation.md) | infra, CI/CD, conventions, lead-time applications | Repo + CI + compose green |
+
+> **Execution mode — mock-credential run (phases 00–09):** this run executes with
+> fixture-driven mock adapters for the credential-gated providers (`MockLlmAdapter`,
+> `MockSttAdapter`, `MockTtsAdapter`, `MockOAuthAdapter`) behind the same ports and
+> contract suites. LiveKit is self-hosted locally, so media transport is real.
+> **Credential-gated items deferred to key handover (NOT validated in this run):**
+> X2 real generation quality · FR-E7-2 follow-up relevance ≥ 90% with a real model ·
+> judge-agreement economics · X6 real voice latency · X7 real COGS · Hinglish WER ·
+> real Google sign-in (FR-E1-1) · voice naturalness panel. Each affected phase file
+> lists its deferred items; the MVP-0 tag is recorded as `v0.1.0-mvp0-mock` and the
+> real AI/pilot gates re-run when credentials arrive.
 | 01 | [Identity, orgs & design system](phase-01-identity-orgs-design-system.md) | E1 | Signup → workspace ≤ 2 min |
 | 02 | [Interview Kit Builder & question bank](phase-02-kit-builder-question-bank.md) | E2, E4-1/4-3 | Kit CRUD → publish end-to-end |
 | 03 | [Invites & candidate text interview](phase-03-invites-candidate-text-interview.md) | E5, E6, E7 (text, stub AI) | Link → consent → text interview → recovery |

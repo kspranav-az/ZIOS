@@ -36,6 +36,8 @@ Add camera-on interviews and the baseline integrity stack — recording, snapsho
 
 None new (media infra from Phase 07).
 
+> **Mock-credential mode (this run):** fully executable — LiveKit is self-hosted and all proctoring signals (snapshots, tab/paste/silence events) are client/capture-side, so nothing here is credential-gated. Audio-derived markers (silence/background-voice) use the mock STT stream from Phase 07 and are re-checked against real STT at handover.
+
 ## Testing strategy
 
 - Unit: snapshot scheduler randomness bounds, event timeline ordering, disposition reason-code requirements
