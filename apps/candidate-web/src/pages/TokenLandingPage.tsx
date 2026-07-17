@@ -66,7 +66,12 @@ export function TokenLandingPage() {
             storeRecovery(data.session.id, recoveryToken);
             setResolvedData({ recoveryToken });
           }
-          navigate('/interview', { replace: true });
+          // Human-facilitated video interviews use the live room, not the AI text flow.
+          if (data.session.conductor === 'human' && data.session.mode === 'video') {
+            navigate('/live', { replace: true });
+          } else {
+            navigate('/interview', { replace: true });
+          }
           return;
         }
 

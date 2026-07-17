@@ -29,7 +29,14 @@ export function HumanLivePage() {
 
   const roomRef = useRef<Room | null>(null);
   const localVideoRef = useRef<LocalVideoTrack | null>(null);
-  const videoElementRef = useRef<HTMLVideoElement | null>(null);
+  const localVideoElementRef = useRef<HTMLVideoElement | null>(null);
+  const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
+
+  const [remoteVideoTrack, setRemoteVideoTrack] = useState<{
+    track: RemoteTrack;
+    participantIdentity: string;
+  } | null>(null);
+  const [interviewerJoined, setInterviewerJoined] = useState(false);
 
   const recoveryToken = contextRecoveryToken ?? recoveredRecoveryToken;
   const sessionId = contextSession?.id ?? recoveredSessionId;
@@ -73,12 +80,34 @@ export function HumanLivePage() {
 
         room.on(
           RoomEvent.TrackSubscribed,
-          (_track: RemoteTrack, publication: RemoteTrackPublication) => {
-            if (publication.kind === Track.Kind.Audio) {
-              publication.audioTrack?.attach();
+          (track: RemoteTrack, publication: RemoteTrackPublication, participant) => {
+            if (publication.kind === Track.Kind.Video) {
+              setRemoteVideoTrack({ track, participantIdentity: participant.identity });
+              if (remoteVideoRef.current) {
+                track.attach(remoteVideoRef.current);
+              }
+              setInterviewerJoined(true);
+            } else if (publication.kind === Track.Kind.Audio) {
+              track.attach();
             }
           },
         );
+        room.on(
+          RoomEvent.TrackUnsubscribed,
+          (track: RemoteTrack, publication: RemoteTrackPublication, participant) => {
+            if (publication.kind === Track.Kind.Video) {
+              setRemoteVideoTrack((current) =>
+                current?.participantIdentity === participant.identity ? null : current,
+              );
+              track.detach();
+              setInterviewerJoined(false);
+            } else if (publication.kind === Track.Kind.Audio) {
+              track.detach();
+            }
+          },
+        );
+        room.on(RoomEvent.ParticipantConnected, () => setInterviewerJoined(true));
+        room.on(RoomEvent.ParticipantDisconnected, () => setInterviewerJoined(false));
         room.on(RoomEvent.ConnectionQualityChanged, () => {
           setConnectionQuality('good');
         });
@@ -88,8 +117,8 @@ export function HumanLivePage() {
         const localVideo = room.localParticipant.getTrackPublication(Track.Source.Camera)
           ?.videoTrack as LocalVideoTrack | undefined;
         localVideoRef.current = localVideo ?? null;
-        if (localVideo && videoElementRef.current) {
-          localVideo.attach(videoElementRef.current);
+        if (localVideo && localVideoElementRef.current) {
+          localVideo.attach(localVideoElementRef.current);
         }
         setConnecting(false);
       } catch (err) {
@@ -111,12 +140,18 @@ export function HumanLivePage() {
     };
   }, [sessionId, recoveryToken]);
 
-  // Re-attach local video if the ref becomes available after connect.
+  // Re-attach local/remote video when the DOM refs become available after connect.
   useEffect(() => {
-    if (localVideoRef.current && videoElementRef.current) {
-      localVideoRef.current.attach(videoElementRef.current);
+    if (localVideoRef.current && localVideoElementRef.current) {
+      localVideoRef.current.attach(localVideoElementRef.current);
     }
-  }, []);
+  }, [connecting]);
+
+  useEffect(() => {
+    if (remoteVideoTrack?.track && remoteVideoRef.current) {
+      remoteVideoTrack.track.attach(remoteVideoRef.current);
+    }
+  }, [remoteVideoTrack]);
 
   const handleRetry = () => {
     setError(null);
@@ -176,18 +211,39 @@ export function HumanLivePage() {
             This interview is being recorded. Continuing means you consent to recording.
           </div>
 
-          <div className="relative overflow-hidden rounded-xl bg-surface-container-low">
-            <video
-              ref={videoElementRef}
-              autoPlay
-              playsInline
-              muted
-              className="aspect-video w-full object-cover"
-            />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="relative overflow-hidden rounded-xl bg-surface-container-low aspect-video">
+              <video
+                ref={remoteVideoRef}
+                autoPlay
+                playsInline
+                className="absolute inset-0 w-full h-full object-cover"
+              />
+              {!remoteVideoTrack && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center text-on-surface-variant p-4 text-center">
+                  <Icon name="person" className="text-4xl mb-2" />
+                  <p className="text-sm">Waiting for interviewer…</p>
+                </div>
+              )}
+            </div>
+            <div className="relative overflow-hidden rounded-xl bg-surface-container-low aspect-video">
+              <video
+                ref={localVideoElementRef}
+                autoPlay
+                playsInline
+                muted
+                className="absolute inset-0 w-full h-full object-cover"
+              />
+              <div className="absolute bottom-3 left-3 bg-black/60 text-white text-xs px-2 py-1 rounded-lg">
+                You
+              </div>
+            </div>
           </div>
 
           <p className="mt-4 text-body-md text-on-surface-variant">
-            Waiting for the interviewer to join. Keep your camera and microphone on.
+            {interviewerJoined
+              ? 'Interviewer joined. Keep your camera and microphone on.'
+              : 'Waiting for the interviewer to join. Keep your camera and microphone on.'}
           </p>
 
           {error && (

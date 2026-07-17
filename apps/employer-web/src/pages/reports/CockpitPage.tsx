@@ -45,6 +45,8 @@ export function CockpitPage() {
   );
   const [roomError, setRoomError] = useState<string>();
   const [connectNonce, setConnectNonce] = useState(0);
+  const [micEnabled, setMicEnabled] = useState(true);
+  const [cameraEnabled, setCameraEnabled] = useState(true);
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
@@ -138,6 +140,11 @@ export function CockpitPage() {
 
         room.on(RoomEvent.Connected, () => setConnectionStatus('connected'));
         room.on(RoomEvent.Disconnected, () => setConnectionStatus('error'));
+        room.on(RoomEvent.LocalTrackPublished, (publication) => {
+          if (publication.kind === Track.Kind.Video && localVideoRef.current) {
+            publication.videoTrack?.attach(localVideoRef.current);
+          }
+        });
 
         await room.connect(tokenResponse.livekit.url, tokenResponse.livekit.token);
         await room.localParticipant.enableCameraAndMicrophone();
@@ -166,6 +173,20 @@ export function CockpitPage() {
       remoteVideoTrack.track.attach(remoteVideoRef.current);
     }
   }, [remoteVideoTrack]);
+
+  const toggleMic = async () => {
+    const room = roomRef.current;
+    if (!room) return;
+    const publication = await room.localParticipant.setMicrophoneEnabled(!micEnabled);
+    setMicEnabled(publication !== undefined);
+  };
+
+  const toggleCamera = async () => {
+    const room = roomRef.current;
+    if (!room) return;
+    const publication = await room.localParticipant.setCameraEnabled(!cameraEnabled);
+    setCameraEnabled(publication !== undefined);
+  };
 
   /* ---- timers ---- */
   useEffect(() => {
@@ -306,6 +327,24 @@ export function CockpitPage() {
                 ? 'Connecting…'
                 : 'Room offline'}
           </Badge>
+          <Button
+            variant="outline"
+            icon={micEnabled ? 'mic' : 'mic_off'}
+            onClick={() => void toggleMic()}
+            disabled={connectionStatus !== 'connected'}
+            aria-label={micEnabled ? 'Mute microphone' : 'Unmute microphone'}
+          >
+            {micEnabled ? 'Mute' : 'Unmute'}
+          </Button>
+          <Button
+            variant="outline"
+            icon={cameraEnabled ? 'videocam' : 'videocam_off'}
+            onClick={() => void toggleCamera()}
+            disabled={connectionStatus !== 'connected'}
+            aria-label={cameraEnabled ? 'Turn off camera' : 'Turn on camera'}
+          >
+            {cameraEnabled ? 'Camera off' : 'Camera on'}
+          </Button>
           <Button icon="call_end" onClick={handleEndCall} loading={ending}>
             End call
           </Button>
