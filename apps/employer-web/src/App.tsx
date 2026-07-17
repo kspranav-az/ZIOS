@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { createBrowserRouter, Navigate, Outlet, RouterProvider } from 'react-router-dom';
 import { AuthProvider } from './auth/AuthContext';
 import { RequireAuth } from './auth/guards';
 import { ToastProvider } from './components/Toast';
@@ -16,6 +16,16 @@ import { KitBuilderPage } from './pages/kits/KitBuilderPage';
 import { KitPreviewPage } from './pages/kits/KitPreviewPage';
 import { DesignSystemPage } from './pages/design-system/DesignSystemPage';
 
+function RootProviders() {
+  return (
+    <AuthProvider>
+      <ToastProvider>
+        <Outlet />
+      </ToastProvider>
+    </AuthProvider>
+  );
+}
+
 /**
  * Route map:
  *   /login          public-only — email → OTP → verify (bounces signed-in users)
@@ -32,58 +42,58 @@ import { DesignSystemPage } from './pages/design-system/DesignSystemPage';
  *     /analytics               Analytics
  *   /design-system  public     — @zios/ui catalog
  */
+const router = createBrowserRouter([
+  {
+    element: <RootProviders />,
+    children: [
+      { path: '/login', element: <LoginPage /> },
+      {
+        path: '/accept-invite',
+        element: (
+          <RequireAuth>
+            <AcceptInvitePage />
+          </RequireAuth>
+        ),
+      },
+      {
+        path: '/welcome',
+        element: (
+          <RequireAuth>
+            <WelcomePage />
+          </RequireAuth>
+        ),
+      },
+      {
+        path: '/kits/:kitId/preview',
+        element: (
+          <RequireAuth>
+            <KitPreviewPage />
+          </RequireAuth>
+        ),
+      },
+      {
+        path: '/',
+        element: (
+          <RequireAuth>
+            <ShellLayout />
+          </RequireAuth>
+        ),
+        children: [
+          { index: true, element: <DashboardPage /> },
+          { path: 'kits', element: <KitsListPage /> },
+          { path: 'kits/new', element: <TemplateGalleryPage /> },
+          { path: 'kits/:kitId', element: <KitBuilderPage /> },
+          { path: 'candidates', element: <CandidatesPage /> },
+          { path: 'interviews', element: <InterviewsPage /> },
+          { path: 'analytics', element: <AnalyticsPage /> },
+        ],
+      },
+      { path: '/design-system', element: <DesignSystemPage /> },
+      { path: '*', element: <Navigate to="/" replace /> },
+    ],
+  },
+]);
+
 export function App() {
-  return (
-    <BrowserRouter>
-      <AuthProvider>
-        <ToastProvider>
-          <Routes>
-            <Route path="/login" element={<LoginPage />} />
-            <Route
-              path="/accept-invite"
-              element={
-                <RequireAuth>
-                  <AcceptInvitePage />
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/welcome"
-              element={
-                <RequireAuth>
-                  <WelcomePage />
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/kits/:kitId/preview"
-              element={
-                <RequireAuth>
-                  <KitPreviewPage />
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/"
-              element={
-                <RequireAuth>
-                  <ShellLayout />
-                </RequireAuth>
-              }
-            >
-              <Route index element={<DashboardPage />} />
-              <Route path="kits" element={<KitsListPage />} />
-              <Route path="kits/new" element={<TemplateGalleryPage />} />
-              <Route path="kits/:kitId" element={<KitBuilderPage />} />
-              <Route path="candidates" element={<CandidatesPage />} />
-              <Route path="interviews" element={<InterviewsPage />} />
-              <Route path="analytics" element={<AnalyticsPage />} />
-            </Route>
-            <Route path="/design-system" element={<DesignSystemPage />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </ToastProvider>
-      </AuthProvider>
-    </BrowserRouter>
-  );
+  return <RouterProvider router={router} />;
 }

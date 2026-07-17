@@ -66,12 +66,13 @@ export function QuestionCard({
   function changeType(next: QuestionType) {
     const patch: UpdateQuestionBody = { type: next };
     if (isMcq(next)) {
+      // Seed valid defaults — the api validates option text on every write.
       patch.options =
         question.options && question.options.length >= 2
           ? question.options
           : [
-              { id: uid(), text: '' },
-              { id: uid(), text: '' },
+              { id: uid(), text: 'Option 1' },
+              { id: uid(), text: 'Option 2' },
             ];
       // adaptive_ai is open-ended-only (§6.2) — drop it on the switch.
       if (question.followupPolicy === 'adaptive_ai') {
