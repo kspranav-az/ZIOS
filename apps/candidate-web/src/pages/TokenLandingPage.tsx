@@ -65,12 +65,16 @@ export function TokenLandingPage() {
           if (recoveryToken) {
             storeRecovery(data.session.id, recoveryToken);
             setResolvedData({ recoveryToken });
-          }
-          // Human-facilitated video interviews use the live room, not the AI text flow.
-          if (data.session.conductor === 'human' && data.session.mode === 'video') {
-            navigate('/live', { replace: true });
+            // Human-facilitated video interviews use the live room, not the AI text flow.
+            if (data.session.conductor === 'human' && data.session.mode === 'video') {
+              navigate('/live', { replace: true });
+            } else {
+              navigate('/interview', { replace: true });
+            }
           } else {
-            navigate('/interview', { replace: true });
+            // Recovery token is not available (new device / storage cleared);
+            // re-run consent so the candidate gets a fresh token.
+            navigate('/consent', { replace: true });
           }
           return;
         }
