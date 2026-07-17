@@ -25,6 +25,7 @@
     "@zios/ui": "workspace:*",
     "jspdf": "^3.0.1",
     "jspdf-autotable": "^5.0.2",
+    "livekit-client": "^2.20.1",
     "material-symbols": "^0.45.8",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

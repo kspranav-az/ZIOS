@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import {
   adminEmail,
+  API_BASE,
   candidateEmail,
   createCandidateInvite,
   createPublishedKit,
@@ -82,4 +83,44 @@ export async function completeInterviewViaApi(
 
 export function uniqueTag(prefix: string): string {
   return `${prefix}-${randomUUID().slice(0, 8)}`;
+}
+
+export async function scheduleInterview(
+  adminToken: string,
+  inviteId: string,
+  slotAt: Date,
+): Promise<void> {
+  const response = await postJson(
+    `/invites/${encodeURIComponent(inviteId)}/schedule`,
+    {
+      slotAt: slotAt.toISOString(),
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      interviewerIds: [],
+    },
+    { authorization: `Bearer ${adminToken}` },
+  );
+  if (!response.ok) {
+    throw new Error(`schedule failed: ${response.status} ${await response.text()}`);
+  }
+}
+
+export async function createHumanSession(
+  adminToken: string,
+  candidate: { name: string; email: string },
+): Promise<{ inviteId: string; sessionId: string; recoveryToken: string; token: string }> {
+  const { versionId } = await createPublishedKit(adminToken, 'video', 'none');
+  const token = await createCandidateInvite(adminToken, versionId, candidate, 'human');
+  const { recoveryToken } = await consentByToken(token, candidate);
+  const { session } = await resolveInviteToken(token);
+  if (!session) {
+    throw new Error('session not created after consent');
+  }
+  const inviteResponse = await fetch(`${API_BASE}/invites/by-token/${encodeURIComponent(token)}`, {
+    headers: { authorization: `Bearer ${adminToken}` },
+  });
+  if (!inviteResponse.ok) {
+    throw new Error(`resolve invite id failed: ${inviteResponse.status}`);
+  }
+  const inviteBody = (await inviteResponse.json()) as { invite: { id: string } };
+  return { inviteId: inviteBody.invite.id, sessionId: session.id, recoveryToken, token };
 }

@@ -135,7 +135,7 @@ export class SessionsService {
     const tokenHash = TokenService.hash(rawToken);
     return this.db.transaction(async (q) => {
       const inviteRow = await q.query(
-        `SELECT id, org_id, kit_version_id, candidate_id, otp_required, otp_verified_at, status, expires_at
+        `SELECT id, org_id, kit_version_id, candidate_id, otp_required, otp_verified_at, status, conductor, expires_at
          FROM invite WHERE token_hash = $1`,
         [tokenHash],
       );
@@ -148,6 +148,7 @@ export class SessionsService {
             otp_required: boolean;
             otp_verified_at: Date | null;
             status: string;
+            conductor: string;
             expires_at: Date;
           }
         | undefined;
@@ -216,6 +217,7 @@ export class SessionsService {
           inviteId: invite.id,
           kitVersionId: invite.kit_version_id,
           mode: snapshot.kit.settings.mode,
+          conductor: invite.conductor as InterviewSession['conductor'],
           status: 'consented',
           consentId: consent.id,
           recoveryTokenHash: TokenService.hash(rawRecovery),

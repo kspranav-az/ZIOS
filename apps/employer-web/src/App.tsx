@@ -12,6 +12,8 @@ import { AnalyticsPage } from './pages/shell/AnalyticsPage';
 import { InterviewsListPage } from './pages/reports/InterviewsListPage';
 import { InterviewDetailPage } from './pages/reports/InterviewDetailPage';
 import { ShareReportPage } from './pages/reports/ShareReportPage';
+import { CockpitPage } from './pages/reports/CockpitPage';
+import { ScorecardPage } from './pages/reports/ScorecardPage';
 import { KitsListPage } from './pages/kits/KitsListPage';
 import { TemplateGalleryPage } from './pages/kits/TemplateGalleryPage';
 import { KitBuilderPage } from './pages/kits/KitBuilderPage';
@@ -46,6 +48,8 @@ function RootProviders() {
  *     /candidates              Candidates
  *     /interviews              Interview pipeline (Phase 04 dashboard)
  *     /interviews/:sessionId   Evidence-linked report + transcript (Phase 04)
+ *     /interviews/:sessionId/cockpit   Live interviewer cockpit (Phase 09)
+ *     /interviews/:sessionId/scorecard Human scorecard (Phase 09)
  *     /analytics               Analytics
  *   /share/:token   public     — read-only shared report (Phase 04)
  *   /design-system  public     — @zios/ui catalog
@@ -96,6 +100,8 @@ const router = createBrowserRouter([
           { path: 'candidates', element: <CandidatesPage /> },
           { path: 'interviews', element: <InterviewsListPage /> },
           { path: 'interviews/:sessionId', element: <InterviewDetailPage /> },
+          { path: 'interviews/:sessionId/cockpit', element: <CockpitPage /> },
+          { path: 'interviews/:sessionId/scorecard', element: <ScorecardPage /> },
           { path: 'analytics', element: <AnalyticsPage /> },
         ],
       },

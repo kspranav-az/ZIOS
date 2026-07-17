@@ -23,6 +23,8 @@ export interface EvaluationReportRow {
   cost: number | null;
   prompt_versions: Record<string, unknown>;
   error_message: string | null;
+  scorecard_meta: Record<string, unknown>;
+  notes_id: string | null;
   started_at: Date | null;
   completed_at: Date | null;
   created_at: Date;
@@ -30,9 +32,15 @@ export interface EvaluationReportRow {
 }
 
 const COLUMNS =
-  'id, org_id, session_id, invite_id, kit_version_id, status, overall_recommendation, overall_confidence, communication_metrics, rubric_version, model_route, cost, prompt_versions, error_message, started_at, completed_at, created_at, updated_at';
+  'id, org_id, session_id, invite_id, kit_version_id, status, overall_recommendation, overall_confidence, communication_metrics, rubric_version, model_route, cost, prompt_versions, error_message, scorecard_meta, notes_id, started_at, completed_at, created_at, updated_at';
 
 export function mapReportRow(row: EvaluationReportRow): EvaluationReport {
+  const scorecardMeta = (row.scorecard_meta ?? {}) as {
+    submittedAt?: string;
+    submittedBy?: string;
+    prefillAccepted?: boolean;
+    editCount?: number;
+  };
   return {
     id: row.id,
     orgId: row.org_id,
@@ -48,6 +56,17 @@ export function mapReportRow(row: EvaluationReportRow): EvaluationReport {
     cost: row.cost === null ? null : Number(row.cost),
     promptVersions: row.prompt_versions,
     errorMessage: row.error_message,
+    scorecard:
+      scorecardMeta.submittedAt && scorecardMeta.submittedBy
+        ? {
+            submittedAt: scorecardMeta.submittedAt,
+            submittedBy: scorecardMeta.submittedBy,
+            prefillAccepted: scorecardMeta.prefillAccepted ?? false,
+            editCount: scorecardMeta.editCount ?? 0,
+          }
+        : null,
+    notes: null, // populated separately when needed
+    notesId: row.notes_id,
     startedAt: row.started_at?.toISOString() ?? null,
     completedAt: row.completed_at?.toISOString() ?? null,
     createdAt: row.created_at.toISOString(),
@@ -69,12 +88,13 @@ export class EvaluationRepository {
       rubricVersion?: string;
       modelRoute?: string;
       cost?: number;
+      notesId?: string | null;
     },
     q: Queryable,
   ): Promise<EvaluationReport> {
     const result = await q.query(
-      `INSERT INTO evaluation_report (org_id, session_id, invite_id, kit_version_id, status, rubric_version, model_route, cost, started_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
+      `INSERT INTO evaluation_report (org_id, session_id, invite_id, kit_version_id, status, rubric_version, model_route, cost, notes_id, started_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now())
        RETURNING ${COLUMNS}`,
       [
         input.orgId,
@@ -85,6 +105,7 @@ export class EvaluationRepository {
         input.rubricVersion ?? 'phase04-stub',
         input.modelRoute ?? 'stub-judge',
         input.cost ?? 0,
+        input.notesId ?? null,
       ],
     );
     return mapReportRow(result.rows[0] as EvaluationReportRow);
@@ -150,6 +171,52 @@ export class EvaluationRepository {
        WHERE id = $2`,
       [errorMessage, id],
     );
+  }
+
+  async updateScorecard(
+    id: string,
+    fields: {
+      overallRecommendation: number;
+      overallConfidence: number;
+      communicationMetrics: CommunicationMetrics;
+      cost?: number;
+      promptVersions?: Record<string, unknown>;
+      scorecardMeta: Record<string, unknown>;
+    },
+    q: Queryable,
+  ): Promise<EvaluationReport | null> {
+    const result = await q.query(
+      `UPDATE evaluation_report
+       SET status = 'completed',
+           overall_recommendation = $1,
+           overall_confidence = $2,
+           communication_metrics = $3::jsonb,
+           cost = $4,
+           prompt_versions = $5::jsonb,
+           scorecard_meta = $6::jsonb,
+           completed_at = now(),
+           updated_at = now()
+       WHERE id = $7
+       RETURNING ${COLUMNS}`,
+      [
+        fields.overallRecommendation,
+        fields.overallConfidence,
+        JSON.stringify(fields.communicationMetrics),
+        fields.cost ?? 0,
+        JSON.stringify(fields.promptVersions ?? {}),
+        JSON.stringify(fields.scorecardMeta),
+        id,
+      ],
+    );
+    const row = result.rows[0] as EvaluationReportRow | undefined;
+    return row ? mapReportRow(row) : null;
+  }
+
+  async updateNotesId(id: string, notesId: string, q: Queryable): Promise<void> {
+    await q.query('UPDATE evaluation_report SET notes_id = $1, updated_at = now() WHERE id = $2', [
+      notesId,
+      id,
+    ]);
   }
 
   async listByOrg(

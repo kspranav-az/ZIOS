@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import type {
   Candidate,
   EvaluationReport,
@@ -43,10 +43,12 @@ interface DetailState {
   kitTitle: string;
   sessionStatus: import('@zios/shared-types').SessionStatus;
   sessionMode: import('@zios/shared-types').InterviewMode;
+  sessionConductor: import('@zios/shared-types').SessionConductor;
 }
 
 export function InterviewDetailPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
+  const navigate = useNavigate();
   const { push: showToast } = useToast();
   const [state, setState] = useState<DetailState | null>(null);
   const [error, setError] = useState<string>();
@@ -81,6 +83,7 @@ export function InterviewDetailPage() {
         kitTitle: row.kitTitle,
         sessionStatus: row.session.status,
         sessionMode: row.session.mode,
+        sessionConductor: row.session.conductor,
       });
     } catch (err) {
       setError(userMessageForError(err));
@@ -193,6 +196,7 @@ export function InterviewDetailPage() {
     kitTitle,
     sessionStatus,
     sessionMode,
+    sessionConductor,
   } = state;
   const timeline = sortTimelineStages(sessionStatus);
   const hasReport = report.status === 'completed';
@@ -216,6 +220,27 @@ export function InterviewDetailPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
+          {sessionConductor === 'human' && sessionStatus === 'completed' && !hasReport && (
+            <Button
+              variant="secondary"
+              icon="assignment"
+              onClick={() => navigate(`/interviews/${sessionId}/scorecard`)}
+            >
+              Score interview
+            </Button>
+          )}
+          {sessionConductor === 'human' &&
+            (sessionStatus === 'consented' ||
+              sessionStatus === 'preflight' ||
+              sessionStatus === 'live') && (
+              <Button
+                variant="secondary"
+                icon="video_call"
+                onClick={() => navigate(`/interviews/${sessionId}/cockpit`)}
+              >
+                Join cockpit
+              </Button>
+            )}
           <Button variant="outline" icon="share" onClick={handleShare}>
             Share
           </Button>

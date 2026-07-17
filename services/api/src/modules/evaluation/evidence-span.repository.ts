@@ -33,7 +33,7 @@ export class EvidenceSpanRepository {
   async insert(
     input: {
       reportId: string;
-      transcriptId: string;
+      transcriptId: string | null;
       questionId: string;
       start: number;
       end: number;
@@ -63,5 +63,9 @@ export class EvidenceSpanRepository {
       [reportId],
     );
     return (result.rows as EvidenceSpanRow[]).map(mapEvidenceSpanRow);
+  }
+
+  async deleteByReportId(reportId: string, q: Queryable): Promise<void> {
+    await q.query('DELETE FROM evaluation_evidence_span WHERE report_id = $1', [reportId]);
   }
 }

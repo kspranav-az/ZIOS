@@ -83,7 +83,7 @@ export interface GuardrailResult {
 
 /** Evidence span referenced by mock judge fixtures. */
 export interface JudgeEvidenceSpan {
-  transcriptId: string;
+  transcriptId: string | null;
   questionId: string;
   start: number;
   end: number;
