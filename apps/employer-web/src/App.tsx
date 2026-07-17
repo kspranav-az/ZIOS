@@ -8,8 +8,10 @@ import { AcceptInvitePage } from './pages/auth/AcceptInvitePage';
 import { ShellLayout } from './pages/shell/ShellLayout';
 import { DashboardPage } from './pages/shell/DashboardPage';
 import { CandidatesPage } from './pages/shell/CandidatesPage';
-import { InterviewsPage } from './pages/shell/InterviewsPage';
 import { AnalyticsPage } from './pages/shell/AnalyticsPage';
+import { InterviewsListPage } from './pages/reports/InterviewsListPage';
+import { InterviewDetailPage } from './pages/reports/InterviewDetailPage';
+import { ShareReportPage } from './pages/reports/ShareReportPage';
 import { KitsListPage } from './pages/kits/KitsListPage';
 import { TemplateGalleryPage } from './pages/kits/TemplateGalleryPage';
 import { KitBuilderPage } from './pages/kits/KitBuilderPage';
@@ -38,8 +40,10 @@ function RootProviders() {
  *     /kits/new                Template gallery (FR-E2-7)
  *     /kits/:id                Kit builder (FR-E2-1…E2-5)
  *     /candidates              Candidates
- *     /interviews              Interviews
+ *     /interviews              Interview pipeline (Phase 04 dashboard)
+ *     /interviews/:sessionId   Evidence-linked report + transcript (Phase 04)
  *     /analytics               Analytics
+ *   /share/:token   public     — read-only shared report (Phase 04)
  *   /design-system  public     — @zios/ui catalog
  */
 const router = createBrowserRouter([
@@ -84,10 +88,12 @@ const router = createBrowserRouter([
           { path: 'kits/new', element: <TemplateGalleryPage /> },
           { path: 'kits/:kitId', element: <KitBuilderPage /> },
           { path: 'candidates', element: <CandidatesPage /> },
-          { path: 'interviews', element: <InterviewsPage /> },
+          { path: 'interviews', element: <InterviewsListPage /> },
+          { path: 'interviews/:sessionId', element: <InterviewDetailPage /> },
           { path: 'analytics', element: <AnalyticsPage /> },
         ],
       },
+      { path: '/share/:token', element: <ShareReportPage /> },
       { path: '/design-system', element: <DesignSystemPage /> },
       { path: '*', element: <Navigate to="/" replace /> },
     ],
