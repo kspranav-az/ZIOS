@@ -1,7 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { Module } from '@nestjs/common';
 import { LoggerModule } from 'nestjs-pino';
+import { AuthModule } from '@/modules/auth';
+import { DatabaseModule } from '@/modules/database';
 import { HealthModule } from '@/modules/health';
+import { OrgModule } from '@/modules/org';
+import { UsersModule } from '@/modules/users';
 
 @Module({
   imports: [
@@ -20,6 +24,10 @@ import { HealthModule } from '@/modules/health';
         },
       },
     }),
+    DatabaseModule,
+    UsersModule,
+    OrgModule,
+    AuthModule,
     HealthModule,
   ],
 })

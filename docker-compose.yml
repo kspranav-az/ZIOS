@@ -115,7 +115,7 @@ services:
       retries: 10
 
   api:
-    # NestJS modular monolith — Phase 00 skeleton (health endpoint only)
+    # NestJS modular monolith — Phase 00 skeleton + Phase 01 identity/auth
     build:
       context: .
       dockerfile: services/api/Dockerfile
@@ -126,6 +126,12 @@ services:
       LOG_LEVEL: info
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       REDIS_URL: redis://redis:6379
+      # Email+OTP sign-in (Phase 01): EmailSender port bound to Mailpit (ADR-0002)
+      EMAIL_ADAPTER: mailpit
+      SMTP_URL: smtp://mailpit:1025
+      MAIL_FROM: 'InterviewOS <no-reply@interviewos.local>'
+      WEB_BASE_URL: http://localhost:5173
+      CORS_ORIGIN: http://localhost:5173
     ports:
       - '${API_PORT}:3000'
     depends_on:
