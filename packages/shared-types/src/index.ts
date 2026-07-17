@@ -457,6 +457,7 @@ export interface Invite {
   otpRequired: boolean;
   otpVerifiedAt: string | null;
   status: InviteStatus;
+  conductor: SessionConductor;
   metadata: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
@@ -540,6 +541,8 @@ export interface CreateCandidateInviteBody {
   /** Default 7 days. */
   expiresInDays?: number;
   otpRequired?: boolean;
+  /** ai (default) or human-facilitated interviewer (Phase 09). */
+  conductor?: SessionConductor;
   metadata?: Record<string, unknown>;
 }
 
@@ -836,6 +839,12 @@ export interface EvaluationReport {
   cost: number | null;
   promptVersions: Record<string, unknown>;
   errorMessage: string | null;
+  /** Human-facilitated scorecard audit (Phase 09). */
+  scorecard: ScorecardSubmission | null;
+  /** Auto-generated or human interview notes (Phase 09). */
+  notes: InterviewNotes | null;
+  /** Internal DB pointer to the interview_notes row; null for AI-judged reports. */
+  notesId: string | null;
   startedAt: string | null;
   completedAt: string | null;
   createdAt: string;
@@ -851,6 +860,9 @@ export interface EvaluationScore {
   score: number;
   weight: number;
   evidenceSpanIds: string[];
+  /** ai = judged; ai_prefill = suggested starting point; human = interviewer scorecard (Phase 09). */
+  source?: ScoreSource;
+  scorerId?: string | null;
 }
 
 export interface EvidenceSpan {
@@ -946,6 +958,7 @@ export interface ReportDetailResponse {
   evidenceSpans: EvidenceSpan[];
   overrides: ScoreOverride[];
   transcript: SessionTranscript[];
+  notes: InterviewNotes | null;
 }
 
 export interface DashboardInterviewItem {
@@ -970,6 +983,7 @@ export interface PublicReportResponse {
   scores: EvaluationScore[];
   evidenceSpans: EvidenceSpan[];
   transcript: SessionTranscript[];
+  notes: InterviewNotes | null;
 }
 
 /* --------------------------------------------------------------------------
@@ -1081,4 +1095,119 @@ export interface RegenerateQuestionBody {
     topic?: string;
     type?: QuestionType;
   };
+}
+
+/* --------------------------------------------------------------------------
+ * Phase 09 — Human-Facilitated Mode
+ * (PRD E8 FR-E8-1…E8-5, E5 FR-E5-5, §15).
+ * ------------------------------------------------------------------------ */
+
+export type InterviewSlotStatus = 'scheduled' | 'rescheduled' | 'cancelled';
+
+export interface InterviewSlot {
+  id: string;
+  orgId: string;
+  inviteId: string;
+  sessionId: string | null;
+  slotAt: string;
+  timezone: string;
+  interviewerIds: string[];
+  status: InterviewSlotStatus;
+  rescheduleRequestedAt: string | null;
+  rescheduleReason: string | null;
+  requestedSlotAt: string | null;
+  icsSentAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ScheduleSlotBody {
+  slotAt: string;
+  timezone?: string;
+  interviewerIds?: string[];
+}
+
+export interface ScheduleSlotResponse {
+  slot: InterviewSlot;
+}
+
+export interface RescheduleRequestBody {
+  reason?: string;
+  requestedSlotAt?: string;
+}
+
+export interface RescheduleRequestResponse {
+  slot: InterviewSlot;
+}
+
+export type CoverageStatus = 'pending' | 'covered' | 'skipped';
+
+export interface SessionCoverage {
+  questionId: string;
+  status: CoverageStatus;
+  markedAt: string | null;
+  markedBy: string | null;
+}
+
+export interface MarkCoverageBody {
+  questionId: string;
+  action: 'cover' | 'skip' | 'reset';
+}
+
+export interface InterviewNotes {
+  id: string;
+  sessionId: string;
+  summary: string;
+  questionMapping: Array<{ questionId: string; prompt: string; note: string }>;
+  generatedBy: 'ai' | 'human';
+  generatedAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CockpitStateResponse {
+  session: InterviewSession;
+  candidate: Candidate;
+  kit: KitSnapshot;
+  slot: InterviewSlot | null;
+  coverage: SessionCoverage[];
+  transcript: SessionTranscript[];
+  notes: InterviewNotes | null;
+  scorecardPrefill: EvaluationScore[] | null;
+}
+
+export type ScoreSource = 'ai' | 'ai_prefill' | 'human';
+
+export interface ScorecardSubmission {
+  submittedAt: string;
+  submittedBy: string;
+  prefillAccepted: boolean;
+  editCount: number;
+}
+
+export interface HumanScorecardBody {
+  scores: Array<{
+    questionId: string;
+    criterionId: string;
+    criterionText: string;
+    score: number;
+    weight: number;
+    evidenceSpanIds?: string[];
+  }>;
+  prefillAccepted: boolean;
+  editCount: number;
+}
+
+export interface LiveTokenResponse {
+  session: InterviewSession;
+  livekit: {
+    url: string;
+    token: string;
+    roomName: string;
+  };
+}
+
+export interface LiveEndResponse {
+  session: InterviewSession;
+  reportId: string | null;
 }
