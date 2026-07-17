@@ -84,6 +84,9 @@ export class InvitesService {
         ? candidateInput.externalRef.trim()
         : undefined;
 
+    const conductor =
+      body?.conductor === 'human' || body?.conductor === 'ai' ? body.conductor : 'ai';
+
     return this.db.transaction(async (q) => {
       await this.loadVersionForWrite(orgId, kitVersionId, q);
       const candidate = await this.candidates.insert({ orgId, name, email, phone, externalRef }, q);
@@ -96,6 +99,7 @@ export class InvitesService {
           tokenHash: TokenService.hash(rawToken),
           expiresAt: this.expiryFromDays(body?.expiresInDays),
           otpRequired: body?.otpRequired === true,
+          conductor,
           metadata: body?.metadata,
         },
         q,

@@ -412,7 +412,7 @@ function judgeScoreFixture(variables: Record<string, unknown>): JudgeResult {
       score,
       weight: line.weight,
       evidenceSpan: {
-        transcriptId: firstRow?.id ?? '00000000-0000-0000-0000-000000000000',
+        transcriptId: firstRow?.id ?? null,
         questionId: question.id,
         start: 0,
         end,

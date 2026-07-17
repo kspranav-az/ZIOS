@@ -13,6 +13,7 @@ import { OverrideService } from './override.service';
 import { ShareLinkRepository } from './share-link.repository';
 import { ShareLinkService } from './share-link.service';
 import { PipelineLogRepository } from './pipeline-log.repository';
+import { InterviewNotesRepository } from './notes.repository';
 import { JUDGE_PORT } from './judge.port';
 
 @Module({
@@ -25,6 +26,7 @@ import { JUDGE_PORT } from './judge.port';
     OverrideRepository,
     ShareLinkRepository,
     PipelineLogRepository,
+    InterviewNotesRepository,
     EvaluationService,
     OverrideService,
     ShareLinkService,

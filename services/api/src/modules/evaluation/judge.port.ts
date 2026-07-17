@@ -10,7 +10,7 @@ import type {
  * justify a score. Coordinates are character offsets into answer_text.
  */
 export interface JudgeEvidenceSpan {
-  transcriptId: string;
+  transcriptId: string | null;
   questionId: string;
   start: number;
   end: number;

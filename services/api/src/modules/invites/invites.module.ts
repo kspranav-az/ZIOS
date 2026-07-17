@@ -35,6 +35,6 @@ import { RemindersService } from './reminders.service';
     RemindersCron,
     RemindersService,
   ],
-  exports: [InvitesService, CandidateOtpService],
+  exports: [InvitesService, CandidateOtpService, InvitesRepository],
 })
 export class InvitesModule {}

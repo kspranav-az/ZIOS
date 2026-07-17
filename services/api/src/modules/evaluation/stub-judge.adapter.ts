@@ -42,7 +42,7 @@ export class StubJudgeAdapter implements JudgePort {
     const answer = row?.answerText ?? '';
     const end = Math.min(80, answer.length);
     return {
-      transcriptId: row?.id ?? '00000000-0000-0000-0000-000000000000',
+      transcriptId: row?.id ?? null,
       questionId: row?.questionId ?? '',
       start: 0,
       end,

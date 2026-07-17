@@ -1,18 +1,24 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type {
+  AppUser,
   EvaluationReport,
+  HumanScorecardBody,
+  InterviewNotes,
+  InterviewSession,
   KitQuestion,
   KitSnapshot,
   SessionTranscript,
 } from '@zios/shared-types';
-import { DatabaseService } from '@/modules/database';
+import { DatabaseService, type Queryable } from '@/modules/database';
 import { LlmGateway } from '@/modules/llm-gateway';
 import { ApiException } from '@/common/errors';
+import { computeCommunicationMetrics } from './metrics';
 import { EvaluationRepository } from './evaluation.repository';
 import { EvaluationScoreRepository } from './score.repository';
 import { EvidenceSpanRepository } from './evidence-span.repository';
 import { PipelineLogRepository } from './pipeline-log.repository';
 import { OverrideRepository } from './override.repository';
+import { InterviewNotesRepository } from './notes.repository';
 import { JUDGE_PORT, type JudgePort } from './judge.port';
 
 interface SessionContext {
@@ -20,6 +26,7 @@ interface SessionContext {
   orgId: string;
   inviteId: string;
   kitVersionId: string;
+  conductor: InterviewSession['conductor'];
 }
 
 @Injectable()
@@ -31,6 +38,7 @@ export class EvaluationService {
     private readonly evidenceSpans: EvidenceSpanRepository,
     private readonly pipelineLogs: PipelineLogRepository,
     private readonly overrides: OverrideRepository,
+    private readonly notesRepo: InterviewNotesRepository,
     @Inject(JUDGE_PORT) private readonly judge: JudgePort,
     private readonly llmGateway: LlmGateway,
   ) {}
@@ -66,6 +74,30 @@ export class EvaluationService {
       const transcript = await this.loadTranscript(sessionId);
       const questions = await this.loadQuestions(session.kitVersionId);
       stages.push({ name: 'load_context', status: 'ok', ms: Date.now() - stageLoad });
+
+      // Human-facilitated sessions are scored by the interviewer via scorecard;
+      // they never receive an AI-judged report. We create a pending report so
+      // downstream lookups and the scorecard flow have a report id.
+      if (session.conductor === 'human') {
+        const report =
+          existing ??
+          (await this.db.transaction(async (q) =>
+            this.reports.insert(
+              {
+                orgId: session.orgId,
+                sessionId: session.id,
+                inviteId: session.inviteId,
+                kitVersionId: session.kitVersionId,
+                status: 'pending',
+                modelRoute: 'human-facilitated',
+              },
+              q,
+            ),
+          ));
+        stages.push({ name: 'human_mode_pending', status: 'ok', ms: Date.now() - stageLoad });
+        await this.pipelineLogs.updateCompleted(log.id, stages, Date.now() - startedAt, this.db);
+        return report;
+      }
 
       const report =
         existing ??
@@ -198,13 +230,31 @@ export class EvaluationService {
     if (!report || report.orgId !== orgId) {
       throw new ApiException(404, 'REPORT_NOT_FOUND', 'report not found');
     }
-    const [scores, evidenceSpans, overrides, transcript] = await Promise.all([
+    const [scores, evidenceSpans, overrides, transcript, notes] = await Promise.all([
       this.scores.listByReportId(report.id),
       this.evidenceSpans.listByReportId(report.id),
       this.overrides.listByReportId(report.id),
       this.loadTranscript(sessionId),
+      this.loadNotes(report),
     ]);
-    return { report, scores, evidenceSpans, overrides, transcript };
+    return { report: { ...report, notes }, scores, evidenceSpans, overrides, transcript, notes };
+  }
+
+  async findReportBySessionId(sessionId: string): Promise<EvaluationReport | null> {
+    return this.reports.findBySessionId(sessionId);
+  }
+
+  async listScores(reportId: string) {
+    return this.scores.listByReportId(reportId);
+  }
+
+  async attachNotes(reportId: string, notesId: string, q: Queryable): Promise<void> {
+    await this.reports.updateNotesId(reportId, notesId, q);
+  }
+
+  private async loadNotes(report: EvaluationReport): Promise<InterviewNotes | null> {
+    if (!report.notesId) return null;
+    return this.notesRepo.findById(report.notesId);
   }
 
   /**
@@ -217,12 +267,13 @@ export class EvaluationService {
     if (!report) {
       throw new ApiException(404, 'REPORT_NOT_FOUND', 'report not found');
     }
-    const [scores, evidenceSpans, transcript] = await Promise.all([
+    const [scores, evidenceSpans, transcript, notes] = await Promise.all([
       this.scores.listByReportId(report.id),
       this.evidenceSpans.listByReportId(report.id),
       this.loadTranscript(report.sessionId),
+      this.loadNotes(report),
     ]);
-    return { report, scores, evidenceSpans, transcript };
+    return { report: { ...report, notes }, scores, evidenceSpans, transcript, notes };
   }
 
   async listForOrg(
@@ -237,16 +288,196 @@ export class EvaluationService {
     return this.reports.listByOrg(orgId, filters);
   }
 
+  /**
+   * AI pre-fill for a human-facilitated scorecard. Reuses the judge on the
+   * existing transcript so the interviewer has an editable starting point.
+   * Any previous ai_prefill scores are replaced; human scores are untouched.
+   */
+  async prefillScorecard(orgId: string, sessionId: string, userId: string) {
+    const report = await this.findOrCreateHumanReport(orgId, sessionId);
+    const transcript = await this.loadTranscript(sessionId);
+    const questions = await this.loadQuestions(report.kitVersionId);
+    const judgeResult = await this.judge.evaluate(
+      { orgId, sessionId, kitVersionId: report.kitVersionId },
+      transcript,
+      questions,
+    );
+
+    await this.db.transaction(async (q) => {
+      await this.scores.deleteByReportId(report.id, q);
+      await this.evidenceSpans.deleteByReportId(report.id, q);
+      const spanIdByEvidence = new Map<string, string>();
+      for (const score of judgeResult.scores) {
+        const span = await this.evidenceSpans.insert(
+          {
+            reportId: report.id,
+            transcriptId: score.evidenceSpan.transcriptId,
+            questionId: score.evidenceSpan.questionId,
+            start: score.evidenceSpan.start,
+            end: score.evidenceSpan.end,
+            quoteText: score.evidenceSpan.quoteText,
+          },
+          q,
+        );
+        spanIdByEvidence.set(`${score.questionId}:${score.criterionId}`, span.id);
+      }
+      for (const score of judgeResult.scores) {
+        const spanId = spanIdByEvidence.get(`${score.questionId}:${score.criterionId}`);
+        if (!spanId) {
+          throw new Error(`missing evidence span for ${score.questionId}:${score.criterionId}`);
+        }
+        await this.scores.insert(
+          {
+            reportId: report.id,
+            questionId: score.questionId,
+            criterionId: score.criterionId,
+            criterionText: score.criterionText,
+            score: score.score,
+            weight: score.weight,
+            evidenceSpanIds: [spanId],
+            source: 'ai_prefill',
+            scorerId: userId,
+          },
+          q,
+        );
+      }
+    });
+
+    return this.findDetail(orgId, sessionId);
+  }
+
+  /**
+   * Submit a human-completed scorecard. Replaces all prior scores for the
+   * report, writes fresh evidence spans, and marks the report completed.
+   */
+  async submitHumanScorecard(
+    orgId: string,
+    sessionId: string,
+    user: AppUser,
+    body: HumanScorecardBody,
+  ) {
+    const report = await this.findOrCreateHumanReport(orgId, sessionId);
+    const transcript = await this.loadTranscript(sessionId);
+    const metrics = computeCommunicationMetrics(transcript);
+
+    const overall =
+      body.scores.length > 0
+        ? body.scores.reduce((sum: number, s) => sum + s.score * s.weight, 0) /
+          body.scores.reduce((sum: number, s) => sum + s.weight, 0)
+        : 0;
+
+    await this.db.transaction(async (q) => {
+      await this.scores.deleteByReportId(report.id, q);
+      await this.evidenceSpans.deleteByReportId(report.id, q);
+
+      const spanIdByEvidence = new Map<string, string>();
+      for (const score of body.scores) {
+        const span = await this.evidenceSpans.insert(
+          {
+            reportId: report.id,
+            transcriptId: null,
+            questionId: score.questionId,
+            start: 0,
+            end: 0,
+            quoteText: score.criterionText,
+          },
+          q,
+        );
+        spanIdByEvidence.set(`${score.questionId}:${score.criterionId}`, span.id);
+      }
+
+      for (const score of body.scores) {
+        const spanId = spanIdByEvidence.get(`${score.questionId}:${score.criterionId}`);
+        if (!spanId) {
+          throw new Error(`missing evidence span for ${score.questionId}:${score.criterionId}`);
+        }
+        await this.scores.insert(
+          {
+            reportId: report.id,
+            questionId: score.questionId,
+            criterionId: score.criterionId,
+            criterionText: score.criterionText,
+            score: score.score,
+            weight: score.weight,
+            evidenceSpanIds: [spanId],
+            source: 'human',
+            scorerId: user.id,
+          },
+          q,
+        );
+      }
+
+      await this.reports.updateScorecard(
+        report.id,
+        {
+          overallRecommendation: Math.round(overall * 10) / 10,
+          overallConfidence: 0.7,
+          communicationMetrics: metrics,
+          cost: 0,
+          promptVersions: { source: 'human-scorecard' },
+          scorecardMeta: {
+            submittedAt: new Date().toISOString(),
+            submittedBy: user.id,
+            prefillAccepted: body.prefillAccepted,
+            editCount: body.editCount,
+          },
+        },
+        q,
+      );
+    });
+
+    return this.findDetail(orgId, sessionId);
+  }
+
+  private async findOrCreateHumanReport(
+    orgId: string,
+    sessionId: string,
+  ): Promise<EvaluationReport> {
+    const sessionContext = await this.loadSessionContext(sessionId);
+    if (sessionContext.orgId !== orgId) {
+      throw new ApiException(404, 'REPORT_NOT_FOUND', 'report not found');
+    }
+    if (sessionContext.conductor !== 'human') {
+      throw new ApiException(
+        409,
+        'SESSION_MODE_INVALID',
+        'scorecard is only for human-facilitated sessions',
+      );
+    }
+    const existing = await this.reports.findBySessionId(sessionId);
+    if (existing) return existing;
+    return this.db.transaction(async (q) =>
+      this.reports.insert(
+        {
+          orgId: sessionContext.orgId,
+          sessionId: sessionContext.id,
+          inviteId: sessionContext.inviteId,
+          kitVersionId: sessionContext.kitVersionId,
+          status: 'pending',
+          modelRoute: 'human-facilitated',
+        },
+        q,
+      ),
+    );
+  }
+
   private async loadSessionContext(sessionId: string): Promise<SessionContext> {
     const result = await this.db.query(
-      `SELECT s.id, s.invite_id, i.org_id, s.kit_version_id
+      `SELECT s.id, s.invite_id, s.conductor, i.org_id, s.kit_version_id
        FROM interview_session s
        JOIN invite i ON i.id = s.invite_id
        WHERE s.id = $1`,
       [sessionId],
     );
     const row = result.rows[0] as
-      { id: string; invite_id: string; org_id: string; kit_version_id: string } | undefined;
+      | {
+          id: string;
+          invite_id: string;
+          conductor: InterviewSession['conductor'];
+          org_id: string;
+          kit_version_id: string;
+        }
+      | undefined;
     if (!row) {
       throw new ApiException(404, 'SESSION_NOT_FOUND', 'session not found');
     }
@@ -254,6 +485,7 @@ export class EvaluationService {
       id: row.id,
       inviteId: row.invite_id,
       orgId: row.org_id,
+      conductor: row.conductor,
       kitVersionId: row.kit_version_id,
     };
   }

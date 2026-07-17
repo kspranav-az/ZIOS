@@ -15,6 +15,7 @@ import { IntegrityModule } from '@/modules/integrity';
 import { SessionsModule } from '@/modules/sessions';
 import { UsersModule } from '@/modules/users';
 import { VoiceModule } from '@/modules/voice';
+import { LiveRoomsModule } from '@/modules/live-rooms';
 
 @Module({
   imports: [
@@ -47,6 +48,7 @@ import { VoiceModule } from '@/modules/voice';
     SessionsModule,
     VoiceModule,
     IntegrityModule,
+    LiveRoomsModule,
   ],
 })
 export class AppModule {}

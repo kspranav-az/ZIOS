@@ -3,6 +3,7 @@ import type {
   AppUser,
   CreateShareLinkBody,
   CreateShareLinkResponse,
+  HumanScorecardBody,
   OverrideScoreBody,
   PublicReportResponse,
   ReportDetailResponse,
@@ -56,6 +57,7 @@ export class EvaluationController {
       evidenceSpans: detail.evidenceSpans,
       overrides: detail.overrides,
       transcript: detail.transcript,
+      notes: detail.notes,
     };
   }
 
@@ -79,6 +81,27 @@ export class EvaluationController {
       user.id,
     );
     return { override };
+  }
+
+  @Roles('admin')
+  @Post(':sessionId/scorecard/prefill')
+  @HttpCode(200)
+  async prefillScorecard(
+    @CurrentUser() user: AppUser,
+    @Param('sessionId') sessionId: string,
+  ): Promise<ReportDetailResponse> {
+    return this.evaluation.prefillScorecard(user.orgId, sessionId, user.id);
+  }
+
+  @Roles('admin')
+  @Post(':sessionId/scorecard')
+  @HttpCode(200)
+  async submitScorecard(
+    @CurrentUser() user: AppUser,
+    @Param('sessionId') sessionId: string,
+    @Body() body: HumanScorecardBody,
+  ): Promise<ReportDetailResponse> {
+    return this.evaluation.submitHumanScorecard(user.orgId, sessionId, user, body);
   }
 
   @Roles('admin')
@@ -108,6 +131,7 @@ export class EvaluationController {
       scores: detail.scores,
       evidenceSpans: detail.evidenceSpans,
       transcript: detail.transcript,
+      notes: detail.notes,
     };
   }
 }

@@ -12,6 +12,7 @@ export interface InviteRow {
   otp_required: boolean;
   otp_verified_at: Date | null;
   status: string;
+  conductor: string;
   metadata: Record<string, unknown>;
   reminder_48h_sent_at: Date | null;
   reminder_4h_sent_at: Date | null;
@@ -20,7 +21,7 @@ export interface InviteRow {
 }
 
 const COLUMNS =
-  'id, org_id, kit_version_id, candidate_id, token_hash, expires_at, otp_required, otp_verified_at, status, metadata, reminder_48h_sent_at, reminder_4h_sent_at, created_at, updated_at';
+  'id, org_id, kit_version_id, candidate_id, token_hash, expires_at, otp_required, otp_verified_at, status, conductor, metadata, reminder_48h_sent_at, reminder_4h_sent_at, created_at, updated_at';
 
 function mapRow(row: InviteRow): Invite {
   return {
@@ -33,6 +34,7 @@ function mapRow(row: InviteRow): Invite {
     otpRequired: row.otp_required,
     otpVerifiedAt: row.otp_verified_at?.toISOString() ?? null,
     status: row.status as InviteStatus,
+    conductor: row.conductor as Invite['conductor'],
     metadata: row.metadata,
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString(),
@@ -51,13 +53,14 @@ export class InvitesRepository {
       tokenHash: string;
       expiresAt: Date;
       otpRequired: boolean;
+      conductor?: Invite['conductor'];
       metadata?: Record<string, unknown>;
     },
     q: Queryable,
   ): Promise<Invite> {
     const result = await q.query(
-      `INSERT INTO invite (org_id, kit_version_id, candidate_id, token_hash, expires_at, otp_required, metadata)
-       VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
+      `INSERT INTO invite (org_id, kit_version_id, candidate_id, token_hash, expires_at, otp_required, conductor, metadata)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
        RETURNING ${COLUMNS}`,
       [
         input.orgId,
@@ -66,13 +69,14 @@ export class InvitesRepository {
         input.tokenHash,
         input.expiresAt,
         input.otpRequired,
+        input.conductor ?? 'ai',
         JSON.stringify(input.metadata ?? {}),
       ],
     );
     return mapRow(result.rows[0] as InviteRow);
   }
 
-  async findById(orgId: string, id: string, q: Queryable): Promise<Invite | null> {
+  async findById(orgId: string, id: string, q: Queryable = this.db): Promise<Invite | null> {
     const result = await q.query(`SELECT ${COLUMNS} FROM invite WHERE id = $1 AND org_id = $2`, [
       id,
       orgId,
@@ -81,7 +85,7 @@ export class InvitesRepository {
     return row ? mapRow(row) : null;
   }
 
-  async findByTokenHash(tokenHash: string, q: Queryable): Promise<Invite | null> {
+  async findByTokenHash(tokenHash: string, q: Queryable = this.db): Promise<Invite | null> {
     const result = await q.query(`SELECT ${COLUMNS} FROM invite WHERE token_hash = $1`, [
       tokenHash,
     ]);

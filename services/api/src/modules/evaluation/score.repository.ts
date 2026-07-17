@@ -11,10 +11,12 @@ export interface EvaluationScoreRow {
   score: number;
   weight: number;
   evidence_span_ids: string[];
+  source: string;
+  scorer_id: string | null;
 }
 
 const COLUMNS =
-  'id, report_id, question_id, criterion_id, criterion_text, score, weight, evidence_span_ids';
+  'id, report_id, question_id, criterion_id, criterion_text, score, weight, evidence_span_ids, source, scorer_id';
 
 export function mapScoreRow(row: EvaluationScoreRow): EvaluationScore {
   return {
@@ -26,6 +28,8 @@ export function mapScoreRow(row: EvaluationScoreRow): EvaluationScore {
     score: row.score,
     weight: Number(row.weight),
     evidenceSpanIds: row.evidence_span_ids,
+    source: row.source as EvaluationScore['source'],
+    scorerId: row.scorer_id,
   };
 }
 
@@ -42,12 +46,14 @@ export class EvaluationScoreRepository {
       score: number;
       weight: number;
       evidenceSpanIds: string[];
+      source?: EvaluationScore['source'];
+      scorerId?: string | null;
     },
     q: Queryable,
   ): Promise<EvaluationScore> {
     const result = await q.query(
-      `INSERT INTO evaluation_score (report_id, question_id, criterion_id, criterion_text, score, weight, evidence_span_ids)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO evaluation_score (report_id, question_id, criterion_id, criterion_text, score, weight, evidence_span_ids, source, scorer_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING ${COLUMNS}`,
       [
         input.reportId,
@@ -57,6 +63,8 @@ export class EvaluationScoreRepository {
         input.score,
         input.weight,
         input.evidenceSpanIds,
+        input.source ?? 'ai',
+        input.scorerId ?? null,
       ],
     );
     return mapScoreRow(result.rows[0] as EvaluationScoreRow);
@@ -78,5 +86,9 @@ export class EvaluationScoreRepository {
 
   async updateScore(id: string, newScore: number, q: Queryable): Promise<void> {
     await q.query('UPDATE evaluation_score SET score = $1 WHERE id = $2', [newScore, id]);
+  }
+
+  async deleteByReportId(reportId: string, q: Queryable): Promise<void> {
+    await q.query('DELETE FROM evaluation_score WHERE report_id = $1', [reportId]);
   }
 }

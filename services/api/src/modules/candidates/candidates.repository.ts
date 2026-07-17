@@ -59,7 +59,7 @@ export class CandidatesRepository {
     return mapRow(result.rows[0] as CandidateRow);
   }
 
-  async findById(orgId: string, id: string, q: Queryable): Promise<Candidate | null> {
+  async findById(orgId: string, id: string, q: Queryable = this.db): Promise<Candidate | null> {
     const result = await q.query(`SELECT ${COLUMNS} FROM candidate WHERE id = $1 AND org_id = $2`, [
       id,
       orgId,
