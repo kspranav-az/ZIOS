@@ -57,16 +57,46 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
       - name: Prepare env
         run: cp .env.example .env
 
       - name: Start the full stack
         run: docker compose up -d --build --wait
 
+      # The schema now has consumers (ADR-0003): migrate before asserting.
+      - name: Run database migrations
+        run: pnpm migrate
+
       - name: Smoke-test health endpoints
         run: |
           curl -fsS http://localhost:3000/healthz | grep '"status":"ok"'
           curl -fsS http://localhost:8000/healthz | grep '"status":"ok"'
+
+      - name: Smoke-test OTP sign-in over Mailpit
+        run: |
+          code=$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
+            http://localhost:3000/auth/otp/request \
+            -H 'content-type: application/json' \
+            -d '{"email":"ci-smoke@example.com"}')
+          test "$code" = "200"
+          count=0
+          for _ in $(seq 1 20); do
+            count=$(curl -sS 'http://localhost:8025/api/v1/messages?limit=50' | grep -c 'ci-smoke@example.com' || true)
+            [ "$count" -ge 1 ] && break
+            sleep 1.5
+          done
+          echo "mailpit messages for ci-smoke@example.com: $count"
+          [ "$count" -ge 1 ]
 
       - name: Tear down
         if: always()
