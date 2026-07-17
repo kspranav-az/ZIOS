@@ -41,6 +41,7 @@ export class ConsentService {
         subjectId,
         purpose: body?.purpose?.trim() || DEFAULT_PURPOSE,
         noticeVersion: body?.noticeVersion?.trim() || this.noticeVersion(),
+        noticeText: body?.noticeText?.trim() || this.noticeText(),
         artifactUri,
       },
       q,
@@ -48,7 +49,7 @@ export class ConsentService {
   }
 
   async createForInvite(
-    input: { inviteId: string; subjectId: string; artifactUri?: string },
+    input: { inviteId: string; subjectId: string; noticeText?: string; artifactUri?: string },
     q: Queryable,
   ): Promise<ConsentRecord> {
     return this.repository.insert(
@@ -57,6 +58,7 @@ export class ConsentService {
         subjectId: input.subjectId,
         purpose: DEFAULT_PURPOSE,
         noticeVersion: this.noticeVersion(),
+        noticeText: input.noticeText?.trim() || this.noticeText(),
         artifactUri: input.artifactUri ?? `artifact://consent/${crypto.randomUUID()}`,
       },
       q,

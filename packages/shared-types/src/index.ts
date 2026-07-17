@@ -469,6 +469,8 @@ export interface ConsentRecord {
   subjectId: string;
   purpose: string;
   noticeVersion: string;
+  /** Verbatim copy of the disclosure text shown to the candidate (FR-E9-1). */
+  noticeText: string;
   capturedAt: string;
   artifactUri: string | null;
   withdrawnAt: string | null;
@@ -617,6 +619,8 @@ export interface ConsentByTokenBody {
   name?: string;
   email?: string;
   phone?: string;
+  /** Exact proctoring-level disclosure shown to the candidate, stored verbatim (FR-E9-1). */
+  noticeText?: string;
 }
 
 export interface ConsentByTokenResponse {
@@ -632,6 +636,8 @@ export interface CreateConsentBody {
   subjectId: string;
   purpose: string;
   noticeVersion: string;
+  /** Exact disclosure text shown to the candidate, stored verbatim (FR-E9-1). */
+  noticeText?: string;
   artifactUri?: string;
   inviteId?: string;
   sessionId?: string;

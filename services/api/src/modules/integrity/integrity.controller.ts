@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
   Param,
   Post,
   UploadedFile,
@@ -53,13 +54,15 @@ export class IntegrityController {
   }
 
   @Post('flags/:flagId/disposition')
+  @HttpCode(200)
   async dispositionFlag(
     @Param('id') id: string,
     @Param('flagId') flagId: string,
     @CurrentUser() user: AppUser,
     @Body() body: CreateDispositionBody,
-  ) {
-    return this.integrity.dispositionFlag(id, flagId, user, body);
+  ): Promise<{ flag: IntegrityFlag }> {
+    const flag = await this.integrity.dispositionFlag(id, flagId, user, body);
+    return { flag };
   }
 
   @Public()
@@ -87,6 +90,7 @@ export class IntegrityController {
 
   @Public()
   @Delete('id-upload/:uploadId')
+  @HttpCode(204)
   async eraseIdUpload(@Param('id') id: string, @Param('uploadId') uploadId: string): Promise<void> {
     return this.integrity.eraseIdUpload(id, uploadId);
   }

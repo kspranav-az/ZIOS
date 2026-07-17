@@ -5,6 +5,8 @@ import type {
   CandidateOtpVerifyResponse,
   ConsentByTokenBody,
   ConsentByTokenResponse,
+  IntegrityEventBody,
+  IntegrityFlagsResponse,
   PreflightBody,
   PreflightResponse,
   SessionDetailResponse,
@@ -126,6 +128,17 @@ export function consentByToken(
   return request<ConsentByTokenResponse>(
     'POST',
     `/invites/by-token/${encodeURIComponent(token)}/consent`,
+    { body },
+  );
+}
+
+export function recordIntegrityEvents(
+  sessionId: string,
+  body: IntegrityEventBody,
+): Promise<IntegrityFlagsResponse> {
+  return request<IntegrityFlagsResponse>(
+    'POST',
+    `/sessions/${encodeURIComponent(sessionId)}/integrity/events`,
     { body },
   );
 }

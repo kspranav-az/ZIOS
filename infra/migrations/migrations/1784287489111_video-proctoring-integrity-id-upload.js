@@ -9,7 +9,7 @@ const DISPOSITIONS = "('pending','dismissed','confirmed')";
 const REASON_CODES =
   "('false_positive','technical_issue','candidate_explained','confirmed_violation','other')";
 const SIGNALS =
-  "('webcam_snapshot','tab_switch','fullscreen_exit','copy_paste','long_silence','background_voice')";
+  "('webcam_snapshot','tab_switch','fullscreen_exit','paste_attempt','long_silence','background_voice')";
 
 /** @type {import('node-pg-migrate').MigrationBuilder['up']} */
 exports.up = async (pgm) => {
@@ -31,6 +31,7 @@ exports.up = async (pgm) => {
     dispositioned_by: { type: 'uuid', references: 'app_user', onDelete: 'SET NULL' },
     dispositioned_at: { type: 'timestamptz' },
     created_at: { type: 'timestamptz', notNull: true, default: pgm.func('now()') },
+    updated_at: { type: 'timestamptz', notNull: true, default: pgm.func('now()') },
   });
   pgm.addConstraint(
     'integrity_flag',
