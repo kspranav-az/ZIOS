@@ -1,0 +1,48 @@
+{
+  "name": "employer-web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "prebuild": "pnpm --filter @zios/shared-types build",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "e2e": "playwright test",
+    "e2e:headed": "playwright test --headed",
+    "e2e:ui": "playwright test --ui"
+  },
+  "dependencies": {
+    "@fontsource/plus-jakarta-sans": "^5.2.5",
+    "@zios/shared-types": "workspace:*",
+    "@zios/ui": "workspace:*",
+    "material-symbols": "^0.45.8",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-router-dom": "^7.9.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0",
+    "@tailwindcss/vite": "^4.3.1",
+    "@testing-library/dom": "^10.4.0",
+    "@testing-library/jest-dom": "^6.8.0",
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "@zios/config": "workspace:*",
+    "eslint": "^9.23.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^16.0.0",
+    "jsdom": "^26.1.0",
+    "tailwindcss": "^4.3.1",
+    "typescript": "^5.8.2",
+    "vite": "^7.0.0",
+    "vitest": "^3.2.4"
+  }
+}

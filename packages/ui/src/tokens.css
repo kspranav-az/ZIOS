@@ -1,0 +1,230 @@
+/**
+ * InterviewOS design tokens — ported from the AI-Interview-Platform design
+ * reference (src/components/RecruiterLayout.jsx TAILWIND_CONFIG, src/index.css).
+ *
+ * Single source of truth: the `--zios-*` custom properties below. The
+ * `@theme inline` block maps them into Tailwind 4 utilities (bg-primary,
+ * text-on-surface-variant, text-headline-md, p-gutter, max-w-container-max, …)
+ * so feature code uses semantic utility names while the raw values stay
+ * tunable in one place (AGENTS.md §7 / phase-01 technical approach).
+ */
+
+:root {
+  /* ---- Color: primary (deep teal) ---- */
+  --zios-color-primary: #003441;
+  --zios-color-on-primary: #ffffff;
+  --zios-color-primary-container: #0f4c5c;
+  --zios-color-on-primary-container: #87bbce;
+  --zios-color-primary-fixed: #b6ebfe;
+  --zios-color-primary-fixed-dim: #9acee1;
+  --zios-color-on-primary-fixed: #001f28;
+  --zios-color-on-primary-fixed-variant: #114d5d;
+  --zios-color-inverse-primary: #9acee1;
+
+  /* ---- Color: secondary (amber/orange) ---- */
+  --zios-color-secondary: #8e4f00;
+  --zios-color-on-secondary: #ffffff;
+  --zios-color-secondary-container: #fe9415;
+  --zios-color-on-secondary-container: #643600;
+  --zios-color-secondary-fixed: #ffdcc1;
+  --zios-color-secondary-fixed-dim: #ffb877;
+  --zios-color-on-secondary-fixed: #2e1600;
+  --zios-color-on-secondary-fixed-variant: #6c3a00;
+
+  /* ---- Color: tertiary (slate) ---- */
+  --zios-color-tertiary: #263134;
+  --zios-color-on-tertiary: #ffffff;
+  --zios-color-tertiary-container: #3d484a;
+  --zios-color-on-tertiary-container: #aab6b9;
+  --zios-color-tertiary-fixed: #d9e5e8;
+  --zios-color-tertiary-fixed-dim: #bdc9cc;
+  --zios-color-on-tertiary-fixed: #121d20;
+  --zios-color-on-tertiary-fixed-variant: #3d494b;
+
+  /* ---- Color: error ---- */
+  --zios-color-error: #ba1a1a;
+  --zios-color-on-error: #ffffff;
+  --zios-color-error-container: #ffdad6;
+  --zios-color-on-error-container: #93000a;
+
+  /* ---- Color: surfaces & ink ---- */
+  --zios-color-background: #f4faff;
+  --zios-color-on-background: #0d1e25;
+  --zios-color-surface: #f4faff;
+  --zios-color-surface-bright: #f4faff;
+  --zios-color-surface-dim: #cbdde7;
+  --zios-color-surface-container-lowest: #ffffff;
+  --zios-color-surface-container-low: #e7f6ff;
+  --zios-color-surface-container: #dff0fb;
+  --zios-color-surface-container-high: #d9ebf5;
+  --zios-color-surface-container-highest: #d4e5f0;
+  --zios-color-surface-variant: #d4e5f0;
+  --zios-color-on-surface: #0d1e25;
+  --zios-color-on-surface-variant: #40484b;
+  --zios-color-surface-tint: #306576;
+  --zios-color-inverse-surface: #23333b;
+  --zios-color-inverse-on-surface: #e2f3fe;
+
+  /* ---- Color: outlines & status extras ---- */
+  --zios-color-outline: #70787c;
+  --zios-color-outline-variant: #c0c8cb;
+  /** Valid/success green used by the reference's form validation states. */
+  --zios-color-success: #2f8f5b;
+
+  /* ---- Typography (Plus Jakarta Sans scale) ---- */
+  --zios-font-sans: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
+
+  --zios-text-display-lg: 48px;
+  --zios-text-display-lg--line-height: 1.1;
+  --zios-text-display-lg--letter-spacing: -0.02em;
+  --zios-text-display-lg--font-weight: 800;
+
+  --zios-text-display-lg-mobile: 36px;
+  --zios-text-display-lg-mobile--line-height: 1.2;
+  --zios-text-display-lg-mobile--font-weight: 800;
+
+  --zios-text-headline-md: 32px;
+  --zios-text-headline-md--line-height: 1.3;
+  --zios-text-headline-md--font-weight: 700;
+
+  --zios-text-headline-sm: 24px;
+  --zios-text-headline-sm--line-height: 1.4;
+  --zios-text-headline-sm--font-weight: 700;
+
+  --zios-text-label-bold: 14px;
+  --zios-text-label-bold--line-height: 1;
+  --zios-text-label-bold--font-weight: 700;
+
+  --zios-text-body-lg: 18px;
+  --zios-text-body-lg--line-height: 1.6;
+  --zios-text-body-lg--font-weight: 500;
+
+  --zios-text-body-md: 16px;
+  --zios-text-body-md--line-height: 1.6;
+  --zios-text-body-md--font-weight: 400;
+
+  /* ---- Radius (reference overrides; 2xl/3xl keep Tailwind defaults) ---- */
+  --zios-radius: 0.25rem;
+  --zios-radius-lg: 0.5rem;
+  --zios-radius-xl: 0.75rem;
+  --zios-radius-full: 9999px;
+
+  /* ---- Layout spacing ---- */
+  --zios-spacing-base: 8px;
+  --zios-spacing-gutter: 24px;
+  --zios-spacing-margin-mobile: 20px;
+  --zios-spacing-margin-desktop: 64px;
+  --zios-spacing-container-max: 1280px;
+
+  /* ---- Elevation ---- */
+  --zios-shadow-card: 0px 4px 20px rgba(0, 0, 0, 0.04);
+  --zios-shadow-cta: 0 6px 16px rgba(0, 52, 65, 0.25);
+}
+
+@theme inline {
+  --color-primary: var(--zios-color-primary);
+  --color-on-primary: var(--zios-color-on-primary);
+  --color-primary-container: var(--zios-color-primary-container);
+  --color-on-primary-container: var(--zios-color-on-primary-container);
+  --color-primary-fixed: var(--zios-color-primary-fixed);
+  --color-primary-fixed-dim: var(--zios-color-primary-fixed-dim);
+  --color-on-primary-fixed: var(--zios-color-on-primary-fixed);
+  --color-on-primary-fixed-variant: var(--zios-color-on-primary-fixed-variant);
+  --color-inverse-primary: var(--zios-color-inverse-primary);
+
+  --color-secondary: var(--zios-color-secondary);
+  --color-on-secondary: var(--zios-color-on-secondary);
+  --color-secondary-container: var(--zios-color-secondary-container);
+  --color-on-secondary-container: var(--zios-color-on-secondary-container);
+  --color-secondary-fixed: var(--zios-color-secondary-fixed);
+  --color-secondary-fixed-dim: var(--zios-color-secondary-fixed-dim);
+  --color-on-secondary-fixed: var(--zios-color-on-secondary-fixed);
+  --color-on-secondary-fixed-variant: var(--zios-color-on-secondary-fixed-variant);
+
+  --color-tertiary: var(--zios-color-tertiary);
+  --color-on-tertiary: var(--zios-color-on-tertiary);
+  --color-tertiary-container: var(--zios-color-tertiary-container);
+  --color-on-tertiary-container: var(--zios-color-on-tertiary-container);
+  --color-tertiary-fixed: var(--zios-color-tertiary-fixed);
+  --color-tertiary-fixed-dim: var(--zios-color-tertiary-fixed-dim);
+  --color-on-tertiary-fixed: var(--zios-color-on-tertiary-fixed);
+  --color-on-tertiary-fixed-variant: var(--zios-color-on-tertiary-fixed-variant);
+
+  --color-error: var(--zios-color-error);
+  --color-on-error: var(--zios-color-on-error);
+  --color-error-container: var(--zios-color-error-container);
+  --color-on-error-container: var(--zios-color-on-error-container);
+
+  --color-background: var(--zios-color-background);
+  --color-on-background: var(--zios-color-on-background);
+  --color-surface: var(--zios-color-surface);
+  --color-surface-bright: var(--zios-color-surface-bright);
+  --color-surface-dim: var(--zios-color-surface-dim);
+  --color-surface-container-lowest: var(--zios-color-surface-container-lowest);
+  --color-surface-container-low: var(--zios-color-surface-container-low);
+  --color-surface-container: var(--zios-color-surface-container);
+  --color-surface-container-high: var(--zios-color-surface-container-high);
+  --color-surface-container-highest: var(--zios-color-surface-container-highest);
+  --color-surface-variant: var(--zios-color-surface-variant);
+  --color-on-surface: var(--zios-color-on-surface);
+  --color-on-surface-variant: var(--zios-color-on-surface-variant);
+  --color-surface-tint: var(--zios-color-surface-tint);
+  --color-inverse-surface: var(--zios-color-inverse-surface);
+  --color-inverse-on-surface: var(--zios-color-inverse-on-surface);
+
+  --color-outline: var(--zios-color-outline);
+  --color-outline-variant: var(--zios-color-outline-variant);
+  --color-success: var(--zios-color-success);
+
+  --font-sans: var(--zios-font-sans);
+  --font-display-lg: var(--zios-font-sans);
+  --font-display-lg-mobile: var(--zios-font-sans);
+  --font-headline-md: var(--zios-font-sans);
+  --font-headline-sm: var(--zios-font-sans);
+  --font-label-bold: var(--zios-font-sans);
+  --font-body-lg: var(--zios-font-sans);
+  --font-body-md: var(--zios-font-sans);
+
+  --text-display-lg: var(--zios-text-display-lg);
+  --text-display-lg--line-height: var(--zios-text-display-lg--line-height);
+  --text-display-lg--letter-spacing: var(--zios-text-display-lg--letter-spacing);
+  --text-display-lg--font-weight: var(--zios-text-display-lg--font-weight);
+
+  --text-display-lg-mobile: var(--zios-text-display-lg-mobile);
+  --text-display-lg-mobile--line-height: var(--zios-text-display-lg-mobile--line-height);
+  --text-display-lg-mobile--font-weight: var(--zios-text-display-lg-mobile--font-weight);
+
+  --text-headline-md: var(--zios-text-headline-md);
+  --text-headline-md--line-height: var(--zios-text-headline-md--line-height);
+  --text-headline-md--font-weight: var(--zios-text-headline-md--font-weight);
+
+  --text-headline-sm: var(--zios-text-headline-sm);
+  --text-headline-sm--line-height: var(--zios-text-headline-sm--line-height);
+  --text-headline-sm--font-weight: var(--zios-text-headline-sm--font-weight);
+
+  --text-label-bold: var(--zios-text-label-bold);
+  --text-label-bold--line-height: var(--zios-text-label-bold--line-height);
+  --text-label-bold--font-weight: var(--zios-text-label-bold--font-weight);
+
+  --text-body-lg: var(--zios-text-body-lg);
+  --text-body-lg--line-height: var(--zios-text-body-lg--line-height);
+  --text-body-lg--font-weight: var(--zios-text-body-lg--font-weight);
+
+  --text-body-md: var(--zios-text-body-md);
+  --text-body-md--line-height: var(--zios-text-body-md--line-height);
+  --text-body-md--font-weight: var(--zios-text-body-md--font-weight);
+
+  --radius: var(--zios-radius);
+  --radius-lg: var(--zios-radius-lg);
+  --radius-xl: var(--zios-radius-xl);
+  --radius-full: var(--zios-radius-full);
+
+  --spacing-base: var(--zios-spacing-base);
+  --spacing-gutter: var(--zios-spacing-gutter);
+  --spacing-margin-mobile: var(--zios-spacing-margin-mobile);
+  --spacing-margin-desktop: var(--zios-spacing-margin-desktop);
+  --spacing-container-max: var(--zios-spacing-container-max);
+
+  --shadow-card: var(--zios-shadow-card);
+  --shadow-cta: var(--zios-shadow-cta);
+}
