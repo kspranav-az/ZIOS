@@ -43,6 +43,10 @@ export function CockpitPage() {
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'error'>(
     'connecting',
   );
+  const [connectionQuality, setConnectionQuality] = useState<'good' | 'poor' | 'unknown'>(
+    'unknown',
+  );
+  const [isReconnecting, setIsReconnecting] = useState(false);
   const [roomError, setRoomError] = useState<string>();
   const [connectNonce, setConnectNonce] = useState(0);
   const [micEnabled, setMicEnabled] = useState(true);
@@ -138,8 +142,19 @@ export function CockpitPage() {
           },
         );
 
-        room.on(RoomEvent.Connected, () => setConnectionStatus('connected'));
-        room.on(RoomEvent.Disconnected, () => setConnectionStatus('error'));
+        room.on(RoomEvent.Connected, () => {
+          setConnectionStatus('connected');
+          setIsReconnecting(false);
+        });
+        room.on(RoomEvent.Disconnected, () => {
+          setConnectionStatus('error');
+          setIsReconnecting(false);
+        });
+        room.on(RoomEvent.Reconnecting, () => setIsReconnecting(true));
+        room.on(RoomEvent.Reconnected, () => setIsReconnecting(false));
+        room.on(RoomEvent.ConnectionQualityChanged, (quality) => {
+          setConnectionQuality(quality === 'excellent' || quality === 'good' ? 'good' : 'poor');
+        });
         room.on(RoomEvent.LocalTrackPublished, (publication) => {
           if (publication.kind === Track.Kind.Video && localVideoRef.current) {
             publication.videoTrack?.attach(localVideoRef.current);
@@ -153,6 +168,8 @@ export function CockpitPage() {
         if (localVideo && localVideoRef.current) {
           localVideo.attach(localVideoRef.current);
         }
+        setMicEnabled(room.localParticipant.isMicrophoneEnabled);
+        setCameraEnabled(room.localParticipant.isCameraEnabled);
       } catch (err) {
         if (cancelled) return;
         setConnectionStatus('error');
@@ -320,12 +337,26 @@ export function CockpitPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <Badge tone={connectionStatus === 'connected' ? 'success' : 'warning'}>
-            {connectionStatus === 'connected'
-              ? 'Live'
-              : connectionStatus === 'connecting'
-                ? 'Connecting…'
-                : 'Room offline'}
+          <Badge
+            tone={
+              connectionStatus === 'error'
+                ? 'error'
+                : isReconnecting
+                  ? 'warning'
+                  : connectionQuality === 'good'
+                    ? 'success'
+                    : 'warning'
+            }
+          >
+            {isReconnecting
+              ? 'Reconnecting…'
+              : connectionStatus === 'connected'
+                ? connectionQuality === 'good'
+                  ? 'Live'
+                  : 'Poor connection'
+                : connectionStatus === 'connecting'
+                  ? 'Connecting…'
+                  : 'Room offline'}
           </Badge>
           <Button
             variant="outline"
@@ -393,10 +424,17 @@ export function CockpitPage() {
                   autoPlay
                   playsInline
                   muted
-                  className="absolute inset-0 w-full h-full object-cover"
+                  className={`absolute inset-0 w-full h-full object-cover ${!cameraEnabled ? 'hidden' : ''}`}
                 />
-                <div className="absolute bottom-3 left-3 bg-black/60 text-white text-xs px-2 py-1 rounded-lg">
-                  You
+                {!cameraEnabled && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center text-on-surface-variant p-4 text-center">
+                    <Icon name="videocam_off" className="text-4xl mb-2" />
+                    <p className="text-sm">Camera is off</p>
+                  </div>
+                )}
+                <div className="absolute bottom-3 left-3 bg-black/60 text-white text-xs px-2 py-1 rounded-lg flex items-center gap-2">
+                  <span>You</span>
+                  {!micEnabled && <Icon name="mic_off" className="text-sm" />}
                 </div>
               </div>
             </div>

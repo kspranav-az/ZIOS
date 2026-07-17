@@ -26,6 +26,9 @@ export function HumanLivePage() {
   const [connectionQuality, setConnectionQuality] = useState<'good' | 'poor' | 'unknown'>(
     'unknown',
   );
+  const [isReconnecting, setIsReconnecting] = useState(false);
+  const [micEnabled, setMicEnabled] = useState(true);
+  const [cameraEnabled, setCameraEnabled] = useState(true);
 
   const roomRef = useRef<Room | null>(null);
   const localVideoRef = useRef<LocalVideoTrack | null>(null);
@@ -108,8 +111,16 @@ export function HumanLivePage() {
         );
         room.on(RoomEvent.ParticipantConnected, () => setInterviewerJoined(true));
         room.on(RoomEvent.ParticipantDisconnected, () => setInterviewerJoined(false));
-        room.on(RoomEvent.ConnectionQualityChanged, () => {
-          setConnectionQuality('good');
+        room.on(RoomEvent.ConnectionQualityChanged, (quality) => {
+          setConnectionQuality(quality === 'excellent' || quality === 'good' ? 'good' : 'poor');
+        });
+        room.on(RoomEvent.Reconnecting, () => setIsReconnecting(true));
+        room.on(RoomEvent.Reconnected, () => setIsReconnecting(false));
+        room.on(RoomEvent.Disconnected, () => setIsReconnecting(false));
+        room.on(RoomEvent.LocalTrackPublished, (publication) => {
+          if (publication.kind === Track.Kind.Video && localVideoElementRef.current) {
+            publication.videoTrack?.attach(localVideoElementRef.current);
+          }
         });
 
         await room.connect(livekit.url, livekit.token);
@@ -120,6 +131,8 @@ export function HumanLivePage() {
         if (localVideo && localVideoElementRef.current) {
           localVideo.attach(localVideoElementRef.current);
         }
+        setMicEnabled(room.localParticipant.isMicrophoneEnabled);
+        setCameraEnabled(room.localParticipant.isCameraEnabled);
         setConnecting(false);
       } catch (err) {
         if (cancelled) return;
@@ -152,6 +165,20 @@ export function HumanLivePage() {
       remoteVideoTrack.track.attach(remoteVideoRef.current);
     }
   }, [remoteVideoTrack]);
+
+  const toggleMic = async () => {
+    const room = roomRef.current;
+    if (!room) return;
+    const publication = await room.localParticipant.setMicrophoneEnabled(!micEnabled);
+    setMicEnabled(publication !== undefined);
+  };
+
+  const toggleCamera = async () => {
+    const room = roomRef.current;
+    if (!room) return;
+    const publication = await room.localParticipant.setCameraEnabled(!cameraEnabled);
+    setCameraEnabled(publication !== undefined);
+  };
 
   const handleRetry = () => {
     setError(null);
@@ -196,11 +223,19 @@ export function HumanLivePage() {
           <div className="flex items-center gap-2">
             <span
               className={`inline-block h-2 w-2 rounded-full ${
-                connectionQuality === 'good' ? 'bg-success' : 'bg-warning'
+                isReconnecting
+                  ? 'bg-warning animate-pulse'
+                  : connectionQuality === 'good'
+                    ? 'bg-success'
+                    : 'bg-error'
               }`}
             />
             <span className="text-label-bold text-on-surface-variant">
-              {connectionQuality === 'good' ? 'Connected' : 'Connecting…'}
+              {isReconnecting
+                ? 'Reconnecting…'
+                : connectionQuality === 'good'
+                  ? 'Connected'
+                  : 'Poor connection'}
             </span>
           </div>
         </div>
@@ -232,10 +267,17 @@ export function HumanLivePage() {
                 autoPlay
                 playsInline
                 muted
-                className="absolute inset-0 w-full h-full object-cover"
+                className={`absolute inset-0 w-full h-full object-cover ${!cameraEnabled ? 'hidden' : ''}`}
               />
-              <div className="absolute bottom-3 left-3 bg-black/60 text-white text-xs px-2 py-1 rounded-lg">
-                You
+              {!cameraEnabled && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center text-on-surface-variant p-4 text-center">
+                  <Icon name="videocam_off" className="text-4xl mb-2" />
+                  <p className="text-sm">Camera is off</p>
+                </div>
+              )}
+              <div className="absolute bottom-3 left-3 bg-black/60 text-white text-xs px-2 py-1 rounded-lg flex items-center gap-2">
+                <span>You</span>
+                {!micEnabled && <Icon name="mic_off" className="text-sm" />}
               </div>
             </div>
           </div>
@@ -255,7 +297,27 @@ export function HumanLivePage() {
             </div>
           )}
 
-          <div className="mt-6 flex justify-end">
+          <div className="mt-6 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                icon={micEnabled ? 'mic' : 'mic_off'}
+                onClick={() => void toggleMic()}
+                aria-label={micEnabled ? 'Mute microphone' : 'Unmute microphone'}
+              >
+                {micEnabled ? 'Mute' : 'Unmute'}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                icon={cameraEnabled ? 'videocam' : 'videocam_off'}
+                onClick={() => void toggleCamera()}
+                aria-label={cameraEnabled ? 'Turn off camera' : 'Turn on camera'}
+              >
+                {cameraEnabled ? 'Camera off' : 'Camera on'}
+              </Button>
+            </div>
             <Button variant="outline" onClick={handleLeave} icon="call_end">
               Leave interview
             </Button>
