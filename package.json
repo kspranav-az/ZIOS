@@ -18,6 +18,7 @@
     "e2e": "pnpm --filter employer-web e2e",
     "e2e:headed": "pnpm --filter employer-web e2e:headed",
     "migrate": "pnpm --filter @zios/migrations migrate",
+    "seed": "pnpm --filter @zios/migrations seed",
     "prepare": "husky"
   },
   "devDependencies": {
