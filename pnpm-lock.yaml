@@ -138,6 +138,9 @@ importers:
       jspdf-autotable:
         specifier: ^5.0.2
         version: 5.0.8(jspdf@3.0.4)
+      livekit-client:
+        specifier: ^2.20.1
+        version: 2.20.1(@types/dom-mediacapture-record@1.0.22)
       material-symbols:
         specifier: ^0.45.8
         version: 0.45.8
