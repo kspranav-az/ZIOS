@@ -291,11 +291,9 @@ test('kit builder golden journey', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Interview complete' })).toBeVisible();
   await expect(page.getByText(/nothing was recorded or scored/)).toBeVisible();
 
-  // Read-only proof: no session-like tables exist, and the preview wrote nothing.
-  const sessionTables = psql(
-    "SELECT count(*) FROM information_schema.tables WHERE table_name ILIKE '%interview%' OR table_name ILIKE '%media%' OR table_name ILIKE '%artifact%'",
-  );
-  expect(sessionTables).toBe('0');
+  // Read-only proof: the preview wrote no kit/question/version rows.
+  // Session/report tables legitimately exist from later-phase migrations; the
+  // preview endpoint itself creates no rows of any kind for this kit.
   expect(tableCounts()).toBe(countsBefore);
 
   /* ---- archive ---- */
