@@ -6,6 +6,7 @@ import type {
   SessionTranscript,
 } from '@zios/shared-types';
 import { DatabaseService } from '@/modules/database';
+import { LlmGateway } from '@/modules/llm-gateway';
 import { ApiException } from '@/common/errors';
 import { EvaluationRepository } from './evaluation.repository';
 import { EvaluationScoreRepository } from './score.repository';
@@ -31,6 +32,7 @@ export class EvaluationService {
     private readonly pipelineLogs: PipelineLogRepository,
     private readonly overrides: OverrideRepository,
     @Inject(JUDGE_PORT) private readonly judge: JudgePort,
+    private readonly llmGateway: LlmGateway,
   ) {}
 
   /**
@@ -98,6 +100,15 @@ export class EvaluationService {
       );
       stages.push({ name: 'judge', status: 'ok', ms: Date.now() - stageJudge });
 
+      // Attribute AI cost from the gateway journal for this session.
+      const journalEntries = this.llmGateway
+        .getJournal()
+        .filter((entry) => entry.sessionId === session.id);
+      const attributedCost = journalEntries.reduce((sum, entry) => sum + entry.cost, 0);
+      const modelRoute = journalEntries
+        .map((entry) => `${entry.provider}:${entry.modelRoute}`)
+        .join(',');
+
       const stageWrite = Date.now();
       await this.db.transaction(async (q) => {
         // Write evidence spans first so scores can reference them.
@@ -142,7 +153,12 @@ export class EvaluationService {
             overallRecommendation: judgeResult.recommendation,
             overallConfidence: judgeResult.confidence,
             communicationMetrics: judgeResult.metrics,
-            promptVersions: { stubJudge: 'phase04-stub' },
+            cost: attributedCost,
+            promptVersions: {
+              stubJudge: 'phase04-stub',
+              modelRoute: modelRoute || 'mock-judge',
+              journalCount: journalEntries.length,
+            },
           },
           q,
         );
