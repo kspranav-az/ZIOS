@@ -30,6 +30,6 @@ import { TranscriptRepository } from './transcript.repository';
     TranscriptRepository,
     { provide: INTERVIEWER_AI, useClass: LlmConductorAdapter },
   ],
-  exports: [SessionsService],
+  exports: [SessionsService, SessionsRepository, TranscriptRepository, INTERVIEWER_AI],
 })
 export class SessionsModule {}

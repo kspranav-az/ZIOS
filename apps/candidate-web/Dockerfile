@@ -25,7 +25,9 @@ COPY packages/ui packages/ui
 COPY apps/candidate-web apps/candidate-web
 
 ARG VITE_API_URL=http://localhost:3000
+ARG VITE_ORCHESTRATOR_URL=ws://localhost:8000
 ENV VITE_API_URL=$VITE_API_URL
+ENV VITE_ORCHESTRATOR_URL=$VITE_ORCHESTRATOR_URL
 
 RUN pnpm --filter @zios/shared-types build && pnpm --filter candidate-web build
 

@@ -76,10 +76,11 @@ export async function signupAdmin(email: string): Promise<{ token: string }> {
 
 export async function createPublishedKit(
   adminToken: string,
+  mode: 'text' | 'voice' = 'text',
 ): Promise<{ kitId: string; versionId: string }> {
   const create = await postJson(
     '/kits',
-    { title: 'E2E Candidate Kit', role: 'Engineer', level: 'Mid' },
+    { title: `E2E Candidate Kit ${mode}`, role: 'Engineer', level: 'Mid', settings: { mode } },
     { authorization: `Bearer ${adminToken}` },
   );
   if (!create.ok) {

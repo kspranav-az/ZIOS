@@ -20,6 +20,7 @@
     "@fontsource/plus-jakarta-sans": "^5.2.5",
     "@zios/shared-types": "workspace:*",
     "@zios/ui": "workspace:*",
+    "livekit-client": "^2.20.1",
     "material-symbols": "^0.45.8",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

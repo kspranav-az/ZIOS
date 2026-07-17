@@ -11,6 +11,9 @@ import type {
   TokenResolveResponse,
   TurnBody,
   TurnResponse,
+  VoiceFallbackBody,
+  VoiceFallbackResponse,
+  VoiceTokenResponse,
 } from '@zios/shared-types';
 
 const API_BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:3000';
@@ -160,4 +163,27 @@ export function getSession(
   return request<SessionDetailResponse>('GET', `/sessions/${encodeURIComponent(sessionId)}`, {
     headers: { 'x-recovery-token': recoveryToken },
   });
+}
+
+export function getVoiceToken(
+  sessionId: string,
+  recoveryToken: string,
+): Promise<VoiceTokenResponse> {
+  return request<VoiceTokenResponse>(
+    'POST',
+    `/sessions/${encodeURIComponent(sessionId)}/voice/token`,
+    { headers: { 'x-recovery-token': recoveryToken } },
+  );
+}
+
+export function fallbackToText(
+  sessionId: string,
+  recoveryToken: string,
+  body: VoiceFallbackBody,
+): Promise<VoiceFallbackResponse> {
+  return request<VoiceFallbackResponse>(
+    'POST',
+    `/sessions/${encodeURIComponent(sessionId)}/voice/fallback`,
+    { body, headers: { 'x-recovery-token': recoveryToken } },
+  );
 }

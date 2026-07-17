@@ -36,7 +36,7 @@ export class DashboardController {
     const result = await this.db.query(
       `SELECT s.id, s.status, s.mode, s.conductor, s.started_at, s.ended_at, s.created_at, s.updated_at,
               s.recovery_token_hash, s.consent_id, s.preflight_report, s.media_refs, s.integrity_events,
-              s.schema_version,
+              s.schema_version, s.livekit_room_name, s.fallback_to_text_at,
               c.id AS candidate_id, c.org_id AS candidate_org_id, c.name AS candidate_name,
               c.email AS candidate_email, c.phone AS candidate_phone,
               c.external_ref AS candidate_external_ref, c.pii_vault_ref AS candidate_pii_vault_ref,
@@ -82,6 +82,10 @@ export class DashboardController {
           integrityEvents: row.integrity_events as unknown[],
           schemaVersion: row.schema_version as number,
           recoveryTokenHash: row.recovery_token_hash as string | null,
+          livekitRoomName: row.livekit_room_name as string | null,
+          fallbackToTextAt: row.fallback_to_text_at
+            ? (row.fallback_to_text_at as Date).toISOString()
+            : null,
           createdAt: (row.created_at as Date).toISOString(),
           updatedAt: (row.updated_at as Date).toISOString(),
         },

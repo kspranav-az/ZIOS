@@ -42,6 +42,8 @@ function session(): InterviewSession {
     integrityEvents: [],
     schemaVersion: 1,
     recoveryTokenHash: 'hash',
+    livekitRoomName: null,
+    fallbackToTextAt: null,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
