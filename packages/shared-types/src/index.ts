@@ -660,3 +660,171 @@ export interface SessionDetailResponse {
   transcript: SessionTranscript[];
   events: SessionEvent[];
 }
+
+/* --------------------------------------------------------------------------
+ * Phase 04 — Evaluation Pipeline, Reports, Share Links & Dashboard
+ * (PRD E8 FR-E8-1…E8-6, E9 FR-E9-1/E9-2, §11 evidence-linked scoring).
+ * ------------------------------------------------------------------------ */
+
+export type EvaluationStatus = 'pending' | 'completed' | 'failed';
+
+export interface CommunicationMetrics {
+  /** Approximate words per minute across all answered transcript rows. */
+  paceWpm: number;
+  /** Count of filler words (um, uh, like) across answers. */
+  fillerCount: number;
+  /** Number of paragraph breaks across answers. */
+  paragraphCount: number;
+  /** Average sentence length in words. */
+  avgSentenceLength: number;
+}
+
+export interface EvaluationReport {
+  id: string;
+  orgId: string;
+  sessionId: string;
+  inviteId: string | null;
+  kitVersionId: string;
+  status: EvaluationStatus;
+  overallRecommendation: number | null;
+  overallConfidence: number | null;
+  communicationMetrics: CommunicationMetrics;
+  rubricVersion: string;
+  modelRoute: string;
+  promptVersions: Record<string, unknown>;
+  errorMessage: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EvaluationScore {
+  id: string;
+  reportId: string;
+  questionId: string;
+  criterionId: string;
+  criterionText: string;
+  score: number;
+  weight: number;
+  evidenceSpanIds: string[];
+}
+
+export interface EvidenceSpan {
+  id: string;
+  reportId: string;
+  transcriptId: string | null;
+  questionId: string;
+  start: number;
+  end: number;
+  quoteText: string;
+}
+
+export interface ScoreOverride {
+  id: string;
+  reportId: string;
+  scoreId: string;
+  originalScore: number;
+  newScore: number;
+  reasonCode: string;
+  reasonText: string | null;
+  createdBy: string | null;
+  createdAt: string;
+}
+
+export interface ReportShareLink {
+  id: string;
+  reportId: string;
+  tokenHash: string;
+  expiresAt: string;
+  accessCount: number;
+  lastAccessedAt: string | null;
+  createdAt: string;
+}
+
+export interface PipelineStage {
+  name: string;
+  status: 'ok' | 'error';
+  ms: number;
+  detail?: Record<string, unknown>;
+}
+
+export interface PipelineLog {
+  id: string;
+  sessionId: string | null;
+  reportId: string | null;
+  stages: PipelineStage[];
+  totalMs: number | null;
+  startedAt: string;
+  completedAt: string | null;
+}
+
+/* ---- request/response bodies ---- */
+
+export interface OverrideScoreBody {
+  newScore: number;
+  reasonCode: string;
+  reasonText?: string;
+}
+
+export interface CreateShareLinkBody {
+  /** TTL in hours; defaults to 168 (7 days). */
+  expiresInHours?: number;
+}
+
+export interface CreateShareLinkResponse {
+  link: ReportShareLink & { token: string };
+}
+
+export interface ReportListQuery {
+  status?: EvaluationStatus;
+  q?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface ReportListItem {
+  report: EvaluationReport;
+  candidate: Candidate;
+  kitTitle: string;
+}
+
+export interface ReportListResponse {
+  reports: ReportListItem[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface ReportDetailResponse {
+  report: EvaluationReport;
+  scores: EvaluationScore[];
+  evidenceSpans: EvidenceSpan[];
+  overrides: ScoreOverride[];
+  transcript: SessionTranscript[];
+}
+
+export interface DashboardInterviewItem {
+  session: InterviewSession;
+  candidate: Candidate;
+  kitTitle: string;
+  reportStatus: EvaluationStatus | null;
+  overallRecommendation: number | null;
+  flags: string[];
+}
+
+export interface DashboardListResponse {
+  items: DashboardInterviewItem[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface PublicReportResponse {
+  report: EvaluationReport;
+  scores: EvaluationScore[];
+  evidenceSpans: EvidenceSpan[];
+  transcript: SessionTranscript[];
+}

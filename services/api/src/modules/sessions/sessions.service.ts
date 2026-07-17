@@ -15,6 +15,7 @@ import type {
 import { TokenService } from '@/common/tokens';
 import { CandidatesRepository } from '@/modules/candidates';
 import { ConsentService } from '@/modules/consent';
+import { EvaluationService } from '@/modules/evaluation';
 import { ApiException } from '@/common/errors';
 import { DatabaseService, type Queryable } from '@/modules/database';
 import { KitVersionsRepository } from '@/modules/kits';
@@ -35,6 +36,7 @@ export class SessionsService {
     private readonly events: EventsRepository,
     private readonly consent: ConsentService,
     private readonly candidates: CandidatesRepository,
+    private readonly evaluation: EvaluationService,
     private readonly kitVersions: KitVersionsRepository,
     @Inject(INTERVIEWER_AI) private readonly conductor: InterviewerAi,
   ) {}
@@ -235,7 +237,7 @@ export class SessionsService {
     rawRecoveryToken: string,
     body?: PreflightBody,
   ): Promise<PreflightResponse> {
-    return this.db.transaction(async (q) => {
+    const result = await this.db.transaction(async (q) => {
       let session = await this.loadSessionByRecoveryToken(sessionId, rawRecoveryToken, q);
       if (session.status !== 'consented') {
         throw new ApiException(409, 'SESSION_STATE_INVALID', `session is ${session.status}`);
@@ -265,15 +267,19 @@ export class SessionsService {
         return { session, turn };
       }
 
-      const { session: finalSession, turn } = await this.buildNextTurn(q, session, snapshot);
-      return { session: finalSession, turn };
+      return this.buildNextTurn(q, session, snapshot);
     });
+
+    if (result.session.status === 'completed') {
+      await this.evaluation.evaluateSession(result.session.id);
+    }
+    return result;
   }
 
   /* ---- turn ---- */
 
   async turn(sessionId: string, rawRecoveryToken: string, body?: TurnBody): Promise<TurnResponse> {
-    return this.db.transaction(async (q) => {
+    const result = await this.db.transaction(async (q) => {
       const session = await this.loadSessionByRecoveryToken(sessionId, rawRecoveryToken, q);
       if (session.status !== 'live') {
         // Allow completing an already-wrapped session to return the wrapup again.
@@ -295,14 +301,12 @@ export class SessionsService {
           const askedForQuestion = transcript.filter(
             (t) => t.questionId === lastRow.questionId,
           ).length;
-          return {
-            session,
-            turn: {
-              type: askedForQuestion > 1 ? 'followup' : 'question',
-              text: lastRow.questionPrompt,
-              questionId: lastRow.questionId,
-            },
+          const turn: SessionTurnResponse = {
+            type: askedForQuestion > 1 ? 'followup' : 'question',
+            text: lastRow.questionPrompt,
+            questionId: lastRow.questionId,
           };
+          return { session, turn };
         }
         const question = snapshot.questions.find((q) => q.id === lastRow.questionId);
         if (question) {
@@ -322,9 +326,13 @@ export class SessionsService {
         });
       }
 
-      const { session: finalSession, turn } = await this.buildNextTurn(q, session, snapshot);
-      return { session: finalSession, turn };
+      return this.buildNextTurn(q, session, snapshot);
     });
+
+    if (result.session.status === 'completed') {
+      await this.evaluation.evaluateSession(result.session.id);
+    }
+    return result;
   }
 
   /* ---- abandon / recovery ---- */

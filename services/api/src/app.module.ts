@@ -4,6 +4,7 @@ import { LoggerModule } from 'nestjs-pino';
 import { AuthModule } from '@/modules/auth';
 import { ConsentModule } from '@/modules/consent';
 import { DatabaseModule } from '@/modules/database';
+import { EvaluationModule } from '@/modules/evaluation';
 import { HealthModule } from '@/modules/health';
 import { InvitesModule } from '@/modules/invites';
 import { KitsModule } from '@/modules/kits';
@@ -38,6 +39,7 @@ import { UsersModule } from '@/modules/users';
     KitsModule,
     InvitesModule,
     ConsentModule,
+    EvaluationModule,
     SessionsModule,
   ],
 })
