@@ -12,6 +12,10 @@ Two products on one shared AI interview platform, built India-first:
 | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | [`docs/AI Interview Ecosystem PRD - MVP Employer Platform.md`](docs/AI%20Interview%20Ecosystem%20PRD%20-%20MVP%20Employer%20Platform.md) | **Governs scope.** The M1 contract: epics E1–E14, FR IDs, X1–X10 exit criteria, in/out scope.                       |
 | [`docs/AI Interview Ecosystem Blueprint.md`](docs/AI%20Interview%20Ecosystem%20Blueprint.md)                                             | **Governs architecture depth** where the PRD is silent (AI architecture, cost model, compliance, long-term vision). |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)                                                                                           | Implemented system architecture, bounded contexts, ports, patterns.                                                 |
+| [`docs/PROJECT.md`](docs/PROJECT.md)                                                                                                     | Repo layout, tech stack, setup, development workflow.                                                               |
+| [`docs/EXECUTIVE.md`](docs/EXECUTIVE.md)                                                                                                 | Status, milestones, risks, decisions needed.                                                                        |
+| [`docs/STATE.md`](docs/STATE.md)                                                                                                         | Current implementation state, test evidence, gaps.                                                                  |
 | [`phases/README.md`](phases/README.md)                                                                                                   | Phase-wise implementation plan with verification/validation checklists and the git workflow between phases.         |
 | [`AGENTS.md`](AGENTS.md)                                                                                                                 | Engineering conventions every contributor (human or agent) must follow.                                             |
 
@@ -57,4 +61,15 @@ Layout: `apps/` (web apps, Phase 01/03) · `services/api` (NestJS modular monoli
 
 ## Status
 
-Phase 00 (engineering foundation) scaffolded: pnpm-workspace monorepo, both skeleton services healthy in compose with structured JSON logging and correlation IDs, migration tooling (`org`/`app_user`), ESLint/Prettier/commitlint/Husky gates with a module-boundary lint rule, CI workflow, and ADRs 0001–0003. Entry point: [`phases/phase-00-foundation.md`](phases/phase-00-foundation.md).
+**Phases 00–09 complete** (mock-credential mode). Current milestone tag: `v0.1.0-mvp0-mock`.
+
+Last verification on `main` (commit `dd00b17`):
+
+- API: 201 tests passed / 35 files
+- Employer E2E: 11 passed
+- Candidate E2E: 4 passed
+- Typecheck & lint: clean across workspaces
+
+See [`docs/STATE.md`](docs/STATE.md) for module-level status and [`docs/EXECUTIVE.md`](docs/EXECUTIVE.md) for risks and next decisions.
+
+Phase 10 (integration API, webhooks, wallet) and Phase 11 (notifications, hardening, pilot gate) are **not started**. Credential-gated provider validations (real LLM/STT/TTS, Google OAuth, WhatsApp, payments) are deferred to key handover and are listed in each phase file.
