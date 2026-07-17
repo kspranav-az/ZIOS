@@ -139,10 +139,11 @@ export async function createCandidateInvite(
   adminToken: string,
   versionId: string,
   candidate: { name: string; email: string },
+  conductor: 'ai' | 'human' = 'ai',
 ): Promise<string> {
   const invite = await postJson(
     '/invites',
-    { kitVersionId: versionId, candidate },
+    { kitVersionId: versionId, candidate, conductor },
     { authorization: `Bearer ${adminToken}` },
   );
   if (!invite.ok) {
