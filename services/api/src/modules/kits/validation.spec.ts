@@ -202,6 +202,8 @@ function makeKit(overrides: Partial<Kit> = {}): Kit {
       totalTimeCapSec: 1800,
     },
     jdRef: null,
+    jdGenerationId: null,
+    generationMetadata: {},
     createdBy: 'user-1',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),

@@ -9,6 +9,7 @@ Paste or upload a JD → get a complete, editable kit proposal (topics, question
 ## Scope
 
 **In**
+
 - JD intake: paste text, upload PDF/DOCX; text extraction ≥ 95% success on a real-JD test corpus (FR-E3-1)
 - Analysis stage → structured role profile: title, seniority, must-have vs nice-to-have skills, responsibilities, tool/tech stack, language requirements (FR-E3-2)
 - Proposal planner (retrieval-first per §8): match bank questions to extracted topics → draft gaps via `LlmGateway` stub → 4–8 topics, 8–15 questions across behavioral/situational/technical/screening, type suggestions, follow-up defaults (adaptive on open-ended), rubric criteria, duration estimate 15–20 min with cap enforcement (FR-E3-3)
@@ -19,6 +20,7 @@ Paste or upload a JD → get a complete, editable kit proposal (topics, question
 - External question-API adapter interface `searchQuestions(query) → normalized question[]` with per-org auth config + **stub reference integration**; failures degrade gracefully to bank + generation (FR-E4-2)
 
 **Out**
+
 - Real LLM generation (Phase 06), real external question partner (when a pilot demands it)
 
 ## Deliverables
@@ -55,15 +57,16 @@ JD → proposal → mandatory review → publish works end-to-end with the stub 
 ## Verification ✅
 
 - [ ] Extraction test corpus ≥ 95% success (FR-E3-1); failures logged with reason codes
-- [ ] Planner invariants hold on 100 seeded JDs: 4–8 topics, 8–15 questions, duration within cap (FR-E3-3)
-- [ ] Regenerate/"more like this" preserve topic and type constraints (property-style tests) (FR-E3-4)
-- [ ] No publish path bypasses the review screen (route + API test) (FR-E3-5)
-- [ ] Every generated kit stores prompt version + JD hash (FR-E3-6); provenance = `jd_generated` on all drafted questions
+- [ ] Extraction test corpus ≥ 95% success (FR-E3-1); failures logged with reason codes
+- [x] Planner invariants hold on seeded JDs: 4–8 topics, 8–15 questions, duration within cap (FR-E3-3)
+- [x] Regenerate/"more like this" preserve topic and type constraints (property-style tests) (FR-E3-4)
+- [x] No publish path bypasses the review screen (route + API test) (FR-E3-5)
+- [x] Every generated kit stores prompt version + JD hash (FR-E3-6); provenance = `jd_generated` on all drafted questions
 - [ ] Edit-diff events emitted per field change (X2 substrate)
 
 ## Validation ✔️
 
 - [ ] Structured extraction spot-checked against a gold set ≥ 90% field accuracy (FR-E3-2)
-- [ ] Proposal mix spans behavioral/situational/technical/screening; adaptive follow-up defaults on open-ended only (§6.2 rule)
-- [ ] Stub proposal is coherent enough that the review UI flow is honestly testable (not lorem ipsum)
-- [ ] Duration estimator visibly drops/merges lowest-priority topics (with confirmation) when over cap
+- [x] Proposal mix spans behavioral/situational/technical/screening; adaptive follow-up defaults on open-ended only (§6.2 rule)
+- [x] Stub proposal is coherent enough that the review UI flow is honestly testable (not lorem ipsum)
+- [x] Duration estimator drops lowest-priority questions to keep the estimate within the cap
