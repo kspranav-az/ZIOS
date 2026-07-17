@@ -1,4 +1,4 @@
-import { Body, Controller, HttpCode, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, Post } from '@nestjs/common';
 import type {
   AnalyzeJdBody,
   AnalyzeJdResponse,
@@ -20,6 +20,16 @@ import { GenerationService } from './generation.service';
 @Controller('generation')
 export class GenerationController {
   constructor(private readonly generation: GenerationService) {}
+
+  @Get(':id')
+  async get(@CurrentUser() user: AppUser, @Param('id') id: string): Promise<ProposeKitResponse> {
+    const generation = await this.generation.getGeneration(user.orgId, id);
+    return {
+      generation,
+      profile: generation.roleProfile,
+      proposal: generation.proposal,
+    };
+  }
 
   @Post('analyze')
   async analyze(
@@ -51,7 +61,7 @@ export class GenerationController {
     @Param('id') id: string,
     @Body() body: PublishProposalBody,
   ): Promise<PublishProposalResponse> {
-    const result = await this.generation.publishProposal(user, id, body?.edits);
+    const result = await this.generation.publishProposal(user, id, body?.proposal, body?.edits);
     return result;
   }
 

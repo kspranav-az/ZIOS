@@ -6,6 +6,7 @@ import type {
   JdGeneration,
   JdProfile,
   KitVersionSummary,
+  ProposalEdit,
   ProposedQuestion,
   QuestionBankItem,
   QuestionType,
@@ -130,6 +131,14 @@ export class GenerationService {
     return this.llm.analyzeJd(jdText);
   }
 
+  async getGeneration(orgId: string, generationId: string): Promise<JdGeneration> {
+    const generation = await this.repository.findById(orgId, generationId);
+    if (!generation) {
+      throw new ApiException(404, 'GENERATION_NOT_FOUND', 'generation not found');
+    }
+    return generation;
+  }
+
   async analyzeAndPropose(orgId: string, jdText: string): Promise<JdGeneration> {
     this.assertValidJdText(jdText);
     const jdHash = sha256(jdText);
@@ -174,7 +183,8 @@ export class GenerationService {
   async publishProposal(
     user: AppUser,
     generationId: string,
-    edits?: unknown[],
+    finalProposal?: GenerationProposal,
+    edits?: ProposalEdit[],
   ): Promise<{ generation: JdGeneration; version: KitVersionSummary }> {
     const generation = await this.repository.findById(user.orgId, generationId);
     if (!generation) {
@@ -188,6 +198,8 @@ export class GenerationService {
       );
     }
 
+    const proposal = finalProposal ?? generation.proposal;
+
     const generationMetadata: Record<string, unknown> = {
       jdHash: generation.jdHash,
       promptVersion: generation.promptVersion,
@@ -197,7 +209,7 @@ export class GenerationService {
 
     const { kit, version } = await this.kits.createFromProposal(
       user,
-      generation.proposal,
+      proposal,
       generation.roleProfile,
       generation.id,
       generationMetadata,
@@ -206,7 +218,7 @@ export class GenerationService {
     const updated = await this.repository.update(user.orgId, generationId, {
       status: 'published',
       kitId: kit.id,
-      edits: edits ?? generation.edits,
+      edits: (edits as unknown[]) ?? generation.edits,
     });
     if (!updated) {
       throw new ApiException(
