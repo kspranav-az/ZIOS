@@ -18,6 +18,6 @@ import { QuestionsService } from './questions.service';
     KitsService,
     QuestionsService,
   ],
-  exports: [KitVersionsRepository],
+  exports: [KitVersionsRepository, KitsService],
 })
 export class KitsModule {}

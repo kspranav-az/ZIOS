@@ -5,6 +5,7 @@ import { AuthModule } from '@/modules/auth';
 import { ConsentModule } from '@/modules/consent';
 import { DatabaseModule } from '@/modules/database';
 import { EvaluationModule } from '@/modules/evaluation';
+import { GenerationModule } from '@/modules/generation';
 import { HealthModule } from '@/modules/health';
 import { InvitesModule } from '@/modules/invites';
 import { KitsModule } from '@/modules/kits';
@@ -40,6 +41,7 @@ import { UsersModule } from '@/modules/users';
     InvitesModule,
     ConsentModule,
     EvaluationModule,
+    GenerationModule,
     SessionsModule,
   ],
 })

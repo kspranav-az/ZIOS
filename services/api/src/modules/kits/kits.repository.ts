@@ -25,6 +25,8 @@ export interface KitRow {
   status: string;
   settings: Record<string, unknown>;
   jd_ref: string | null;
+  jd_generation_id: string | null;
+  generation_metadata: Record<string, unknown>;
   created_by: string;
   created_at: Date;
   updated_at: Date;
@@ -77,6 +79,8 @@ export function mapKitRow(row: KitRow): Kit {
     status: row.status as KitStatus,
     settings: mapSettingsRow(row.settings),
     jdRef: row.jd_ref,
+    jdGenerationId: row.jd_generation_id,
+    generationMetadata: row.generation_metadata,
     createdBy: row.created_by,
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString(),
@@ -94,7 +98,7 @@ function mapVersionSummaryRow(row: KitVersionRow): KitVersionSummary {
 }
 
 const KIT_COLUMNS =
-  'id, org_id, title, role, level, status, settings, jd_ref, created_by, created_at, updated_at';
+  'id, org_id, title, role, level, status, settings, jd_ref, jd_generation_id, generation_metadata, created_by, created_at, updated_at';
 const VERSION_COLUMNS = 'id, kit_id, version, snapshot, published_by, published_at';
 
 export interface KitUpdateFields {
@@ -103,6 +107,8 @@ export interface KitUpdateFields {
   level?: string | null;
   status?: KitStatus;
   settings?: KitSettings;
+  jdGenerationId?: string | null;
+  generationMetadata?: Record<string, unknown>;
 }
 
 @Injectable()
@@ -193,6 +199,11 @@ export class KitsRepository {
     if (fields.settings !== undefined) {
       params.push(settingsToDbJson(fields.settings));
       assignments.push(`settings = $${params.length}::jsonb`);
+    }
+    if (fields.jdGenerationId !== undefined) push('jd_generation_id', fields.jdGenerationId);
+    if (fields.generationMetadata !== undefined) {
+      params.push(JSON.stringify(fields.generationMetadata));
+      assignments.push(`generation_metadata = $${params.length}::jsonb`);
     }
     params.push(id);
     const idParam = params.length;

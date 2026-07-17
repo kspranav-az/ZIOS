@@ -3,7 +3,9 @@ import type {
   AppUser,
   CreateKitBody,
   DurationEstimateResponse,
+  GenerationProposal,
   InterviewMode,
+  JdProfile,
   Kit,
   KitDetailResponse,
   KitSettings,
@@ -14,6 +16,7 @@ import type {
   PreviewResponse,
   PreviewTokenResponse,
   ProctoringLevel,
+  ProposedQuestion,
   UpdateKitBody,
   UpdateKitSettingsBody,
 } from '@zios/shared-types';
@@ -21,6 +24,7 @@ import { ApiException } from '@/common/errors';
 import { DatabaseService, type Queryable } from '@/modules/database';
 import { estimateDuration } from './duration';
 import { KitsRepository, type WriteOutcome } from './kits.repository';
+import { positionAfter } from './positions';
 import {
   PREVIEW_TOKEN_TTL_SECONDS,
   previewTokenSecret,
@@ -137,6 +141,117 @@ export class KitsService {
         client,
       ),
     );
+  }
+
+  /**
+   * Phase 05 publish hand-off: creates a draft kit from a generation proposal,
+   * inserts the proposed questions with `source='jd_generated'` and the
+   * generation id as `source_ref`, stamps audit metadata on the kit row, and
+   * publishes it as a versioned snapshot.
+   */
+  async createFromProposal(
+    user: AppUser,
+    proposal: GenerationProposal,
+    profile: JdProfile,
+    generationId: string,
+    generationMetadata: Record<string, unknown>,
+  ): Promise<{ kit: Kit; version: KitVersionSummary }> {
+    return this.db.withTenant(async (client) => {
+      const settings = mergeSettings(DEFAULT_SETTINGS, {});
+      const kit = await this.kits.insert(
+        {
+          orgId: user.orgId,
+          title: profile.title ?? 'Generated Interview Kit',
+          role: profile.title,
+          level: profile.seniority,
+          settings,
+          createdBy: user.id,
+        },
+        client,
+      );
+
+      let lastPosition: string | undefined;
+      for (const proposed of proposal.questions) {
+        const position = positionAfter(lastPosition);
+        await this.questions.insert(
+          this.toQuestionInsert(kit.id, position, proposed, generationId),
+          client,
+        );
+        lastPosition = position;
+      }
+
+      const kitWithGen = await this.kits.update(
+        user.orgId,
+        kit.id,
+        { jdGenerationId: generationId, generationMetadata },
+        undefined,
+        client,
+      );
+      if (kitWithGen.kind !== 'ok') {
+        throw new ApiException(500, 'INTERNAL_ERROR', 'failed to stamp generation metadata on kit');
+      }
+
+      const questions = await this.questions.listByKit(kit.id, client);
+      const estimate = estimateDuration(questions);
+      const errors = validateKitForPublish(kitWithGen.value, questions, estimate.estimatedSeconds);
+      if (errors.length > 0) {
+        throw new ApiException(
+          422,
+          'PUBLISH_VALIDATION_FAILED',
+          'generated kit cannot be published',
+          {
+            details: errors,
+          },
+        );
+      }
+
+      const version = (await this.kits.maxVersion(kit.id, client)) + 1;
+      const snapshot: KitSnapshot = {
+        schemaVersion: 1,
+        kit: {
+          id: kit.id,
+          title: kitWithGen.value.title,
+          role: kitWithGen.value.role,
+          level: kitWithGen.value.level,
+          settings: kitWithGen.value.settings,
+          jdRef: kitWithGen.value.jdRef,
+        },
+        questions,
+        durationEstimateSec: estimate.estimatedSeconds,
+      };
+      const versionRow = await this.kits.insertVersion(
+        { kitId: kit.id, version, snapshot, publishedBy: user.id },
+        client,
+      );
+      await this.kits.update(user.orgId, kit.id, { status: 'published' }, undefined, client);
+      return { kit: kitWithGen.value, version: versionRow };
+    });
+  }
+
+  private toQuestionInsert(
+    kitId: string,
+    position: string,
+    proposed: ProposedQuestion,
+    generationId: string,
+  ): import('./questions.repository').QuestionInsert {
+    return {
+      kitId,
+      position,
+      topic: proposed.topic,
+      type: proposed.type,
+      prompt: proposed.prompt,
+      options: proposed.options,
+      difficulty: proposed.difficulty,
+      timeLimitSec: proposed.timeLimitSec,
+      timeLimitType: proposed.timeLimitType,
+      mandatory: proposed.mandatory,
+      followupPolicy: proposed.followupPolicy,
+      followupFixed: proposed.followupFixed,
+      followupDepthCap: proposed.followupDepthCap,
+      rubricLines: proposed.rubricLines,
+      source: 'jd_generated',
+      sourceRef: generationId,
+    };
   }
 
   async list(user: AppUser, statusParam: string | undefined): Promise<Kit[]> {
