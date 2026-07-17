@@ -9,13 +9,14 @@ export interface ConsentRow {
   subject_id: string;
   purpose: string;
   notice_version: string;
+  notice_text: string | null;
   captured_at: Date;
   artifact_uri: string | null;
   withdrawn_at: Date | null;
 }
 
 const COLUMNS =
-  'id, session_id, invite_id, subject_id, purpose, notice_version, captured_at, artifact_uri, withdrawn_at';
+  'id, session_id, invite_id, subject_id, purpose, notice_version, notice_text, captured_at, artifact_uri, withdrawn_at';
 
 function mapRow(row: ConsentRow): ConsentRecord {
   return {
@@ -25,6 +26,7 @@ function mapRow(row: ConsentRow): ConsentRecord {
     subjectId: row.subject_id,
     purpose: row.purpose,
     noticeVersion: row.notice_version,
+    noticeText: row.notice_text ?? '',
     capturedAt: row.captured_at.toISOString(),
     artifactUri: row.artifact_uri,
     withdrawnAt: row.withdrawn_at?.toISOString() ?? null,
@@ -42,13 +44,14 @@ export class ConsentRepository {
       subjectId: string;
       purpose: string;
       noticeVersion: string;
+      noticeText?: string;
       artifactUri?: string;
     },
     q: Queryable,
   ): Promise<ConsentRecord> {
     const result = await q.query(
-      `INSERT INTO consent_record (session_id, invite_id, subject_id, purpose, notice_version, artifact_uri)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO consent_record (session_id, invite_id, subject_id, purpose, notice_version, notice_text, artifact_uri)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING ${COLUMNS}`,
       [
         input.sessionId ?? null,
@@ -56,6 +59,7 @@ export class ConsentRepository {
         input.subjectId,
         input.purpose,
         input.noticeVersion,
+        input.noticeText ?? null,
         input.artifactUri ?? null,
       ],
     );

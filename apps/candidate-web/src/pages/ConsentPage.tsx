@@ -3,13 +3,43 @@ import { useNavigate } from 'react-router-dom';
 import { Button, Card, Input } from '@zios/ui';
 import { ApiErrorResponse, consentByToken } from '../api';
 import { storeRecovery, useInterview } from '../InterviewContext';
+
 import { ErrorState } from '../components/ErrorState';
 import { LoadingState } from '../components/LoadingState';
 import { PageShell } from '../components/PageShell';
 
+function buildNoticeText(mode: string, proctoringLevel: string): string {
+  const base = [
+    'This interview is conducted by an AI system.',
+    'Your responses may be recorded (audio, video, or text) for evaluation.',
+    'We measure observable delivery behaviour (pace, fillers, structure) — never emotion, personality, or face inference.',
+    'Your data is retained according to our retention policy and you may withdraw consent at any time.',
+    'Purpose: interview evaluation for the role you applied to.',
+  ];
+
+  const modeText =
+    mode === 'video'
+      ? 'For this video interview, your camera and microphone are used to capture your spoken answers. Video and audio are recorded and stored securely.'
+      : mode === 'voice'
+        ? 'For this voice interview, your microphone is used to capture your spoken answers. Audio is recorded and stored securely; no camera or face inference is performed.'
+        : 'For this text interview, no camera or microphone recording is made. We only collect the answers you type and basic interaction telemetry.';
+
+  const proctoringText =
+    proctoringLevel === 'strict'
+      ? 'Proctoring level: strict. We capture periodic webcam snapshots, count tab-switch/fullscreen-exit events, and log copy-paste actions. A human reviewer will disposition every flag before any hiring decision is affected.'
+      : proctoringLevel === 'standard'
+        ? 'Proctoring level: standard. We count tab-switch/fullscreen-exit events and log copy-paste actions. A human reviewer will disposition any flag before any hiring decision is affected.'
+        : 'Proctoring level: none. No proctoring events are captured beyond the interview recording itself.';
+
+  return [...base, modeText, proctoringText].join(' ');
+}
+
 export function ConsentPage() {
   const navigate = useNavigate();
   const { token, candidate, kit, setResolvedData } = useInterview();
+  const mode = kit?.settings?.mode ?? 'text';
+  const proctoringLevel = kit?.settings?.proctoringLevel ?? 'none';
+  const noticeText = buildNoticeText(mode, proctoringLevel);
   const [name, setName] = useState(candidate?.name ?? '');
   const [email, setEmail] = useState(candidate?.email ?? '');
   const [phone, setPhone] = useState(candidate?.phone ?? '');
@@ -37,6 +67,7 @@ export function ConsentPage() {
         name: name.trim(),
         email: email.trim(),
         phone: phone.trim() || undefined,
+        noticeText,
       });
       storeRecovery(response.session.id, response.recoveryToken);
       setResolvedData({
@@ -78,9 +109,21 @@ export function ConsentPage() {
             <li className="flex gap-3">
               <span className="text-secondary-container">●</span>
               <span>
-                {kit?.settings?.mode === 'voice'
-                  ? 'For this voice interview, your microphone is used to capture your spoken answers. Audio is recorded and stored securely; no camera or face inference is performed.'
-                  : 'For this text interview, no camera or microphone recording is made. We only collect the answers you type and basic interaction telemetry.'}
+                {mode === 'video'
+                  ? 'For this video interview, your camera and microphone are used to capture your spoken answers. Video and audio are recorded and stored securely; no face inference is performed.'
+                  : mode === 'voice'
+                    ? 'For this voice interview, your microphone is used to capture your spoken answers. Audio is recorded and stored securely; no camera or face inference is performed.'
+                    : 'For this text interview, no camera or microphone recording is made. We only collect the answers you type and basic interaction telemetry.'}
+              </span>
+            </li>
+            <li className="flex gap-3">
+              <span className="text-secondary-container">●</span>
+              <span>
+                {proctoringLevel === 'strict'
+                  ? 'Proctoring level: strict. We capture periodic webcam snapshots, count tab-switch/fullscreen-exit events, and log copy-paste actions. A human reviewer will disposition every flag before any hiring decision is affected.'
+                  : proctoringLevel === 'standard'
+                    ? 'Proctoring level: standard. We count tab-switch/fullscreen-exit events and log copy-paste actions. A human reviewer will disposition any flag before any hiring decision is affected.'
+                    : 'Proctoring level: none. No proctoring events are captured beyond the interview recording itself.'}
               </span>
             </li>
             <li className="flex gap-3">

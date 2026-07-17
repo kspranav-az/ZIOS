@@ -189,7 +189,7 @@ export class SessionsService {
       // Consent must be recorded before any capture (FR-E6-2 / X8).
       const subjectId = candidate ? candidate.email : invite.candidate_id;
       const consent: ConsentRecord = await this.consent.createForInvite(
-        { inviteId: invite.id, subjectId },
+        { inviteId: invite.id, subjectId, noticeText: body?.noticeText },
         q,
       );
 

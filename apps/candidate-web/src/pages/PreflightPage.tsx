@@ -32,6 +32,8 @@ export function PreflightPage() {
       setResolvedData({ session: response.session, turn: response.turn });
       if (response.session.mode === 'voice') {
         navigate('/voice', { replace: true });
+      } else if (response.session.mode === 'video') {
+        navigate('/video', { replace: true });
       } else {
         navigate('/interview', { replace: true });
       }
