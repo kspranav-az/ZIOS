@@ -5,11 +5,13 @@ import type {
   EvaluationReport,
   EvaluationScore,
   EvidenceSpan,
+  IntegrityFlag,
   ScoreOverride,
   SessionTranscript,
 } from '@zios/shared-types';
 import { Badge, Button, Card, Icon } from '@zios/ui';
 import { dashboardApi } from '../../lib/dashboard-api';
+import { integrityApi } from '../../lib/integrity-api';
 import { reportsApi } from '../../lib/reports-api';
 import { userMessageForError } from '../../lib/errors';
 import { useToast } from '../../components/Toast';
@@ -36,9 +38,11 @@ interface DetailState {
   evidenceSpans: EvidenceSpan[];
   overrides: ScoreOverride[];
   transcript: SessionTranscript[];
+  flags: IntegrityFlag[];
   candidate: Candidate;
   kitTitle: string;
   sessionStatus: import('@zios/shared-types').SessionStatus;
+  sessionMode: import('@zios/shared-types').InterviewMode;
 }
 
 export function InterviewDetailPage() {
@@ -49,6 +53,7 @@ export function InterviewDetailPage() {
   const [loading, setLoading] = useState(true);
   const [shareUrl, setShareUrl] = useState<string>();
   const [overrideScore, setOverrideScore] = useState<EvaluationScore | null>(null);
+  const [dispositionFlag, setDispositionFlag] = useState<IntegrityFlag | null>(null);
   const transcriptRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
@@ -56,9 +61,10 @@ export function InterviewDetailPage() {
     setLoading(true);
     setError(undefined);
     try {
-      const [detail, dashboard] = await Promise.all([
+      const [detail, dashboard, flags] = await Promise.all([
         reportsApi.getDetail(sessionId),
         dashboardApi.listInterviews({ pageSize: 100 }),
+        integrityApi.listFlags(sessionId),
       ]);
       const row = dashboard.items.find((item) => item.session.id === sessionId);
       if (!row) {
@@ -70,9 +76,11 @@ export function InterviewDetailPage() {
         evidenceSpans: detail.evidenceSpans,
         overrides: detail.overrides,
         transcript: detail.transcript,
+        flags: flags.flags,
         candidate: row.candidate,
         kitTitle: row.kitTitle,
         sessionStatus: row.session.status,
+        sessionMode: row.session.mode,
       });
     } catch (err) {
       setError(userMessageForError(err));
@@ -175,8 +183,17 @@ export function InterviewDetailPage() {
     );
   }
 
-  const { report, evidenceSpans, overrides, transcript, candidate, kitTitle, sessionStatus } =
-    state;
+  const {
+    report,
+    evidenceSpans,
+    overrides,
+    transcript,
+    flags,
+    candidate,
+    kitTitle,
+    sessionStatus,
+    sessionMode,
+  } = state;
   const timeline = sortTimelineStages(sessionStatus);
   const hasReport = report.status === 'completed';
 
@@ -291,8 +308,9 @@ export function InterviewDetailPage() {
             <dl className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <dt className="text-on-surface-variant">Mode</dt>
-                <dd className="flex items-center gap-1 text-primary font-label-bold">
-                  <Icon name={MODE_ICONS['text'] ?? 'chat'} className="text-sm" /> Text
+                <dd className="flex items-center gap-1 text-primary font-label-bold capitalize">
+                  <Icon name={MODE_ICONS[sessionMode] ?? 'chat'} className="text-sm" />{' '}
+                  {sessionMode}
                 </dd>
               </div>
               <div className="flex justify-between">
@@ -459,6 +477,80 @@ export function InterviewDetailPage() {
                   })}
                 </div>
               </Card>
+
+              {sessionMode === 'video' && (
+                <Card>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="font-headline-sm text-headline-sm text-primary">
+                      Integrity flags
+                    </h3>
+                    <span className="text-xs text-on-surface-variant">
+                      {flags.filter((f) => f.disposition === 'pending').length} pending
+                    </span>
+                  </div>
+                  {flags.length === 0 ? (
+                    <p className="text-sm text-on-surface-variant">No integrity flags recorded.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {flags.map((flag) => (
+                        <div
+                          key={flag.id}
+                          className="rounded-xl border border-surface-variant/50 p-3"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-label-bold text-on-surface capitalize">
+                                {flag.signal.replace(/_/g, ' ')}
+                              </p>
+                              <p className="text-xs text-on-surface-variant">
+                                {formatDateTime(flag.occurredAt)}
+                              </p>
+                            </div>
+                            <Badge
+                              tone={
+                                flag.disposition === 'confirmed'
+                                  ? 'error'
+                                  : flag.disposition === 'dismissed'
+                                    ? 'success'
+                                    : 'warning'
+                              }
+                              className="text-[10px] capitalize"
+                            >
+                              {flag.disposition}
+                            </Badge>
+                          </div>
+                          <div className="mt-2 text-xs text-on-surface-variant">
+                            {flag.evidence && Object.keys(flag.evidence).length > 0 && (
+                              <details>
+                                <summary className="cursor-pointer">Evidence</summary>
+                                <pre className="mt-1 max-h-32 overflow-auto rounded-lg bg-surface-container-low p-2">
+                                  {JSON.stringify(flag.evidence, null, 2)}
+                                </pre>
+                              </details>
+                            )}
+                          </div>
+                          {flag.disposition === 'pending' && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="mt-3"
+                              onClick={() => setDispositionFlag(flag)}
+                            >
+                              Disposition
+                            </Button>
+                          )}
+                          {flag.disposition !== 'pending' && flag.dispositionedBy && (
+                            <p className="mt-2 text-xs text-on-surface-variant">
+                              Dispositioned as {flag.disposition} · {flag.dispositionReasonCode}
+                              {flag.dispositionReasonText ? ` · ${flag.dispositionReasonText}` : ''}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </Card>
+              )}
             </>
           )}
         </div>
@@ -470,6 +562,15 @@ export function InterviewDetailPage() {
           sessionId={sessionId!}
           onClose={() => setOverrideScore(null)}
           onOverride={load}
+        />
+      )}
+
+      {dispositionFlag && (
+        <DispositionModal
+          flag={dispositionFlag}
+          sessionId={sessionId!}
+          onClose={() => setDispositionFlag(null)}
+          onDisposition={load}
         />
       )}
     </div>
@@ -568,6 +669,123 @@ function OverrideModal({ score, sessionId, onClose, onOverride }: OverrideModalP
             </Button>
             <Button type="submit" loading={submitting} className="flex-1">
               Save override
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+interface DispositionModalProps {
+  flag: IntegrityFlag;
+  sessionId: string;
+  onClose: () => void;
+  onDisposition: () => void | Promise<void>;
+}
+
+const REASON_CODES = [
+  { value: 'false_positive', label: 'False positive' },
+  { value: 'technical_issue', label: 'Technical issue' },
+  { value: 'candidate_explained', label: 'Candidate explained' },
+  { value: 'confirmed_violation', label: 'Confirmed violation' },
+  { value: 'other', label: 'Other' },
+];
+
+function DispositionModal({ flag, sessionId, onClose, onDisposition }: DispositionModalProps) {
+  const { push: showToast } = useToast();
+  const [disposition, setDisposition] = useState<'dismissed' | 'confirmed'>('dismissed');
+  const [reasonCode, setReasonCode] = useState('');
+  const [reasonText, setReasonText] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!reasonCode.trim()) return;
+    setSubmitting(true);
+    try {
+      await integrityApi.dispositionFlag(sessionId, flag.id, {
+        disposition,
+        reasonCode: reasonCode.trim() as 'false_positive',
+        reasonText: reasonText.trim() || undefined,
+      });
+      showToast('Flag dispositioned', 'success');
+      onClose();
+      await onDisposition();
+    } catch (err) {
+      showToast(userMessageForError(err), 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+      <div className="bg-surface-container-lowest rounded-3xl shadow-xl w-full max-w-md p-6">
+        <h3 className="font-headline-sm text-headline-sm text-primary mb-1">Disposition flag</h3>
+        <p className="text-sm text-on-surface-variant mb-4 capitalize">
+          {flag.signal.replace(/_/g, ' ')}
+        </p>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="text-sm font-bold text-primary block mb-2">Decision</label>
+            <div className="flex gap-2">
+              {[
+                { value: 'dismissed', label: 'Dismiss' },
+                { value: 'confirmed', label: 'Confirm' },
+              ].map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setDisposition(option.value as 'dismissed' | 'confirmed')}
+                  className={`flex-1 rounded-xl px-4 py-2 text-sm font-label-bold transition-colors ${
+                    disposition === option.value
+                      ? 'bg-primary text-on-primary'
+                      : 'bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label htmlFor="reasonCode" className="text-sm font-bold text-primary block mb-1.5">
+              Reason code <span className="text-error">*</span>
+            </label>
+            <select
+              id="reasonCode"
+              required
+              value={reasonCode}
+              onChange={(e) => setReasonCode(e.target.value)}
+              className="w-full bg-white border border-outline-variant rounded-xl px-4 py-3 text-on-surface focus:ring-2 focus:ring-primary/10 outline-none"
+            >
+              <option value="">Select a reason</option>
+              {REASON_CODES.map((code) => (
+                <option key={code.value} value={code.value}>
+                  {code.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="reasonText" className="text-sm font-bold text-primary block mb-1.5">
+              Notes
+            </label>
+            <textarea
+              id="reasonText"
+              value={reasonText}
+              onChange={(e) => setReasonText(e.target.value)}
+              rows={3}
+              placeholder="Optional context for the disposition"
+              className="w-full bg-white border border-outline-variant rounded-xl px-4 py-3 text-on-surface focus:ring-2 focus:ring-primary/10 outline-none resize-none"
+            />
+          </div>
+          <div className="flex gap-3 pt-2">
+            <Button variant="outline" type="button" onClick={onClose} className="flex-1">
+              Cancel
+            </Button>
+            <Button type="submit" loading={submitting} className="flex-1">
+              Save disposition
             </Button>
           </div>
         </form>

@@ -195,7 +195,7 @@ describe.runIf(INTEGRATION_AVAILABLE)('Phase 08 — video proctoring & integrity
     expect(eventsRes.status).toBe(201);
     const flags = ((await eventsRes.json()) as IntegrityFlagsResponse).flags;
     expect(flags).toHaveLength(2);
-    expect(flags[0].disposition).toBe('pending');
+    expect(flags[0]!.disposition).toBe('pending');
 
     const listRes = await fetch(
       `${test.baseUrl}/sessions/${encodeURIComponent(sessionId)}/integrity/flags`,
@@ -207,7 +207,7 @@ describe.runIf(INTEGRATION_AVAILABLE)('Phase 08 — video proctoring & integrity
     const listed = ((await listRes.json()) as IntegrityFlagsResponse).flags;
     expect(listed).toHaveLength(2);
 
-    const flagId = listed[0].id;
+    const flagId = listed[0]!.id;
     const dispositionRes = await postJson(
       test.baseUrl,
       `/sessions/${encodeURIComponent(sessionId)}/integrity/flags/${flagId}/disposition`,

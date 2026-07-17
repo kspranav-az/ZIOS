@@ -755,7 +755,7 @@ export type IntegritySignal =
   | 'webcam_snapshot'
   | 'tab_switch'
   | 'fullscreen_exit'
-  | 'copy_paste'
+  | 'paste_attempt'
   | 'long_silence'
   | 'background_voice';
 

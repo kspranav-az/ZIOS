@@ -17,6 +17,7 @@ import type {
   IdUploadBody,
   IdUploadResponse,
   IntegrityEventBody,
+  IntegrityFlag,
   IntegrityFlagsResponse,
 } from '@zios/shared-types';
 
