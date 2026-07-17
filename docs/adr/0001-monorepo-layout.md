@@ -59,3 +59,16 @@ Supporting choices:
 - The boundary rule covers import/export statements only; runtime string
   references (e.g. dynamic `import()` with variables) are out of scope for
   now.
+
+## Amendment (Phase 01)
+
+Two directories outside `src/modules/` were added in `services/api`:
+
+- `src/common/` — a **shared kernel** of dependency-free building blocks
+  (route-policy decorators, request auth context, the API error envelope).
+  Modules import it via the `@/common/...` alias; it never imports modules,
+  so the dependency graph stays acyclic (this is what lets the org module
+  declare `@Roles()` while the auth module provisions orgs).
+- `src/testing/` — integration test harness (app boot, Mailpit/Postgres
+  helpers); test-only, excluded from `tsconfig.build.json` so it never
+  ships in `dist`.
