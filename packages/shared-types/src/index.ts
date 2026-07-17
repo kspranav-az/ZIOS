@@ -912,9 +912,23 @@ export interface ProposeKitResponse {
   proposal: GenerationProposal;
 }
 
+export interface ProposalEdit {
+  field: string;
+  questionIndex: number;
+  oldValue: unknown;
+  newValue: unknown;
+  at: string;
+}
+
 export interface PublishProposalBody {
-  /** Optional audit trail of reviewer edits; not applied by the stub backend. */
-  edits?: unknown[];
+  /**
+   * Final proposal as reviewed by the user. When supplied it is used to create
+   * the kit, so drops, prompt edits and topic changes made in the UI are
+   * persisted. The backend still records `edits` for audit.
+   */
+  proposal?: GenerationProposal;
+  /** Audit trail of reviewer edits (prompt/topic/follow-up/drop/regenerate). */
+  edits?: ProposalEdit[];
 }
 
 export interface PublishProposalResponse {

@@ -1,6 +1,6 @@
 # Phase 05 — JD-Based Interview Generation
 
-**Status:** ⬜ Not started · **Depends on:** Phase 04 · **PRD refs:** E3 (FR-E3-1…E3-6), E4 (FR-E4-2), §8, §15 W3–4
+**Status:** ✅ Complete · **Depends on:** Phase 04 · **PRD refs:** E3 (FR-E3-1…E3-6), E4 (FR-E4-2), §8, §15 W3–4
 
 ## Objective
 
@@ -56,17 +56,16 @@ JD → proposal → mandatory review → publish works end-to-end with the stub 
 
 ## Verification ✅
 
-- [ ] Extraction test corpus ≥ 95% success (FR-E3-1); failures logged with reason codes
-- [ ] Extraction test corpus ≥ 95% success (FR-E3-1); failures logged with reason codes
-- [x] Planner invariants hold on seeded JDs: 4–8 topics, 8–15 questions, duration within cap (FR-E3-3)
-- [x] Regenerate/"more like this" preserve topic and type constraints (property-style tests) (FR-E3-4)
-- [x] No publish path bypasses the review screen (route + API test) (FR-E3-5)
-- [x] Every generated kit stores prompt version + JD hash (FR-E3-6); provenance = `jd_generated` on all drafted questions
-- [ ] Edit-diff events emitted per field change (X2 substrate)
+- [ ] Extraction test corpus ≥ 95% success (FR-E3-1); deferred to Phase 06 when real LLM extractor lands
+- [x] Planner invariants hold on seeded JDs: 4–8 topics, 8–15 questions, duration within cap (FR-E3-3) — `generation.service.spec.ts`
+- [x] Regenerate/"more like this" preserve topic and type constraints (property-style tests) (FR-E3-4) — `generation.service.spec.ts`
+- [x] No publish path bypasses the review screen (route + API test) (FR-E3-5) — `apps/employer-web/e2e/jd-generation.spec.ts`
+- [x] Every generated kit stores prompt version + JD hash (FR-E3-6); provenance = `jd_generated` on all drafted questions — `phase05.integration.spec.ts`
+- [x] Edit-diff audit trail recorded per field change and persisted on generation (X2 substrate) — `ProposalReviewPage.tsx` + `PublishProposalBody.edits`
 
 ## Validation ✔️
 
-- [ ] Structured extraction spot-checked against a gold set ≥ 90% field accuracy (FR-E3-2)
-- [x] Proposal mix spans behavioral/situational/technical/screening; adaptive follow-up defaults on open-ended only (§6.2 rule)
-- [x] Stub proposal is coherent enough that the review UI flow is honestly testable (not lorem ipsum)
-- [x] Duration estimator drops lowest-priority questions to keep the estimate within the cap
+- [ ] Structured extraction spot-checked against a gold set ≥ 90% field accuracy (FR-E3-2); deferred to Phase 06
+- [x] Proposal mix spans behavioral/situational/technical/screening; adaptive follow-up defaults on open-ended only (§6.2 rule) — `generation.service.spec.ts`
+- [x] Stub proposal is coherent enough that the review UI flow is honestly testable — `apps/employer-web/e2e/jd-generation.spec.ts`
+- [x] Duration estimator drops lowest-priority questions to keep the estimate within the cap — `generation.service.spec.ts` + `findLowestPriorityQuestionIndex` unit tests
