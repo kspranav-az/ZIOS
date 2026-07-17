@@ -9,3 +9,5 @@ AI-Interview-Platform
 pnpm-lock.yaml
 uv.lock
 CHANGELOG.md
+playwright-report
+test-results
