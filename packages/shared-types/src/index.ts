@@ -407,3 +407,256 @@ export interface BankSearchResponse {
   total: number;
   totalPages: number;
 }
+
+/* --------------------------------------------------------------------------
+ * Phase 03 — Invites, Consent Registry & Candidate Text Interview Sessions
+ * (PRD E5, E6 text mode, E7, §10 state machine).
+ * ------------------------------------------------------------------------ */
+
+export type InviteStatus = 'invited' | 'started' | 'completed' | 'expired';
+
+export type SessionStatus =
+  | 'invited'
+  | 'consented'
+  | 'preflight'
+  | 'live'
+  | 'completed'
+  | 'abandoned'
+  | 'scoring'
+  | 'reported'
+  | 'reviewed';
+
+export type SessionConductor = 'ai' | 'human';
+
+/** The stub conductor's next output in text mode. */
+export type TurnType = 'question' | 'followup' | 'wrapup';
+
+export interface Candidate {
+  id: string;
+  orgId: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  externalRef: string | null;
+  piiVaultRef: string | null;
+  createdAt: string;
+}
+
+export interface Invite {
+  id: string;
+  orgId: string;
+  kitVersionId: string;
+  candidateId: string;
+  /** SHA-256 of the single-use token delivered to the candidate. */
+  tokenHash: string;
+  expiresAt: string;
+  otpRequired: boolean;
+  otpVerifiedAt: string | null;
+  status: InviteStatus;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ConsentRecord {
+  id: string;
+  sessionId: string | null;
+  inviteId: string | null;
+  subjectId: string;
+  purpose: string;
+  noticeVersion: string;
+  capturedAt: string;
+  artifactUri: string | null;
+  withdrawnAt: string | null;
+}
+
+export interface InterviewSession {
+  id: string;
+  inviteId: string;
+  kitVersionId: string;
+  mode: InterviewMode;
+  conductor: SessionConductor;
+  status: SessionStatus;
+  consentId: string | null;
+  preflightReport: Record<string, unknown>;
+  startedAt: string | null;
+  endedAt: string | null;
+  mediaRefs: unknown[];
+  integrityEvents: unknown[];
+  schemaVersion: number;
+  recoveryTokenHash: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SessionTranscript {
+  id: string;
+  sessionId: string;
+  questionId: string;
+  questionPrompt: string;
+  answerText: string | null;
+  position: number;
+  evidenceSpan: Array<{ start: number; end: number; transcriptId: string }>;
+  createdAt: string;
+  answeredAt: string | null;
+}
+
+export interface SessionEvent {
+  id: string;
+  sessionId: string;
+  type: string;
+  payload: Record<string, unknown>;
+  occurredAt: string;
+}
+
+export interface SessionTurnResponse {
+  type: TurnType;
+  text: string;
+  questionId: string | null;
+}
+
+/* ---- invites ---- */
+
+export interface InviteCandidateInput {
+  name: string;
+  email: string;
+  phone?: string;
+  externalRef?: string;
+}
+
+export interface CreateCandidateInviteBody {
+  kitVersionId: string;
+  candidate: InviteCandidateInput;
+  /** Default 7 days. */
+  expiresInDays?: number;
+  otpRequired?: boolean;
+  metadata?: Record<string, unknown>;
+}
+
+export interface CreateCandidateInviteResponse {
+  invite: Invite;
+  candidate: Candidate;
+  /** Raw token — delivered to the candidate, never stored. */
+  token: string;
+}
+
+export interface BulkInviteRowResult {
+  row: number;
+  invite?: Invite;
+  candidate?: Candidate;
+  token?: string;
+  error?: string;
+}
+
+export interface BulkInviteResponse {
+  total: number;
+  successes: number;
+  errors: number;
+  results: BulkInviteRowResult[];
+}
+
+export interface ReissueInviteBody {
+  /** If omitted, the existing expiry is preserved and only the token rotates. */
+  expiresInDays?: number;
+}
+
+export interface RescheduleInviteBody {
+  /** New absolute expiry. Takes precedence over extendDays. */
+  expiresAt?: string;
+  /** Extend from now by this many days. */
+  extendDays?: number;
+}
+
+export interface InviteListResponse {
+  invites: Invite[];
+}
+
+export interface InviteDetailResponse {
+  invite: Invite;
+  candidate: Candidate;
+  kitVersion: KitVersionSummary;
+}
+
+/* ---- public token / consent / OTP ---- */
+
+export interface TokenResolveResponse {
+  invite: Invite;
+  candidate: Candidate;
+  kit: KitSnapshotKit;
+  questions: KitQuestion[];
+  otpRequired: boolean;
+  otpVerified: boolean;
+  /** Present when the candidate has already started a session. */
+  session: InterviewSession | null;
+  consent: ConsentRecord | null;
+}
+
+export interface CandidateOtpRequestResponse {
+  ok: true;
+  expiresInSeconds: number;
+}
+
+export interface CandidateOtpVerifyBody {
+  code: string;
+}
+
+export interface CandidateOtpVerifyResponse {
+  verified: true;
+}
+
+export interface ConsentByTokenBody {
+  /** Candidate confirms the identity bound to the invite. */
+  name?: string;
+  email?: string;
+  phone?: string;
+}
+
+export interface ConsentByTokenResponse {
+  consent: ConsentRecord;
+  session: InterviewSession;
+  /** Used to resume the session without re-typing the invite link. */
+  recoveryToken: string;
+}
+
+/* ---- generic consent registry ---- */
+
+export interface CreateConsentBody {
+  subjectId: string;
+  purpose: string;
+  noticeVersion: string;
+  artifactUri?: string;
+  inviteId?: string;
+  sessionId?: string;
+}
+
+export interface ConsentResponse {
+  consent: ConsentRecord;
+}
+
+/* ---- sessions ---- */
+
+export interface PreflightBody {
+  /** Client-reported preflight results; stored as telemetry, not gating. */
+  report?: Record<string, unknown>;
+}
+
+export interface PreflightResponse {
+  session: InterviewSession;
+  turn: SessionTurnResponse;
+}
+
+export interface TurnBody {
+  /** Candidate's answer to the question just asked. Omit on first turn / resume. */
+  answer?: string;
+}
+
+export interface TurnResponse {
+  session: InterviewSession;
+  turn: SessionTurnResponse;
+}
+
+export interface SessionDetailResponse {
+  session: InterviewSession;
+  transcript: SessionTranscript[];
+  events: SessionEvent[];
+}
