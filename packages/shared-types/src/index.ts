@@ -154,6 +154,10 @@ export interface Kit {
   status: KitStatus;
   settings: KitSettings;
   jdRef: string | null;
+  /** Populated when this kit was created from a JD generation proposal (Phase 05). */
+  jdGenerationId: string | null;
+  /** Reproducibility metadata: JD hash, prompt version, generation timestamp. */
+  generationMetadata: Record<string, unknown>;
   createdBy: string;
   createdAt: string;
   /**
@@ -827,4 +831,101 @@ export interface PublicReportResponse {
   scores: EvaluationScore[];
   evidenceSpans: EvidenceSpan[];
   transcript: SessionTranscript[];
+}
+
+/* --------------------------------------------------------------------------
+ * Phase 05 — JD-Based Interview Generation
+ * (PRD E3 FR-E3-1…E3-6, E4 FR-E4-2, §8).
+ * ------------------------------------------------------------------------ */
+
+export type JdGenerationStatus = 'analyzing' | 'proposed' | 'published' | 'failed';
+
+export interface JdProfile {
+  title: string | null;
+  seniority: string | null;
+  roleFamily: string | null;
+  skills: string[];
+  niceToHaveSkills: string[];
+  responsibilities: string[];
+  tools: string[];
+  languages: string[];
+  /** Opaque bucket for stub-extractor debugging and future real-extractor parity. */
+  raw: Record<string, unknown>;
+}
+
+export interface ProposedQuestion {
+  topic: string;
+  type: QuestionType;
+  prompt: string;
+  options: McqOption[] | null;
+  difficulty: QuestionDifficulty;
+  timeLimitSec: number | null;
+  timeLimitType: TimeLimitType;
+  mandatory: boolean;
+  followupPolicy: FollowupPolicy;
+  followupFixed: string[] | null;
+  followupDepthCap: number | null;
+  rubricLines: RubricLine[];
+  source: QuestionSource;
+  sourceRef: string | null;
+}
+
+export interface GenerationProposal {
+  topics: string[];
+  questions: ProposedQuestion[];
+  durationEstimateSec: number;
+  withinCap: boolean;
+}
+
+export interface JdGeneration {
+  id: string;
+  orgId: string;
+  kitId: string | null;
+  jdHash: string;
+  promptVersion: string;
+  status: JdGenerationStatus;
+  roleProfile: JdProfile;
+  proposal: GenerationProposal;
+  edits: unknown[];
+  errorMessage: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/* ---- request/response bodies ---- */
+
+export interface AnalyzeJdBody {
+  jdText: string;
+}
+
+export interface AnalyzeJdResponse {
+  profile: JdProfile;
+}
+
+export interface ProposeKitBody {
+  jdText: string;
+}
+
+export interface ProposeKitResponse {
+  generation: JdGeneration;
+  profile: JdProfile;
+  proposal: GenerationProposal;
+}
+
+export interface PublishProposalBody {
+  /** Optional audit trail of reviewer edits; not applied by the stub backend. */
+  edits?: unknown[];
+}
+
+export interface PublishProposalResponse {
+  generation: JdGeneration;
+  version: KitVersionSummary;
+}
+
+export interface RegenerateQuestionBody {
+  index: number;
+  constraints?: {
+    topic?: string;
+    type?: QuestionType;
+  };
 }
