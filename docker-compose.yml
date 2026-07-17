@@ -146,6 +146,24 @@ services:
       retries: 12
       start_period: 10s
 
+  employer-web:
+    # Employer SPA (Vite build served by nginx) — Phase 01 app shell + auth
+    build:
+      context: .
+      dockerfile: apps/employer-web/Dockerfile
+      args:
+        # Build-time API URL baked into the bundle (browser calls the api
+        # container published on the host — see apps/employer-web/README.md)
+        VITE_API_URL: http://localhost:3000
+    container_name: zios-employer-web
+    ports:
+      - '${EMPLOYER_WEB_PORT}:80'
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://localhost:80']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   ai-orchestrator:
     # FastAPI AI orchestration worker service — Phase 00 skeleton
     build:
