@@ -99,9 +99,19 @@ services:
 
   livekit:
     # Self-hosted WebRTC SFU for voice/video interviews (Phase 07+)
+    # --node-ip 127.0.0.1 makes LiveKit advertise localhost ICE candidates so
+    # browsers on the Docker host reach published UDP/TCP ports. --udp-port
+    # pins the media port range to the same range published below.
     image: livekit/livekit-server:latest
     container_name: zios-livekit
-    command: ['--dev', '--bind', '0.0.0.0']
+    command:
+      - '--dev'
+      - '--bind'
+      - '0.0.0.0'
+      - '--node-ip'
+      - '127.0.0.1'
+      - '--udp-port'
+      - '50000-50060'
     ports:
       - '${LIVEKIT_PORT}:7880' # HTTP / WebSocket signalling
       - '7881:7881' # RTC over TCP
