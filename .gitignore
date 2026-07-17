@@ -32,6 +32,8 @@ venv/
 .vscode/
 *.log
 tmp/
+test-results/
+playwright-report/
 
 # --- Docker / local data volumes ---
 .data/
