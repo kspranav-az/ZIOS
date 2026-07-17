@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Post, Req, Res } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Inject, Post, Query, Req, Res } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import type {
   AppUser,
@@ -12,6 +12,7 @@ import { getRequestAuth } from '@/common/auth-context';
 import { CurrentUser, Public } from '@/common/decorators';
 import { SESSION_COOKIE, SESSION_TTL_DAYS } from './auth.constants';
 import { AuthService } from './auth.service';
+import { OAUTH_PORT, type OAuthPort } from './oauth.port';
 
 /**
  * Session transport contract for the SPA: the raw token is returned in the
@@ -21,7 +22,10 @@ import { AuthService } from './auth.service';
  */
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly auth: AuthService) {}
+  constructor(
+    private readonly auth: AuthService,
+    @Inject(OAUTH_PORT) private readonly oauth: OAuthPort,
+  ) {}
 
   @Public()
   @Post('otp/request')
@@ -38,15 +42,18 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ): Promise<AuthResponse> {
     const result = await this.auth.verifyOtp(body?.email, body?.code);
-    res.cookie(SESSION_COOKIE, result.session.token, {
+    this.setSessionCookie(res, result.session.token);
+    return result;
+  }
+
+  private setSessionCookie(res: Response, token: string): void {
+    res.cookie(SESSION_COOKIE, token, {
       httpOnly: true,
       sameSite: 'lax',
-      // http on localhost in dev; set COOKIE_SECURE=true behind TLS.
       secure: process.env.COOKIE_SECURE === 'true',
       path: '/',
       maxAge: SESSION_TTL_DAYS * 24 * 60 * 60 * 1000,
     });
-    return result;
   }
 
   @Post('logout')
@@ -57,6 +64,30 @@ export class AuthController {
       await this.auth.logout(auth.sessionId);
     }
     res.clearCookie(SESSION_COOKIE, { path: '/' });
+  }
+
+  @Public()
+  @Get('google')
+  @HttpCode(302)
+  async googleAuth(@Res({ passthrough: true }) res: Response): Promise<void> {
+    const redirectUri = `${process.env.API_URL ?? 'http://localhost:3000'}/auth/google/callback`;
+    const state = 'mock-state';
+    const url = await this.oauth.authorizationUrl(state, redirectUri);
+    res.redirect(url);
+  }
+
+  @Public()
+  @Get('google/callback')
+  @HttpCode(200)
+  async googleCallback(
+    @Query('code') code: string | undefined,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<AuthResponse> {
+    const redirectUri = `${process.env.API_URL ?? 'http://localhost:3000'}/auth/google/callback`;
+    const identity = await this.oauth.exchangeCode(code ?? '', redirectUri);
+    const result = await this.auth.oauthSignIn(identity.email, identity.provider);
+    this.setSessionCookie(res, result.session.token);
+    return result;
   }
 
   @Get('me')

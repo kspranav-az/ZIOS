@@ -6,6 +6,8 @@ import { UsersModule } from '@/modules/users';
 import { AuthController } from './auth.controller';
 import { AuthGuard } from './auth.guard';
 import { AuthService } from './auth.service';
+import { MockOAuthAdapter } from './mock-oauth.adapter';
+import { OAUTH_PORT } from './oauth.port';
 import { OtpRepository } from './otp.repository';
 import { OtpService } from './otp.service';
 import { RolesGuard } from './roles.guard';
@@ -23,6 +25,7 @@ import { SessionService } from './session.service';
     SessionService,
     AuthService,
     SessionAuthMiddleware,
+    { provide: OAUTH_PORT, useClass: MockOAuthAdapter },
     // Global guards, in order: authenticate first, then authorize.
     { provide: APP_GUARD, useClass: AuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
