@@ -30,7 +30,9 @@ export function PreflightPage() {
         report: { source: 'candidate-web', ready: true },
       });
       setResolvedData({ session: response.session, turn: response.turn });
-      if (response.session.mode === 'voice') {
+      if (response.session.conductor === 'human' && response.session.mode === 'video') {
+        navigate('/live', { replace: true });
+      } else if (response.session.mode === 'voice') {
         navigate('/voice', { replace: true });
       } else if (response.session.mode === 'video') {
         navigate('/video', { replace: true });

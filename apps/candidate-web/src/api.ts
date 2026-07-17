@@ -7,6 +7,7 @@ import type {
   ConsentByTokenResponse,
   IntegrityEventBody,
   IntegrityFlagsResponse,
+  LiveTokenResponse,
   PreflightBody,
   PreflightResponse,
   SessionDetailResponse,
@@ -198,5 +199,13 @@ export function fallbackToText(
     'POST',
     `/sessions/${encodeURIComponent(sessionId)}/voice/fallback`,
     { body, headers: { 'x-recovery-token': recoveryToken } },
+  );
+}
+
+export function getLiveToken(sessionId: string, recoveryToken: string): Promise<LiveTokenResponse> {
+  return request<LiveTokenResponse>(
+    'POST',
+    `/sessions/${encodeURIComponent(sessionId)}/live/token`,
+    { headers: { 'x-recovery-token': recoveryToken } },
   );
 }

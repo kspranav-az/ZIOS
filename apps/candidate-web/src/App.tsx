@@ -7,6 +7,7 @@ import { InterviewPage } from './pages/InterviewPage';
 import { OtpPage } from './pages/OtpPage';
 import { VoiceInterviewPage } from './pages/VoiceInterviewPage';
 import { VideoInterviewPage } from './pages/VideoInterviewPage';
+import { HumanLivePage } from './pages/HumanLivePage';
 import { PreflightPage } from './pages/PreflightPage';
 import { TokenLandingPage } from './pages/TokenLandingPage';
 
@@ -29,6 +30,7 @@ const router = createBrowserRouter([
       { path: '/interview', element: <InterviewPage /> },
       { path: '/voice', element: <VoiceInterviewPage /> },
       { path: '/video', element: <VideoInterviewPage /> },
+      { path: '/live', element: <HumanLivePage /> },
       { path: '/complete', element: <CompletionPage /> },
       { path: '/expired', element: <ExpiredPage /> },
       { path: '*', element: <Navigate to="/" replace /> },
