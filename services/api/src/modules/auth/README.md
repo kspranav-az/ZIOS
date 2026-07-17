@@ -24,6 +24,9 @@ Two global guards (registered as `APP_GUARD`, auth runs before roles):
 | `POST /orgs/current/invites`        | `admin` only                                       |
 | `POST /orgs/current/invites/accept` | authenticated (any role, invitee email must match) |
 | `GET /orgs/current/members`         | `admin` only                                       |
+| `/kits/**` (all kit routes)         | authenticated (admin + interviewer, FR-E1-2)       |
+| `GET /preview/:token`               | authenticated; token's org must match session org  |
+| `GET /bank/questions`               | authenticated (any role)                           |
 
 Adding a route? It is **protected by default** — opt out with `@Public()`,
 restrict with `@Roles('admin')`. Integration tests prove the 401/403 matrix.
