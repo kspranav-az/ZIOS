@@ -20,7 +20,8 @@ export function HumanLivePage() {
   const { session: contextSession, recoveryToken: contextRecoveryToken } = useInterview();
   const [recoveredSessionId, setRecoveredSessionId] = useState<string | null>(null);
   const [recoveredRecoveryToken, setRecoveredRecoveryToken] = useState<string | null>(null);
-  const [connecting, setConnecting] = useState(true);
+  const [recovering, setRecovering] = useState(true);
+  const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [connectionQuality, setConnectionQuality] = useState<'good' | 'poor' | 'unknown'>(
     'unknown',
@@ -30,25 +31,32 @@ export function HumanLivePage() {
   const localVideoRef = useRef<LocalVideoTrack | null>(null);
   const videoElementRef = useRef<HTMLVideoElement | null>(null);
 
-  const session = contextSession;
   const recoveryToken = contextRecoveryToken ?? recoveredRecoveryToken;
-  const sessionId = session?.id ?? recoveredSessionId;
+  const sessionId = contextSession?.id ?? recoveredSessionId;
 
+  // Recover from sessionStorage if context was lost (refresh / direct navigation).
   useEffect(() => {
-    if (contextSession && contextRecoveryToken) return;
+    if (contextSession && contextRecoveryToken) {
+      setRecovering(false);
+      return;
+    }
     const storedSessionId = loadStoredSessionId();
     const storedRecoveryToken = storedSessionId ? loadRecovery(storedSessionId) : null;
     if (storedSessionId && storedRecoveryToken) {
       setRecoveredSessionId(storedSessionId);
       setRecoveredRecoveryToken(storedRecoveryToken);
     }
+    setRecovering(false);
   }, [contextSession, contextRecoveryToken]);
 
+  // Connect to LiveKit once we have session + recovery token.
   useEffect(() => {
     if (!sessionId || !recoveryToken) return;
     const liveSessionId = sessionId;
     const liveRecoveryToken = recoveryToken;
     let cancelled = false;
+    setConnecting(true);
+    setError(null);
 
     async function startLive() {
       try {
@@ -85,11 +93,12 @@ export function HumanLivePage() {
         }
         setConnecting(false);
       } catch (err) {
+        if (cancelled) return;
         setConnecting(false);
         setError(
           err instanceof ApiErrorResponse
             ? err.message
-            : 'Could not join the live interview. Please try again.',
+            : 'Could not join the live interview. Please check your camera/microphone permissions and try again.',
         );
       }
     }
@@ -102,10 +111,36 @@ export function HumanLivePage() {
     };
   }, [sessionId, recoveryToken]);
 
+  // Re-attach local video if the ref becomes available after connect.
+  useEffect(() => {
+    if (localVideoRef.current && videoElementRef.current) {
+      localVideoRef.current.attach(videoElementRef.current);
+    }
+  }, []);
+
+  const handleRetry = () => {
+    setError(null);
+    // Force a re-run of the connect effect by briefly clearing and restoring ids.
+    if (contextSession?.id && contextRecoveryToken) {
+      setConnecting(true);
+      return;
+    }
+    const storedSessionId = loadStoredSessionId();
+    const storedRecoveryToken = storedSessionId ? loadRecovery(storedSessionId) : null;
+    if (storedSessionId && storedRecoveryToken) {
+      setRecoveredSessionId(storedSessionId);
+      setRecoveredRecoveryToken(storedRecoveryToken);
+    }
+  };
+
   const handleLeave = () => {
     void roomRef.current?.disconnect();
     navigate('/complete', { replace: true });
   };
+
+  if (recovering) {
+    return <LoadingState message="Restoring your session…" />;
+  }
 
   if (!sessionId || !recoveryToken) {
     return (
@@ -156,9 +191,12 @@ export function HumanLivePage() {
           </p>
 
           {error && (
-            <p className="mt-4 rounded-lg bg-error-container p-3 text-body-md text-on-error-container">
-              {error}
-            </p>
+            <div className="mt-4 rounded-lg bg-error-container p-3 text-body-md text-on-error-container">
+              <p className="mb-2">{error}</p>
+              <Button variant="outline" size="sm" onClick={handleRetry}>
+                Try again
+              </Button>
+            </div>
           )}
 
           <div className="mt-6 flex justify-end">

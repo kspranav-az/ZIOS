@@ -43,6 +43,8 @@ export function CockpitPage() {
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'error'>(
     'connecting',
   );
+  const [roomError, setRoomError] = useState<string>();
+  const [connectNonce, setConnectNonce] = useState(0);
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
@@ -82,6 +84,8 @@ export function CockpitPage() {
   /* ---- LiveKit room ---- */
   useEffect(() => {
     if (!sessionId || !state) return;
+    setConnectionStatus('connecting');
+    setRoomError(undefined);
     let cancelled = false;
 
     async function connect() {
@@ -142,8 +146,10 @@ export function CockpitPage() {
         if (localVideo && localVideoRef.current) {
           localVideo.attach(localVideoRef.current);
         }
-      } catch {
+      } catch (err) {
+        if (cancelled) return;
         setConnectionStatus('error');
+        setRoomError(err instanceof Error ? err.message : 'Could not connect to the video room.');
       }
     }
 
@@ -153,7 +159,7 @@ export function CockpitPage() {
       cancelled = true;
       void roomRef.current?.disconnect();
     };
-  }, [sessionId, state]);
+  }, [sessionId, state, connectNonce]);
 
   useEffect(() => {
     if (remoteVideoTrack?.track && remoteVideoRef.current) {
@@ -316,7 +322,16 @@ export function CockpitPage() {
                   <div className="absolute inset-0 flex flex-col items-center justify-center text-on-surface-variant p-4 text-center">
                     <Icon name="videocam_off" className="text-4xl mb-2" />
                     <p className="text-sm">Could not connect to video room.</p>
+                    {roomError && <p className="text-xs mt-1 max-w-xs">{roomError}</p>}
                     <p className="text-xs mt-1">Cockpit controls still work.</p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-3"
+                      onClick={() => setConnectNonce((n) => n + 1)}
+                    >
+                      Retry connection
+                    </Button>
                   </div>
                 ) : (
                   <video

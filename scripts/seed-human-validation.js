@@ -98,7 +98,7 @@ async function main() {
   const candidateName = 'Validation Candidate';
 
   console.log('1. Creating admin...');
-  const { token: adminToken, code: adminOtp } = await signupAdmin(adminEmail);
+  const { token: adminToken } = await signupAdmin(adminEmail);
   console.log(`   admin: ${adminEmail}`);
 
   console.log('2. Creating video-mode kit...');
@@ -171,7 +171,7 @@ async function main() {
   });
 
   console.log('7. Scheduling slot for now...');
-  const slotAt = new Date(Date.now() + 60_000); // 1 minute from now
+  const slotAt = new Date(); // schedule for now so the ±10 min room window is open immediately
   await postJson(
     `/invites/${invite.id}/schedule`,
     {
@@ -188,9 +188,10 @@ async function main() {
   const employerScorecard = `http://localhost:5173/interviews/${session.id}/scorecard`;
 
   console.log('\n✅ Human-facilitated interview seeded.\n');
-  console.log('Admin sign-in (already done for you):');
+  console.log('Admin sign-in:');
   console.log(`  email:    ${adminEmail}`);
-  console.log(`  OTP:      ${adminOtp}`);
+  console.log('  password: request a fresh OTP on the login page; read it from');
+  console.log('            http://localhost:8025 (Mailpit) or enter the code shown there.');
   console.log('');
   console.log('URLs to open:');
   console.log(`  1. Employer cockpit (Chrome tab A):        ${employerCockpit}`);
@@ -202,13 +203,16 @@ async function main() {
   console.log(`  ${employerReport}`);
   console.log('');
   console.log('Suggested validation flow:');
-  console.log('  a. Open employer cockpit, confirm kit questions + timers render.');
-  console.log('  b. Open candidate landing, accept consent, click Start on preflight.');
-  console.log('  c. Confirm video/audio connects in the LiveKit room.');
-  console.log('  d. In cockpit, mark question 1 Covered, question 2 Skipped.');
-  console.log('  e. Click End call → should redirect to scorecard.');
-  console.log('  f. Generate AI pre-fill, edit one score, submit.');
-  console.log('  g. View report and confirm human scores + evidence render.');
+  console.log('  a. Sign in to the employer cockpit (request OTP, read from Mailpit).');
+  console.log('  b. Confirm kit questions + timers render.');
+  console.log(
+    '  c. Open candidate landing in another tab, accept consent, click Start on preflight.',
+  );
+  console.log('  d. Confirm video/audio connects in the LiveKit room.');
+  console.log('  e. In cockpit, mark question 1 Covered, question 2 Skipped.');
+  console.log('  f. Click End call → should redirect to scorecard.');
+  console.log('  g. Generate AI pre-fill, edit one score, submit.');
+  console.log('  h. View report and confirm human scores + evidence render.');
   console.log('');
   console.log(`sessionId: ${session.id}`);
   console.log(`inviteId:  ${invite.id}`);
