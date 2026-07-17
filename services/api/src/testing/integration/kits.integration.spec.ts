@@ -225,7 +225,11 @@ describe.skipIf(!INTEGRATION_AVAILABLE)('kits lifecycle (integration)', () => {
       `SELECT 1 FROM information_schema.tables WHERE table_name = 'interview_session'`,
     );
     if (sessionTable.rows.length > 0) {
-      const sessions = await test.db.query('SELECT count(*)::int AS n FROM interview_session');
+      const sessions = await test.db.query(
+        `SELECT count(*)::int AS n FROM interview_session
+         WHERE kit_version_id IN (SELECT id FROM kit_version WHERE kit_id = $1)`,
+        [kit.id],
+      );
       expect((sessions.rows[0] as { n: number }).n).toBe(0);
     }
 
