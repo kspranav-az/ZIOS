@@ -11,6 +11,7 @@ import { InvitesModule } from '@/modules/invites';
 import { KitsModule } from '@/modules/kits';
 import { OrgModule } from '@/modules/org';
 import { QuestionBankModule } from '@/modules/question-bank';
+import { IntegrityModule } from '@/modules/integrity';
 import { SessionsModule } from '@/modules/sessions';
 import { UsersModule } from '@/modules/users';
 import { VoiceModule } from '@/modules/voice';
@@ -45,6 +46,7 @@ import { VoiceModule } from '@/modules/voice';
     GenerationModule,
     SessionsModule,
     VoiceModule,
+    IntegrityModule,
   ],
 })
 export class AppModule {}

@@ -669,6 +669,24 @@ export interface SessionDetailResponse {
   events: SessionEvent[];
 }
 
+/* ---- integrity events (Phase 08) ---- */
+
+export interface IntegrityEventBody {
+  events: IntegrityEvent[];
+}
+
+export interface IntegrityFlagsResponse {
+  flags: IntegrityFlag[];
+}
+
+export interface IdUploadResponse {
+  upload: CandidateIdUpload;
+}
+
+export interface IdUploadBody {
+  candidateId: string;
+}
+
 /* ---- voice mode (Phase 07) ---- */
 
 export interface VoiceTokenResponse {
@@ -720,6 +738,62 @@ export interface VoiceRecordingRef {
   checksum: { algorithm: 'sha256'; value: string };
   recordedAt: string;
   durationMs: number;
+}
+
+/* --------------------------------------------------------------------------
+ * Phase 08 — Video Mode & Baseline Proctoring
+ * (PRD E9 FR-E9-1…E9-4, §13 integrity, §16.5 DPDP).
+ * ------------------------------------------------------------------------ */
+
+export type IntegritySignal =
+  | 'webcam_snapshot'
+  | 'tab_switch'
+  | 'fullscreen_exit'
+  | 'copy_paste'
+  | 'long_silence'
+  | 'background_voice';
+
+export interface IntegrityEvent {
+  signal: IntegritySignal;
+  /** ISO timestamp from the client/device that produced the event. */
+  occurredAt: string;
+  /** Free-form evidence payload (snapshot URI, pasted text length, etc.). */
+  evidence: Record<string, unknown>;
+}
+
+export type Disposition = 'pending' | 'dismissed' | 'confirmed';
+export type DispositionReasonCode =
+  'false_positive' | 'technical_issue' | 'candidate_explained' | 'confirmed_violation' | 'other';
+
+export interface IntegrityFlag {
+  id: string;
+  sessionId: string;
+  signal: IntegritySignal;
+  occurredAt: string;
+  evidence: Record<string, unknown>;
+  disposition: Disposition;
+  dispositionReasonCode: DispositionReasonCode | null;
+  dispositionReasonText: string | null;
+  dispositionedBy: string | null;
+  dispositionedAt: string | null;
+  createdAt: string;
+}
+
+export interface CreateDispositionBody {
+  disposition: 'dismissed' | 'confirmed';
+  reasonCode: DispositionReasonCode;
+  reasonText?: string;
+}
+
+export interface CandidateIdUpload {
+  id: string;
+  candidateId: string;
+  sessionId: string;
+  /** URI to the encrypted ID image (field-level encryption, separate bucket). */
+  encryptedUri: string;
+  checksum: { algorithm: 'sha256'; value: string };
+  uploadedAt: string;
+  deletedAt: string | null;
 }
 
 /* --------------------------------------------------------------------------
