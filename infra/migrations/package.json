@@ -4,10 +4,12 @@
   "private": true,
   "scripts": {
     "migrate": "node run.js",
+    "seed": "node seed.js",
     "lint": "eslint ."
   },
   "dependencies": {
-    "node-pg-migrate": "^7.9.1"
+    "node-pg-migrate": "^7.9.1",
+    "pg": "^8.13.3"
   },
   "devDependencies": {
     "@zios/config": "workspace:*"

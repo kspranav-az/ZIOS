@@ -98,6 +98,57 @@ jobs:
           echo "mailpit messages for ci-smoke@example.com: $count"
           [ "$count" -ge 1 ]
 
+      - name: Seed the question bank
+        run: pnpm seed
+
+      # Phase 02: end-to-end kit authoring loop against the real stack.
+      - name: Smoke-test kit publish and immutability
+        run: |
+          set -euo pipefail
+          curl -fsS -o /dev/null -X POST http://localhost:3000/auth/otp/request \
+            -H 'content-type: application/json' \
+            -d '{"email":"ci-kits@example.com"}'
+          code=""
+          for _ in $(seq 1 20); do
+            code=$(curl -sS 'http://localhost:8025/api/v1/messages?limit=50' | python3 -c '
+          import json, re, sys, urllib.request
+          msgs = json.load(sys.stdin).get("messages", [])
+          hit = next((m for m in msgs if any(t["Address"] == "ci-kits@example.com" for t in m["To"])), None)
+          if hit:
+              detail = json.load(urllib.request.urlopen("http://localhost:8025/api/v1/message/" + hit["ID"]))
+              m = re.search(r"(\d{6})", detail.get("Text", ""))
+              if m:
+                  print(m.group(1))
+          ' || true)
+            [ -n "$code" ] && break
+            sleep 1.5
+          done
+          echo "otp code retrieved: ${code:+yes}"
+          [ -n "$code" ]
+          token=$(curl -fsS -X POST http://localhost:3000/auth/otp/verify \
+            -H 'content-type: application/json' \
+            -d "{\"email\":\"ci-kits@example.com\",\"code\":\"$code\"}" \
+            | python3 -c 'import json,sys; print(json.load(sys.stdin)["session"]["token"])')
+          kit=$(curl -fsS -X POST http://localhost:3000/kits \
+            -H "authorization: Bearer $token" -H 'content-type: application/json' \
+            -d '{"title":"CI Smoke Kit","role":"Engineer","level":"mid"}' \
+            | python3 -c 'import json,sys; print(json.load(sys.stdin)["kit"]["id"])')
+          curl -fsS -o /dev/null -X POST "http://localhost:3000/kits/$kit/questions" \
+            -H "authorization: Bearer $token" -H 'content-type: application/json' \
+            -d '{"type":"open_ended","prompt":"Tell me about yourself.","rubricLines":[{"id":"r1","text":"Clarity","weight":1}]}'
+          curl -fsS -X POST "http://localhost:3000/kits/$kit/publish" \
+            -H "authorization: Bearer $token" | grep '"version":1'
+          status=$(curl -sS -o /dev/null -w '%{http_code}' -X PATCH \
+            "http://localhost:3000/kits/$kit/versions/1" \
+            -H "authorization: Bearer $token" -H 'content-type: application/json' \
+            -d '{"title":"tamper"}')
+          test "$status" = "409"
+          preview_token=$(curl -fsS -X POST "http://localhost:3000/kits/$kit/preview-token" \
+            -H "authorization: Bearer $token" \
+            | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])')
+          curl -fsS "http://localhost:3000/preview/$preview_token" \
+            -H "authorization: Bearer $token" | grep '"preview":true'
+
       - name: Tear down
         if: always()
         run: docker compose down -v

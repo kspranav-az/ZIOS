@@ -114,6 +114,9 @@ importers:
       node-pg-migrate:
         specifier: ^7.9.1
         version: 7.9.1(@types/pg@8.20.0)(pg@8.22.0)
+      pg:
+        specifier: ^8.13.3
+        version: 8.22.0
     devDependencies:
       '@zios/config':
         specifier: workspace:*

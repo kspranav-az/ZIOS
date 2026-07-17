@@ -132,6 +132,8 @@ services:
       MAIL_FROM: 'InterviewOS <no-reply@interviewos.local>'
       WEB_BASE_URL: http://localhost:5173
       CORS_ORIGIN: http://localhost:5173
+      # Phase 02: kit preview-token signing (local value, not a real secret)
+      PREVIEW_TOKEN_SECRET: ${PREVIEW_TOKEN_SECRET:-interviewos-local-preview-secret}
     ports:
       - '${API_PORT}:3000'
     depends_on:
