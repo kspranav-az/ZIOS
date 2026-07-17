@@ -1,0 +1,47 @@
+@import 'tailwindcss';
+@import '@zios/ui/tokens.css';
+@import '@fontsource/plus-jakarta-sans/400.css';
+@import '@fontsource/plus-jakarta-sans/500.css';
+@import '@fontsource/plus-jakarta-sans/700.css';
+@import '@fontsource/plus-jakarta-sans/800.css';
+@import 'material-symbols/outlined.css';
+
+/* Design-system sources outside this app's root must be scanned explicitly
+   so Tailwind 4 emits the utilities used by @zios/ui components. */
+@source '../../../packages/ui/src';
+
+/* Base document styles — ported from the design reference's src/index.css. */
+:root {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html {
+  overflow-x: hidden;
+}
+
+body {
+  margin: 0;
+  background-color: var(--zios-color-background);
+  color: var(--zios-color-on-background);
+  overflow-x: hidden;
+}
+
+#root {
+  width: 100%;
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  overflow-x: hidden;
+}
+
+.material-symbols-outlined {
+  font-variation-settings:
+    'FILL' 0,
+    'wght' 400,
+    'GRAD' 0,
+    'opsz' 24;
+}
