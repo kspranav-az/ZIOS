@@ -96,6 +96,20 @@ export function TemplateGalleryPage() {
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+        {/* Generate from JD (FR-E3-1) */}
+        <Card className="border-dashed border-2 border-primary/40 bg-transparent shadow-none flex flex-col items-center justify-center text-center min-h-[220px]">
+          <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-3">
+            <Icon name="auto_awesome" className="text-2xl text-primary" />
+          </div>
+          <h3 className="font-headline-sm text-headline-sm text-primary">Generate from JD</h3>
+          <p className="text-sm text-on-surface-variant mt-1 mb-4">
+            Paste a job description and let AI draft a tailored interview kit.
+          </p>
+          <Button variant="outline" size="sm" onClick={() => navigate('/kits/generate')}>
+            Generate from JD
+          </Button>
+        </Card>
+
         {/* Blank kit escape hatch */}
         <Card className="border-dashed border-2 border-outline-variant bg-transparent shadow-none flex flex-col items-center justify-center text-center min-h-[220px]">
           <div className="w-12 h-12 rounded-full bg-surface-container-low flex items-center justify-center mb-3">

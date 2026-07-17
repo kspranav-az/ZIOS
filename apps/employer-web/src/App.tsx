@@ -16,6 +16,8 @@ import { KitsListPage } from './pages/kits/KitsListPage';
 import { TemplateGalleryPage } from './pages/kits/TemplateGalleryPage';
 import { KitBuilderPage } from './pages/kits/KitBuilderPage';
 import { KitPreviewPage } from './pages/kits/KitPreviewPage';
+import { JdInputPage } from './pages/generation/JdInputPage';
+import { ProposalReviewPage } from './pages/generation/ProposalReviewPage';
 import { DesignSystemPage } from './pages/design-system/DesignSystemPage';
 
 function RootProviders() {
@@ -38,6 +40,8 @@ function RootProviders() {
  *     index                    Dashboard
  *     /kits                    Kit list + create (FR-E2-1)
  *     /kits/new                Template gallery (FR-E2-7)
+ *     /kits/generate           JD-based kit generation (FR-E3-1…E3-4)
+ *     /kits/generate/:id/review Proposal review + publish (FR-E3-5)
  *     /kits/:id                Kit builder (FR-E2-1…E2-5)
  *     /candidates              Candidates
  *     /interviews              Interview pipeline (Phase 04 dashboard)
@@ -86,6 +90,8 @@ const router = createBrowserRouter([
           { index: true, element: <DashboardPage /> },
           { path: 'kits', element: <KitsListPage /> },
           { path: 'kits/new', element: <TemplateGalleryPage /> },
+          { path: 'kits/generate', element: <JdInputPage /> },
+          { path: 'kits/generate/:generationId/review', element: <ProposalReviewPage /> },
           { path: 'kits/:kitId', element: <KitBuilderPage /> },
           { path: 'candidates', element: <CandidatesPage /> },
           { path: 'interviews', element: <InterviewsListPage /> },
