@@ -77,11 +77,17 @@ exports.up = async (pgm) => {
   pgm.addConstraint('kit_version', 'kit_version_kit_version_unique', 'UNIQUE (kit_id, version)');
 
   // FR-E2-5: versions are immutable — no UPDATE/DELETE path may exist, and the
-  // trigger below makes that hold even for hand-run SQL.
+  // trigger below makes that hold even for hand-run SQL. pg_trigger_depth()
+  // is 1 for a directly-fired trigger and ≥ 2 inside referential cascade
+  // actions, so only direct statements are rejected; cascade deletes from
+  // org/kit teardown still work.
   pgm.sql(`
     CREATE FUNCTION reject_kit_version_mutation() RETURNS trigger AS $fn$
     BEGIN
-      RAISE EXCEPTION 'kit_version rows are immutable (FR-E2-5)';
+      IF pg_trigger_depth() < 2 THEN
+        RAISE EXCEPTION 'kit_version rows are immutable (FR-E2-5)';
+      END IF;
+      RETURN OLD;
     END;
     $fn$ LANGUAGE plpgsql;
   `);
