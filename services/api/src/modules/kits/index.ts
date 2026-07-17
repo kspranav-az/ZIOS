@@ -1,3 +1,3 @@
-// Public contract of the kits module. Everything outside this module must
-// import from '@/modules/kits' (this file) — never from sibling files.
 export { KitsModule } from './kits.module';
+export { KitsService } from './kits.service';
+export { KitVersionsRepository } from './kit-versions.repository';

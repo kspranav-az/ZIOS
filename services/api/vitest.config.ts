@@ -26,6 +26,9 @@ export default defineConfig({
     include: ['src/**/*.spec.ts'],
     setupFiles: ['./vitest.setup.ts'],
     // Integration suites boot Nest and hit real Postgres/Mailpit.
+    // Run test files serially so Phase 03 persistence rows are not visible
+    // to other suites that assert on global table counts.
+    fileParallelism: false,
     testTimeout: 30000,
     hookTimeout: 60000,
   },

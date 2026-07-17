@@ -11,13 +11,28 @@
 const DIGITS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
 const BASE = DIGITS.length;
 
-function digitValue(key: string, index: number): number {
-  const char = key[index];
-  return char === undefined ? 0 : DIGITS.indexOf(char);
-}
-
 function digitAt(index: number): string {
   return DIGITS[index] as string;
+}
+
+/** Value of the digit at `index`, or 0 when the bound is exhausted/open. */
+function lowerDigit(key: string | undefined, index: number): number {
+  if (key === undefined || index >= key.length) {
+    return 0;
+  }
+  return DIGITS.indexOf(key.charAt(index));
+}
+
+/**
+ * Value of the digit at `index`, or `BASE` when the upper bound is
+ * exhausted/open. `BASE` is treated as one past the largest digit, so the
+ * midpoint calculation can always keep descending.
+ */
+function upperDigit(key: string | undefined, index: number): number {
+  if (key === undefined || index >= key.length) {
+    return BASE;
+  }
+  return DIGITS.indexOf(key.charAt(index));
 }
 
 /**
@@ -25,34 +40,34 @@ function digitAt(index: number): string {
  * open boundary. Inputs must be keys produced by this module with lo < hi.
  */
 export function positionBetween(lo?: string, hi?: string): string {
-  // Shared leading digits carry over unchanged.
+  let prefix = '';
   let i = 0;
-  while (
-    lo !== undefined &&
-    hi !== undefined &&
-    i < lo.length &&
-    i < hi.length &&
-    lo[i] === hi[i]
-  ) {
-    i += 1;
-  }
-  const prefix = (lo ?? '').slice(0, i);
-  const loRest = (lo ?? '').slice(i);
-  const hiRest = hi === undefined ? undefined : hi.slice(i);
 
-  const loDigit = digitValue(loRest, 0);
-  // An exhausted hi would mean hi is a prefix of lo (invalid input); treat it
-  // as an open upper bound defensively instead of emitting an unordered key.
-  const hiDigit = hiRest === undefined || hiRest.length === 0 ? BASE : digitValue(hiRest, 0);
+  while (true) {
+    const a = lowerDigit(lo, i);
+    const b = upperDigit(hi, i);
 
-  if (hiDigit - loDigit > 1) {
-    const mid = Math.floor((loDigit + hiDigit) / 2);
-    // mid ≥ 1 whenever the gap is ≥ 2, so the key never ends in '0'.
-    return prefix + digitAt(mid);
+    if (a + 1 < b) {
+      // There is room for a digit strictly between the bounds.
+      const mid = Math.floor((a + b) / 2);
+      return prefix + digitAt(mid);
+    }
+
+    if (a === b) {
+      // Shared leading digit; keep it and descend.
+      prefix += digitAt(a);
+      i += 1;
+      continue;
+    }
+
+    // Adjacent digits: extend the lower bound's bucket. The recursive tail
+    // guarantees a non-zero final digit, preserving the prefix-safety invariant.
+    return (
+      prefix +
+      digitAt(a) +
+      positionBetween(lo === undefined ? undefined : lo.slice(i + 1), undefined)
+    );
   }
-  // Adjacent digits: descend into the lo bucket; the recursive tail supplies
-  // the non-zero final digit, keeping the no-trailing-'0' invariant.
-  return prefix + digitAt(loDigit) + positionBetween(loRest.slice(1) || undefined, undefined);
 }
 
 /** Key after the current last position (or the first key of an empty list). */

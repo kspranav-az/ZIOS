@@ -2,12 +2,14 @@ import { Module } from '@nestjs/common';
 import { PinoLogger } from 'nestjs-pino';
 import { EMAIL_SENDER, type EmailSender } from './email-sender.port';
 import { MailpitEmailAdapter } from './mailpit-email.adapter';
+import { MailpitOtpAdapter } from './mailpit-otp.adapter';
+import { OTP_SENDER } from './otp-sender.port';
 
 const DEFAULT_FROM = 'InterviewOS <no-reply@interviewos.local>';
 
 /**
- * Binds the EmailSender port to an adapter selected by EMAIL_ADAPTER
- * ('mailpit' is the only adapter until a real provider's phase arrives).
+ * Binds the EmailSender and OtpSender ports to local Mailpit adapters.
+ * Real providers slot in at their scheduled phases without call-site changes.
  */
 @Module({
   providers: [
@@ -28,7 +30,12 @@ const DEFAULT_FROM = 'InterviewOS <no-reply@interviewos.local>';
         }
       },
     },
+    {
+      provide: OTP_SENDER,
+      inject: [EMAIL_SENDER],
+      useFactory: (email: EmailSender): MailpitOtpAdapter => new MailpitOtpAdapter(email),
+    },
   ],
-  exports: [EMAIL_SENDER],
+  exports: [EMAIL_SENDER, OTP_SENDER],
 })
 export class NotificationsModule {}
