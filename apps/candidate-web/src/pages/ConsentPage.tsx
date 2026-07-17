@@ -78,8 +78,9 @@ export function ConsentPage() {
             <li className="flex gap-3">
               <span className="text-secondary-container">●</span>
               <span>
-                For this text interview, no camera or microphone recording is made. We only collect
-                the answers you type and basic interaction telemetry.
+                {kit?.settings?.mode === 'voice'
+                  ? 'For this voice interview, your microphone is used to capture your spoken answers. Audio is recorded and stored securely; no camera or face inference is performed.'
+                  : 'For this text interview, no camera or microphone recording is made. We only collect the answers you type and basic interaction telemetry.'}
               </span>
             </li>
             <li className="flex gap-3">

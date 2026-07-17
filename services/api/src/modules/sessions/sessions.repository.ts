@@ -17,12 +17,14 @@ export interface InterviewSessionRow {
   integrity_events: unknown[];
   schema_version: number;
   recovery_token_hash: string | null;
+  livekit_room_name: string | null;
+  fallback_to_text_at: Date | null;
   created_at: Date;
   updated_at: Date;
 }
 
 const COLUMNS =
-  'id, invite_id, kit_version_id, mode, conductor, status, consent_id, preflight_report, started_at, ended_at, media_refs, integrity_events, schema_version, recovery_token_hash, created_at, updated_at';
+  'id, invite_id, kit_version_id, mode, conductor, status, consent_id, preflight_report, started_at, ended_at, media_refs, integrity_events, schema_version, recovery_token_hash, livekit_room_name, fallback_to_text_at, created_at, updated_at';
 
 function mapRow(row: InterviewSessionRow): InterviewSession {
   return {
@@ -40,6 +42,8 @@ function mapRow(row: InterviewSessionRow): InterviewSession {
     integrityEvents: row.integrity_events,
     schemaVersion: row.schema_version,
     recoveryTokenHash: row.recovery_token_hash,
+    livekitRoomName: row.livekit_room_name,
+    fallbackToTextAt: row.fallback_to_text_at?.toISOString() ?? null,
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString(),
   };
@@ -142,6 +146,30 @@ export class SessionsRepository {
     await q.query(
       'UPDATE interview_session SET consent_id = $1, updated_at = now() WHERE id = $2',
       [consentId, id],
+    );
+  }
+
+  async setLivekitRoomName(id: string, roomName: string, q: Queryable): Promise<void> {
+    await q.query(
+      'UPDATE interview_session SET livekit_room_name = $1, updated_at = now() WHERE id = $2',
+      [roomName, id],
+    );
+  }
+
+  async setFallbackToText(id: string, q: Queryable): Promise<InterviewSession | null> {
+    const result = await q.query(
+      `UPDATE interview_session SET fallback_to_text_at = now(), updated_at = now() WHERE id = $1 RETURNING ${COLUMNS}`,
+      [id],
+    );
+    return (result.rows[0] as InterviewSessionRow | undefined)
+      ? mapRow(result.rows[0] as InterviewSessionRow)
+      : null;
+  }
+
+  async appendMediaRef(id: string, ref: unknown, q: Queryable): Promise<void> {
+    await q.query(
+      'UPDATE interview_session SET media_refs = media_refs || $1::jsonb, updated_at = now() WHERE id = $2',
+      [JSON.stringify([ref]), id],
     );
   }
 }

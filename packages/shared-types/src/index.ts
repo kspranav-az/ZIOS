@@ -489,6 +489,10 @@ export interface InterviewSession {
   integrityEvents: unknown[];
   schemaVersion: number;
   recoveryTokenHash: string | null;
+  /** LiveKit room name assigned when the voice session is joined. */
+  livekitRoomName: string | null;
+  /** Voice-mode fallback state: null until fallback to text is requested. */
+  fallbackToTextAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -663,6 +667,59 @@ export interface SessionDetailResponse {
   session: InterviewSession;
   transcript: SessionTranscript[];
   events: SessionEvent[];
+}
+
+/* ---- voice mode (Phase 07) ---- */
+
+export interface VoiceTokenResponse {
+  session: InterviewSession;
+  livekit: {
+    url: string;
+    token: string;
+    roomName: string;
+  };
+  orchestrator: {
+    wsUrl: string;
+    token: string;
+  };
+}
+
+export interface VoiceFallbackBody {
+  /** Client-reported reason for falling back from voice to text. */
+  reason?: string;
+}
+
+export interface VoiceFallbackResponse {
+  session: InterviewSession;
+  turn: SessionTurnResponse;
+}
+
+/** Per-turn latency telemetry captured by the orchestrator (X6). */
+export interface VoiceTurnTelemetry {
+  turnIndex: number;
+  vadMs: number;
+  sttFinalMs: number;
+  plannerMs: number;
+  ttsFirstAudioMs: number;
+  totalTurnMs: number;
+  /** Final transcript of the candidate's answer. */
+  transcript: string;
+  /** Whether the turn was interrupted by barge-in. */
+  bargedIn: boolean;
+  /** Degradation rung active at end of turn, if any. */
+  degradationRung: 'tts_text' | 'stt_text' | 'ai_pause' | null;
+}
+
+export interface VoiceTelemetryBody {
+  turn: VoiceTurnTelemetry;
+}
+
+export interface VoiceRecordingRef {
+  kind: 'recording';
+  uri: string;
+  checksum: { algorithm: 'sha256'; value: string };
+  recordedAt: string;
+  durationMs: number;
 }
 
 /* --------------------------------------------------------------------------

@@ -13,6 +13,7 @@ import { OrgModule } from '@/modules/org';
 import { QuestionBankModule } from '@/modules/question-bank';
 import { SessionsModule } from '@/modules/sessions';
 import { UsersModule } from '@/modules/users';
+import { VoiceModule } from '@/modules/voice';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { UsersModule } from '@/modules/users';
     EvaluationModule,
     GenerationModule,
     SessionsModule,
+    VoiceModule,
   ],
 })
 export class AppModule {}

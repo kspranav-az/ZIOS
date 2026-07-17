@@ -30,7 +30,11 @@ export function PreflightPage() {
         report: { source: 'candidate-web', ready: true },
       });
       setResolvedData({ session: response.session, turn: response.turn });
-      navigate('/interview', { replace: true });
+      if (response.session.mode === 'voice') {
+        navigate('/voice', { replace: true });
+      } else {
+        navigate('/interview', { replace: true });
+      }
     } catch (err) {
       setError(
         err instanceof ApiErrorResponse
