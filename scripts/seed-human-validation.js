@@ -15,7 +15,7 @@
  *   - candidate consent (so a session exists)
  *   - a scheduled slot starting now
  *
- * Prints the employer cockpit URL, candidate landing URL, admin OTP,
+ * Prints the employer cockpit URL, candidate landing URL, sign-in instructions,
  * and a summary. Open the two URLs in separate browsers/incognito windows.
  */
 
@@ -88,6 +88,13 @@ async function signupAdmin(email) {
   const mail = await waitForEmail(email, 'sign-in code');
   const code = extractOtp(mail.text);
   const body = await postJson('/auth/otp/verify', { email, code });
+  // The consumed seed email is deleted from Mailpit so the user does not
+  // accidentally try to reuse the already-spent code when signing in manually.
+  await fetch(`${MAILPIT_API}/api/v1/messages`, {
+    method: 'DELETE',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ ids: [mail.id] }),
+  });
   return { token: body.session.token, code };
 }
 
