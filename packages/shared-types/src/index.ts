@@ -695,6 +695,8 @@ export interface EvaluationReport {
   communicationMetrics: CommunicationMetrics;
   rubricVersion: string;
   modelRoute: string;
+  /** Attributed AI cost for this evaluation (cost unit configured on gateway). */
+  cost: number | null;
   promptVersions: Record<string, unknown>;
   errorMessage: string | null;
   startedAt: string | null;
