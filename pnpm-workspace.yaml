@@ -6,6 +6,8 @@ packages:
 
 onlyBuiltDependencies:
   - esbuild
+  - '@swc/core'
 
 allowBuilds:
+  '@swc/core': true
   esbuild: true
