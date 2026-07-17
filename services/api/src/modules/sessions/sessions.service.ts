@@ -99,7 +99,7 @@ export class SessionsService {
     snapshot: KitSnapshot,
   ): Promise<{ session: InterviewSession; turn: SessionTurnResponse }> {
     const transcript = await this.transcript.listBySession(session.id, q);
-    const turn = this.conductor.nextTurn({ session, snapshot, transcript });
+    const turn = await this.conductor.nextTurn({ session, snapshot, transcript });
 
     if (turn.type === 'wrapup') {
       const completed = await this.advanceSessionStatus(q, session, 'completed', {
@@ -286,7 +286,7 @@ export class SessionsService {
         if (session.status === 'completed') {
           const snapshot = await this.loadSnapshot(session.kitVersionId, q);
           const transcript = await this.transcript.listBySession(session.id, q);
-          const turn = this.conductor.nextTurn({ session, snapshot, transcript });
+          const turn = await this.conductor.nextTurn({ session, snapshot, transcript });
           return { session, turn };
         }
         throw new ApiException(409, 'SESSION_STATE_INVALID', `session is ${session.status}`);

@@ -1,6 +1,6 @@
 # Phase 06 — LLM Gateway & Real AI (MVP-0 Gate)
 
-**Status:** ⬜ Not started · **Depends on:** Phase 05 · **PRD refs:** E3/E7/E10 real paths, FR-E7-2, FR-E7-4, FR-E1-1 (Google), §15 W5–6 · **Milestone tag:** `v0.1.0-mvp0`
+**Status:** ✅ Complete (mock-credential mode) · **Depends on:** Phase 05 · **PRD refs:** E3/E7/E10 real paths, FR-E7-2, FR-E7-4, FR-E1-1 (Google), §15 W5–6 · **Milestone tag:** `v0.1.0-mvp0-mock`
 
 ## Objective
 
@@ -9,6 +9,7 @@ Swap every stub for real AI behind a production-grade LLM gateway: JD generation
 ## Scope
 
 **In**
+
 - `LlmGateway` service: single internal API `llm.complete(task, payload, policy)`; **two live providers** with task-based routing (quality/latency/cost tiers), fallback chains, semantic + prefix caching, per-org/session budget ceilings with circuit breakers, journaled (PII-redacted) request/response log (Blueprint §10.2)
 - Prompt registry: prompts as versioned artifacts (name, version, variables schema, guardrail profile); every artifact stamped `prompt@version`
 - Real adapters: `LlmConductorAdapter` (adaptive follow-ups, depth-capped, references candidate's actual answer ≥ 90% on eval set — FR-E7-2), real JD generation (replaces Phase 05 stub), judge ensemble (two judges + higher-tier adjudication on disagreement — Blueprint §12.1)
@@ -18,6 +19,7 @@ Swap every stub for real AI behind a production-grade LLM gateway: JD generation
 - Google OAuth adapter for employer sign-in (FR-E1-1 completes)
 
 **Out**
+
 - Voice-mode realtime LLM loop (Phase 07 — different latency/routing profile), self-hosted models (post-MVP)
 
 ## Deliverables
@@ -57,17 +59,17 @@ MVP-0 demo green on staging with real AI, eval gates passing, cost telemetry liv
 
 ## Verification ✅
 
-- [ ] Gateway routing/fallback/budget tests: provider kill → fallback serves; budget trip → degrade, never fail open
-- [ ] Prompt registry: production completions all stamped `prompt@version`; unversioned prompt cannot deploy (CI gate)
-- [ ] Follow-up relevance ≥ 90% on eval set; depth cap never exceeded (FR-E7-2)
-- [ ] Judge ensemble: agreement rate + adjudication path logged; ungrounded scores still schema-rejected
-- [ ] Red-team suite passes on the release candidate (FR-E7-4)
-- [ ] Per-session AI cost attributed and visible on dashboard (X7 substrate); text-mode session cost within projection
-- [ ] Google OAuth + email/OTP both work; account linking rules tested (FR-E1-1)
+- [x] Gateway routing/fallback/budget tests: provider kill → fallback serves; budget trip → degrade, never fail open — `src/modules/llm-gateway/llm-gateway.spec.ts`
+- [x] Prompt registry: production completions all stamped `prompt@version` — `src/modules/llm-gateway/llm-gateway.spec.ts`; unversioned-prompt CI gate deferred until real-provider deployment
+- [ ] Follow-up relevance ≥ 90% on eval set; depth cap never exceeded (FR-E7-2) — deferred to real-provider credential handover
+- [x] Judge ensemble: adjudication path on disagreement; ungrounded scores schema-rejected — `src/modules/llm-gateway/adapter-contract.spec.ts` + `judge-ensemble.adapter.ts`; agreement-rate telemetry deferred to real providers
+- [x] Red-team suite passes on the release candidate (FR-E7-4) — `src/modules/llm-gateway/llm-gateway.spec.ts`
+- [x] Per-session AI cost attributed and persisted on `evaluation_report` (X7 substrate) — `EvaluationService` + `LlmGateway.getJournal()`; dashboard visibility deferred to X7 build-out
+- [x] Google OAuth + email/OTP both work in mock mode; account-linking rule tests deferred to real Google credential handover (FR-E1-1) — `src/modules/auth/oauth.spec.ts`
 
 ## Validation ✔️
 
-- [ ] MVP-0 end-to-end demo recorded: JD → kit → link → interview → report (real AI, staging)
-- [ ] Generated kits from real JDs reviewed by 2 humans: X2 quality bar plausibly ≥ 70% (final number measured at pilot)
-- [ ] Report quality with real judges reviewed against stub-phase reports — evidence quotes remain specific and correct
-- [ ] Cost per text interview within the modelled budget toward X7 (₹30/15-min voice equivalent)
+- [ ] MVP-0 end-to-end demo recorded with real AI — deferred to credential handover; mock-credential E2E (`apps/employer-web/e2e`) is green
+- [ ] Generated kits from real JDs reviewed by 2 humans: X2 quality bar plausibly ≥ 70% — deferred to pilot
+- [ ] Report quality with real judges reviewed against stub-phase reports — deferred to real-provider credential handover
+- [ ] Cost per text interview within the modelled budget toward X7 (₹30/15-min voice equivalent) — deferred to real-provider telemetry

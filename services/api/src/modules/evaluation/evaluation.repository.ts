@@ -20,6 +20,7 @@ export interface EvaluationReportRow {
   communication_metrics: CommunicationMetrics;
   rubric_version: string;
   model_route: string;
+  cost: number | null;
   prompt_versions: Record<string, unknown>;
   error_message: string | null;
   started_at: Date | null;
@@ -29,7 +30,7 @@ export interface EvaluationReportRow {
 }
 
 const COLUMNS =
-  'id, org_id, session_id, invite_id, kit_version_id, status, overall_recommendation, overall_confidence, communication_metrics, rubric_version, model_route, prompt_versions, error_message, started_at, completed_at, created_at, updated_at';
+  'id, org_id, session_id, invite_id, kit_version_id, status, overall_recommendation, overall_confidence, communication_metrics, rubric_version, model_route, cost, prompt_versions, error_message, started_at, completed_at, created_at, updated_at';
 
 export function mapReportRow(row: EvaluationReportRow): EvaluationReport {
   return {
@@ -44,6 +45,7 @@ export function mapReportRow(row: EvaluationReportRow): EvaluationReport {
     communicationMetrics: row.communication_metrics,
     rubricVersion: row.rubric_version,
     modelRoute: row.model_route,
+    cost: row.cost === null ? null : Number(row.cost),
     promptVersions: row.prompt_versions,
     errorMessage: row.error_message,
     startedAt: row.started_at?.toISOString() ?? null,
@@ -66,12 +68,13 @@ export class EvaluationRepository {
       status: EvaluationStatus;
       rubricVersion?: string;
       modelRoute?: string;
+      cost?: number;
     },
     q: Queryable,
   ): Promise<EvaluationReport> {
     const result = await q.query(
-      `INSERT INTO evaluation_report (org_id, session_id, invite_id, kit_version_id, status, rubric_version, model_route, started_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, now())
+      `INSERT INTO evaluation_report (org_id, session_id, invite_id, kit_version_id, status, rubric_version, model_route, cost, started_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
        RETURNING ${COLUMNS}`,
       [
         input.orgId,
@@ -81,6 +84,7 @@ export class EvaluationRepository {
         input.status,
         input.rubricVersion ?? 'phase04-stub',
         input.modelRoute ?? 'stub-judge',
+        input.cost ?? 0,
       ],
     );
     return mapReportRow(result.rows[0] as EvaluationReportRow);
@@ -109,6 +113,7 @@ export class EvaluationRepository {
       overallRecommendation: number;
       overallConfidence: number;
       communicationMetrics: CommunicationMetrics;
+      cost?: number;
       promptVersions?: Record<string, unknown>;
     },
     q: Queryable,
@@ -119,15 +124,17 @@ export class EvaluationRepository {
            overall_recommendation = $1,
            overall_confidence = $2,
            communication_metrics = $3::jsonb,
-           prompt_versions = $4::jsonb,
+           cost = $4,
+           prompt_versions = $5::jsonb,
            completed_at = now(),
            updated_at = now()
-       WHERE id = $5
+       WHERE id = $6
        RETURNING ${COLUMNS}`,
       [
         fields.overallRecommendation,
         fields.overallConfidence,
         JSON.stringify(fields.communicationMetrics),
+        fields.cost ?? 0,
         JSON.stringify(fields.promptVersions ?? {}),
         id,
       ],

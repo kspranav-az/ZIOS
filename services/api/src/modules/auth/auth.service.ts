@@ -38,7 +38,14 @@ export class AuthService {
   async verifyOtp(email: unknown, code: unknown): Promise<AuthResponse> {
     await this.otp.verify(email, code);
     const normalizedEmail = (email as string).trim();
+    return this.signInOrProvision(normalizedEmail);
+  }
 
+  async oauthSignIn(email: string, _provider: string): Promise<AuthResponse> {
+    return this.signInOrProvision(email.trim());
+  }
+
+  private async signInOrProvision(normalizedEmail: string): Promise<AuthResponse> {
     let isNewUser = false;
     let user = await this.users.findByEmail(normalizedEmail);
     let org: Org;

@@ -17,7 +17,7 @@ export interface InterviewerContext {
  * adapter for an LLM-backed conductor with zero call-site changes.
  */
 export interface InterviewerAi {
-  nextTurn(ctx: InterviewerContext): SessionTurnResponse;
+  nextTurn(ctx: InterviewerContext): SessionTurnResponse | Promise<SessionTurnResponse>;
 }
 
 export const INTERVIEWER_AI = Symbol('INTERVIEWER_AI');
