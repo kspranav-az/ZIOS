@@ -2,9 +2,11 @@ import { Outlet, useNavigate } from 'react-router-dom';
 import { AppShell, type NavItem } from '@zios/ui';
 import { useAuth } from '../../auth/AuthContext';
 
-/** Reference RecruiterLayout nav (same labels, same Material Symbols icons). */
+/** Reference RecruiterLayout nav (same labels, same Material Symbols icons)
+ *  plus Kits (phase-02 kit builder, FR-E2-1). */
 const NAV_ITEMS: NavItem[] = [
   { id: 'dashboard', label: 'Dashboard', icon: 'dashboard', to: '/', end: true },
+  { id: 'kits', label: 'Kits', icon: 'assignment', to: '/kits' },
   { id: 'candidates', label: 'Candidates', icon: 'group', to: '/candidates' },
   { id: 'interviews', label: 'Interviews', icon: 'video_chat', to: '/interviews' },
   { id: 'analytics', label: 'Analytics', icon: 'analytics', to: '/analytics' },
