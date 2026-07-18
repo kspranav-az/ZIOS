@@ -35,6 +35,7 @@ export function issueLiveKitToken(options: LiveKitTokenOptions): LiveKitTokenPay
     video: {
       roomJoin: true,
       room: options.roomName,
+      identity: options.identity,
       canPublish: true,
       canSubscribe: true,
       canPublishData: true,
