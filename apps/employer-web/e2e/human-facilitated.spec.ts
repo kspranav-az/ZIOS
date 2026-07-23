@@ -54,7 +54,7 @@ test.describe('human-facilitated interview', () => {
     const skipButtons = page.getByRole('button', { name: 'Skip' });
     await coverButtons.first().click();
     await skipButtons.nth(1).click();
-    await expect(page.getByText(/1\/2/).first()).toBeVisible();
+    await expect(page.getByText(/2\/2/).first()).toBeVisible();
 
     // End the call; should redirect to scorecard.
     await page.getByRole('button', { name: 'End call' }).click();

@@ -360,11 +360,26 @@ export class EvaluationService {
     const transcript = await this.loadTranscript(sessionId);
     const metrics = computeCommunicationMetrics(transcript);
 
-    const overall =
+    for (const score of body.scores) {
+      if (
+        !Number.isFinite(score.score) ||
+        !Number.isInteger(score.score) ||
+        score.score < 1 ||
+        score.score > 5
+      ) {
+        throw new ApiException(400, 'INVALID_SCORE', `score must be an integer between 1 and 5`);
+      }
+      if (!Number.isFinite(score.weight) || score.weight <= 0) {
+        throw new ApiException(400, 'INVALID_WEIGHT', `weight must be a positive number`);
+      }
+    }
+
+    const overallRaw =
       body.scores.length > 0
         ? body.scores.reduce((sum: number, s) => sum + s.score * s.weight, 0) /
           body.scores.reduce((sum: number, s) => sum + s.weight, 0)
         : 0;
+    const overallRecommendation = Math.max(1, Math.min(5, Math.round(overallRaw)));
 
     await this.db.transaction(async (q) => {
       await this.scores.deleteByReportId(report.id, q);
@@ -410,7 +425,7 @@ export class EvaluationService {
       await this.reports.updateScorecard(
         report.id,
         {
-          overallRecommendation: Math.round(overall * 10) / 10,
+          overallRecommendation,
           overallConfidence: 0.7,
           communicationMetrics: metrics,
           cost: 0,
