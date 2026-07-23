@@ -14,10 +14,12 @@ async function bootstrap(): Promise<void> {
   app.use(cookieParser());
 
   // SPA dev server origin (Vite on :5173); credentials for the session cookie.
+  // Origins are normalised to lowercase because browsers send the Origin header
+  // with a lowercase host, and the CORS middleware does a case-sensitive match.
   app.enableCors({
     origin: (process.env.CORS_ORIGIN ?? 'http://localhost:5173')
       .split(',')
-      .map((origin) => origin.trim()),
+      .map((origin) => origin.trim().toLowerCase()),
     credentials: true,
   });
 

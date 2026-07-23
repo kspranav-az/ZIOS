@@ -99,9 +99,9 @@ services:
 
   livekit:
     # Self-hosted WebRTC SFU for voice/video interviews (Phase 07+)
-    # --node-ip 127.0.0.1 makes LiveKit advertise localhost ICE candidates so
-    # browsers on the Docker host reach published UDP/TCP ports. --udp-port
-    # pins the media port range to the same range published below.
+    # --node-ip defaults to 127.0.0.1 for local browsers; override with the host
+    # LAN IP (e.g., 192.168.x.x) when connecting from other devices on the network.
+    # --udp-port pins the media port range to the same range published below.
     image: livekit/livekit-server:latest
     container_name: zios-livekit
     command:
@@ -109,7 +109,7 @@ services:
       - '--bind'
       - '0.0.0.0'
       - '--node-ip'
-      - '127.0.0.1'
+      - '${LIVEKIT_NODE_IP:-127.0.0.1}'
       - '--udp-port'
       - '50000-50060'
     ports:
@@ -140,12 +140,16 @@ services:
       EMAIL_ADAPTER: mailpit
       SMTP_URL: smtp://mailpit:1025
       MAIL_FROM: 'InterviewOS <no-reply@interviewos.local>'
-      WEB_BASE_URL: http://localhost:5173
+      WEB_BASE_URL: ${WEB_BASE_URL:-http://localhost:5173}
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173,http://localhost:5174}
       # Phase 02: kit preview-token signing (local value, not a real secret)
       PREVIEW_TOKEN_SECRET: ${PREVIEW_TOKEN_SECRET:-interviewos-local-preview-secret}
       # Phase 07: voice orchestrator endpoint
       ORCHESTRATOR_URL: http://ai-orchestrator:8000
+      # Phase 07/09: external WebRTC signalling URL returned to browsers
+      LIVEKIT_URL: ${LIVEKIT_URL:-ws://localhost:7880}
+      # Share the session cookie across app/API subdomains (e.g., hapkonic.com).
+      COOKIE_DOMAIN: ${COOKIE_DOMAIN:-}
     ports:
       - '${API_PORT}:3000'
     depends_on:
@@ -174,7 +178,7 @@ services:
       args:
         # Build-time API URL baked into the bundle (browser calls the api
         # container published on the host — see apps/employer-web/README.md)
-        VITE_API_URL: http://localhost:3000
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:3000}
     container_name: zios-employer-web
     ports:
       - '${EMPLOYER_WEB_PORT}:80'
@@ -192,8 +196,8 @@ services:
       args:
         # Build-time API URL baked into the bundle (browser calls the api
         # container published on the host — see apps/candidate-web/README.md)
-        VITE_API_URL: http://localhost:3000
-        VITE_ORCHESTRATOR_URL: ws://localhost:8000
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:3000}
+        VITE_ORCHESTRATOR_URL: ${VITE_ORCHESTRATOR_URL:-ws://localhost:8000}
     container_name: zios-candidate-web
     ports:
       - '${CANDIDATE_WEB_PORT}:80'

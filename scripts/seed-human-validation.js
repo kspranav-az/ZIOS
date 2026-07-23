@@ -29,9 +29,20 @@ const envFile = path.join(__dirname, '..', '.env');
 if (existsSync(envFile)) {
   process.loadEnvFile(envFile);
 }
+// Prefer the most specific override file. process.loadEnvFile does not
+// overwrite existing variables, so only load one override file.
+const cloudflareEnvFile = path.join(__dirname, '..', 'cloudflare.env');
+const networkEnvFile = path.join(__dirname, '..', 'network.env');
+if (existsSync(cloudflareEnvFile)) {
+  process.loadEnvFile(cloudflareEnvFile);
+} else if (existsSync(networkEnvFile)) {
+  process.loadEnvFile(networkEnvFile);
+}
 
 const API_BASE = process.env.API_BASE ?? 'http://localhost:3000';
 const MAILPIT_API = process.env.MAILPIT_API ?? 'http://localhost:8025';
+const EMPLOYER_WEB_BASE_URL = process.env.EMPLOYER_WEB_BASE_URL ?? 'http://localhost:5173';
+const CANDIDATE_WEB_BASE_URL = process.env.CANDIDATE_WEB_BASE_URL ?? 'http://localhost:5174';
 
 function extractOtp(text) {
   const match = /(\d{6})/.exec(text);
@@ -189,16 +200,16 @@ async function main() {
     { authorization: `Bearer ${adminToken}` },
   );
 
-  const employerCockpit = `http://localhost:5173/interviews/${session.id}/cockpit`;
-  const candidateLanding = `http://localhost:5174/?token=${encodeURIComponent(inviteToken)}`;
-  const employerReport = `http://localhost:5173/interviews/${session.id}`;
-  const employerScorecard = `http://localhost:5173/interviews/${session.id}/scorecard`;
+  const employerCockpit = `${EMPLOYER_WEB_BASE_URL}/interviews/${session.id}/cockpit`;
+  const candidateLanding = `${CANDIDATE_WEB_BASE_URL}/?token=${encodeURIComponent(inviteToken)}`;
+  const employerReport = `${EMPLOYER_WEB_BASE_URL}/interviews/${session.id}`;
+  const employerScorecard = `${EMPLOYER_WEB_BASE_URL}/interviews/${session.id}/scorecard`;
 
   console.log('\n✅ Human-facilitated interview seeded.\n');
   console.log('Admin sign-in:');
   console.log(`  email:    ${adminEmail}`);
   console.log('  password: request a fresh OTP on the login page; read it from');
-  console.log('            http://localhost:8025 (Mailpit) or enter the code shown there.');
+  console.log(`            ${MAILPIT_API} (Mailpit) or enter the code shown there.`);
   console.log('');
   console.log('URLs to open:');
   console.log(`  1. Employer cockpit (Chrome tab A):        ${employerCockpit}`);
