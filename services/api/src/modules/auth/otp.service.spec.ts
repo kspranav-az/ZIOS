@@ -98,6 +98,17 @@ describe('OtpService.issue', () => {
     expect(email.send).toHaveBeenCalledOnce();
   });
 
+  it('issues a new code immediately when the previous one was already consumed', async () => {
+    const consumed = otpRow({
+      created_at: new Date(),
+      consumed_at: new Date(),
+    });
+    const { service, email } = makeService(consumed);
+
+    await service.issue('user@example.com');
+    expect(email.send).toHaveBeenCalledOnce();
+  });
+
   it('invalidates the stored code and 502s when delivery fails', async () => {
     const { service, otps, email } = makeService();
     email.send.mockRejectedValueOnce(new Error('smtp down'));

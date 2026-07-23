@@ -46,14 +46,22 @@ export class AuthController {
     return result;
   }
 
-  private setSessionCookie(res: Response, token: string): void {
-    res.cookie(SESSION_COOKIE, token, {
+  private cookieOptions(): Record<string, unknown> {
+    const options: Record<string, unknown> = {
       httpOnly: true,
       sameSite: 'lax',
       secure: process.env.COOKIE_SECURE === 'true',
       path: '/',
       maxAge: SESSION_TTL_DAYS * 24 * 60 * 60 * 1000,
-    });
+    };
+    if (process.env.COOKIE_DOMAIN) {
+      options.domain = process.env.COOKIE_DOMAIN;
+    }
+    return options;
+  }
+
+  private setSessionCookie(res: Response, token: string): void {
+    res.cookie(SESSION_COOKIE, token, this.cookieOptions());
   }
 
   @Post('logout')
@@ -63,7 +71,7 @@ export class AuthController {
     if (auth) {
       await this.auth.logout(auth.sessionId);
     }
-    res.clearCookie(SESSION_COOKIE, { path: '/' });
+    res.clearCookie(SESSION_COOKIE, this.cookieOptions());
   }
 
   @Public()

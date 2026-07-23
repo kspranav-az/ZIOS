@@ -35,7 +35,9 @@ export class OtpService {
     const email = rawEmail.trim();
 
     const latest = await this.otps.findLatest(email);
-    if (latest) {
+    // A consumed code is no longer active; the user can request a fresh one
+    // immediately (e.g. after a seed-script login or a successful verify).
+    if (latest && latest.consumed_at === null) {
       const elapsedSeconds = (Date.now() - latest.created_at.getTime()) / 1000;
       if (elapsedSeconds < OTP_RESEND_COOLDOWN_SECONDS) {
         throw new ApiException(

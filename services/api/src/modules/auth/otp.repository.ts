@@ -16,10 +16,10 @@ export interface OtpRow {
 export class OtpRepository {
   constructor(private readonly db: DatabaseService) {}
 
-  /** Most recent code row for the email, consumed or not. */
+  /** Most recent active code row for the email (not yet consumed). */
   async findLatest(email: string): Promise<OtpRow | null> {
     const result = await this.db.query(
-      `SELECT * FROM otp_code WHERE email = $1 ORDER BY created_at DESC LIMIT 1`,
+      `SELECT * FROM otp_code WHERE email = $1 AND consumed_at IS NULL ORDER BY created_at DESC LIMIT 1`,
       [email],
     );
     return (result.rows[0] as OtpRow | undefined) ?? null;
