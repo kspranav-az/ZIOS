@@ -8,6 +8,7 @@ export interface TranscriptRow {
   question_id: string;
   question_prompt: string;
   answer_text: string | null;
+  answer_data: unknown;
   position: number;
   evidence_span: Array<{ start: number; end: number; transcriptId: string }>;
   created_at: Date;
@@ -15,7 +16,7 @@ export interface TranscriptRow {
 }
 
 const COLUMNS =
-  'id, session_id, question_id, question_prompt, answer_text, position, evidence_span, created_at, answered_at';
+  'id, session_id, question_id, question_prompt, answer_text, answer_data, position, evidence_span, created_at, answered_at';
 
 function mapRow(row: TranscriptRow): SessionTranscript {
   return {
@@ -24,6 +25,7 @@ function mapRow(row: TranscriptRow): SessionTranscript {
     questionId: row.question_id,
     questionPrompt: row.question_prompt,
     answerText: row.answer_text,
+    answerData: (row.answer_data as SessionTranscript['answerData']) ?? null,
     position: row.position,
     evidenceSpan: row.evidence_span,
     createdAt: row.created_at.toISOString(),
@@ -58,13 +60,19 @@ export class TranscriptRepository {
     answer: string,
     q: Queryable,
     evidenceSpan?: Array<{ start: number; end: number; transcriptId: string }>,
+    answerData?: SessionTranscript['answerData'],
   ): Promise<SessionTranscript | null> {
     const result = await q.query(
       `UPDATE session_transcript
-       SET answer_text = $1, answered_at = now(), evidence_span = $2::jsonb
-       WHERE id = $3
+       SET answer_text = $1, answer_data = $2::jsonb, answered_at = now(), evidence_span = $3::jsonb
+       WHERE id = $4
        RETURNING ${COLUMNS}`,
-      [answer, JSON.stringify(evidenceSpan ?? []), id],
+      [
+        answer,
+        answerData ? JSON.stringify(answerData) : null,
+        JSON.stringify(evidenceSpan ?? []),
+        id,
+      ],
     );
     return (result.rows[0] as TranscriptRow | undefined)
       ? mapRow(result.rows[0] as TranscriptRow)

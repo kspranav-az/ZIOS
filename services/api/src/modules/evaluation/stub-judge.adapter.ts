@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { KitQuestion, SessionTranscript } from '@zios/shared-types';
 import { computeCommunicationMetrics, rowDurationMinutes } from './metrics';
-import { buildScoringUnits } from './segmenter';
+import { buildScoringUnits, type ScoringUnit } from './segmenter';
 import type { JudgeEvidenceSpan, JudgePort, JudgeResult, JudgeScore } from './judge.port';
 
 const FILLER_RE = /\b(um|uh|like)\b/gi;
@@ -40,17 +40,46 @@ export class StubJudgeAdapter implements JudgePort {
   private firstEvidenceSpan(rows: SessionTranscript[]): JudgeEvidenceSpan {
     const row = rows.find((r) => (r.answerText?.length ?? 0) > 0) ?? rows[0];
     const answer = row?.answerText ?? '';
-    const end = Math.min(80, answer.length);
     return {
       transcriptId: row?.id ?? null,
       questionId: row?.questionId ?? '',
       start: 0,
-      end,
-      quoteText: answer.slice(0, end),
+      end: answer.length,
+      quoteText: answer,
     };
   }
 
-  private scoreForUnit(unit: { combinedAnswer: string; rows: SessionTranscript[] }): number {
+  private scoreForUnit(unit: ScoringUnit): number {
+    const question = unit.question;
+    const mainRow = unit.rows.find((r) => r.answerData !== null) ?? unit.rows[0];
+    const answerData = mainRow?.answerData;
+
+    if (question.type === 'rating_scale' && answerData?.rating !== undefined) {
+      return Math.max(1, Math.min(5, answerData.rating));
+    }
+
+    if (
+      (question.type === 'mcq_single' || question.type === 'mcq_multi') &&
+      answerData?.selectedOptionIds !== undefined
+    ) {
+      const correctIds = new Set(
+        (question.options ?? []).filter((o) => o.correct).map((o) => o.id),
+      );
+      const selectedIds = new Set(answerData.selectedOptionIds);
+      if (correctIds.size === 0) {
+        // No scoring key authored yet; give partial credit for any selection.
+        return selectedIds.size > 0 ? 3 : 1;
+      }
+      const correctSelected = [...selectedIds].filter((id) => correctIds.has(id)).length;
+      const incorrectSelected = [...selectedIds].filter((id) => !correctIds.has(id)).length;
+      const totalCorrect = correctIds.size;
+      if (correctSelected === totalCorrect && incorrectSelected === 0) return 5;
+      if (correctSelected > 0 && incorrectSelected === 0)
+        return 3 + Math.round((2 * correctSelected) / totalCorrect);
+      if (correctSelected > 0) return 2 + Math.round((2 * correctSelected) / totalCorrect);
+      return 1;
+    }
+
     const len = unit.combinedAnswer.length;
     const fillerHits = (unit.combinedAnswer.match(FILLER_RE) ?? []).length;
     const fillerDensity = len > 0 ? fillerHits / len : 0;

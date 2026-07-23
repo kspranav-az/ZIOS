@@ -507,7 +507,7 @@ export class EvaluationService {
 
   private async loadTranscript(sessionId: string): Promise<SessionTranscript[]> {
     const result = await this.db.query(
-      `SELECT id, session_id, question_id, question_prompt, answer_text, position, evidence_span, created_at, answered_at
+      `SELECT id, session_id, question_id, question_prompt, answer_text, answer_data, position, evidence_span, created_at, answered_at
        FROM session_transcript
        WHERE session_id = $1
        ORDER BY position ASC, created_at ASC`,
@@ -519,6 +519,7 @@ export class EvaluationService {
       questionId: row.question_id as string,
       questionPrompt: row.question_prompt as string,
       answerText: row.answer_text as string | null,
+      answerData: (row.answer_data ?? null) as SessionTranscript['answerData'],
       position: row.position as number,
       evidenceSpan: (row.evidence_span ?? []) as Array<{
         start: number;

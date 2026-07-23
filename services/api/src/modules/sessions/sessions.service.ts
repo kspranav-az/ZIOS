@@ -1,9 +1,11 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type {
+  AnswerData,
   ConsentByTokenBody,
   ConsentByTokenResponse,
   ConsentRecord,
   InterviewSession,
+  KitQuestion,
   KitSnapshot,
   PreflightBody,
   PreflightResponse,
@@ -26,6 +28,63 @@ import { SessionsRepository } from './sessions.repository';
 import { TranscriptRepository } from './transcript.repository';
 
 const TIMER_GRACE_SECONDS = 15;
+
+function formatAnswerText(question: KitQuestion, answerData: AnswerData): string {
+  if (answerData.type === 'rating_scale' && answerData.rating !== undefined) {
+    return `Rating: ${answerData.rating}/5`;
+  }
+  if (
+    (answerData.type === 'mcq_single' || answerData.type === 'mcq_multi') &&
+    answerData.selectedOptionIds !== undefined
+  ) {
+    const selected = (question.options ?? []).filter((o) =>
+      answerData.selectedOptionIds?.includes(o.id),
+    );
+    const labels = selected.map((o) => o.text);
+    return labels.length > 0 ? labels.join(', ') : '(no selection)';
+  }
+  return '';
+}
+
+function validateAnswerData(question: KitQuestion, answerData: AnswerData): void {
+  if (answerData.type !== question.type) {
+    throw new ApiException(400, 'ANSWER_TYPE_MISMATCH', 'answer type does not match question type');
+  }
+  if (question.type === 'rating_scale') {
+    if (
+      answerData.rating === undefined ||
+      !Number.isInteger(answerData.rating) ||
+      answerData.rating < 1 ||
+      answerData.rating > 5
+    ) {
+      throw new ApiException(400, 'INVALID_RATING', 'rating must be an integer between 1 and 5');
+    }
+    return;
+  }
+  if (question.type === 'mcq_single' || question.type === 'mcq_multi') {
+    const selected = answerData.selectedOptionIds ?? [];
+    if (!Array.isArray(selected) || selected.length === 0) {
+      throw new ApiException(400, 'INVALID_MCQ_SELECTION', 'at least one option must be selected');
+    }
+    const validIds = new Set((question.options ?? []).map((o) => o.id));
+    if (selected.some((id) => !validIds.has(id))) {
+      throw new ApiException(
+        400,
+        'INVALID_MCQ_OPTION',
+        'selected option does not belong to the question',
+      );
+    }
+    if (question.type === 'mcq_single' && selected.length > 1) {
+      throw new ApiException(400, 'INVALID_MCQ_SINGLE', 'only one option may be selected');
+    }
+    return;
+  }
+  throw new ApiException(
+    400,
+    'INVALID_ANSWER_DATA',
+    'answer data not valid for this question type',
+  );
+}
 
 @Injectable()
 export class SessionsService {
@@ -312,7 +371,9 @@ export class SessionsService {
       const lastRow = transcript[transcript.length - 1] ?? null;
 
       if (lastRow && lastRow.answerText === null) {
-        if (body?.answer === undefined) {
+        const hasTextAnswer = body?.answer !== undefined && body.answer.length > 0;
+        const hasStructuredAnswer = body?.answerData !== undefined;
+        if (!hasTextAnswer && !hasStructuredAnswer) {
           // No answer yet: re-present the current question/followup.
           const askedForQuestion = transcript.filter(
             (t) => t.questionId === lastRow.questionId,
@@ -336,7 +397,13 @@ export class SessionsService {
             );
           }
         }
-        await this.transcript.answer(lastRow.id, body.answer, q);
+        const answerData = hasStructuredAnswer ? body.answerData : undefined;
+        let answerText = body?.answer ?? '';
+        if (answerData && question) {
+          validateAnswerData(question, answerData);
+          answerText = formatAnswerText(question, answerData);
+        }
+        await this.transcript.answer(lastRow.id, answerText, q, undefined, answerData);
         await this.emit(q, session.id, 'session.turn_answered', {
           questionId: lastRow.questionId,
         });
