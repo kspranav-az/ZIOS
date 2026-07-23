@@ -28,19 +28,19 @@ export function issueLiveKitToken(options: LiveKitTokenOptions): LiveKitTokenPay
   const header = { alg: 'HS256', typ: 'JWT' };
   const payload = {
     iss: options.apiKey,
-    sub: options.apiKey,
+    sub: options.identity,
     iat: now,
     nbf: now,
     exp: now + (options.ttlSeconds ?? 3600),
+    identity: options.identity,
+    metadata: options.name ? JSON.stringify({ name: options.name }) : undefined,
     video: {
       roomJoin: true,
       room: options.roomName,
-      identity: options.identity,
       canPublish: true,
       canSubscribe: true,
       canPublishData: true,
     },
-    metadata: options.name ? JSON.stringify({ name: options.name }) : undefined,
   };
 
   const signingInput = `${base64Url(JSON.stringify(header))}.${base64Url(JSON.stringify(payload))}`;

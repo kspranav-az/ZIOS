@@ -241,14 +241,28 @@ export class SessionsService {
   ): Promise<PreflightResponse> {
     const result = await this.db.transaction(async (q) => {
       let session = await this.loadSessionByRecoveryToken(sessionId, rawRecoveryToken, q);
-      if (session.status !== 'consented') {
-        throw new ApiException(409, 'SESSION_STATE_INVALID', `session is ${session.status}`);
-      }
       const snapshot = await this.loadSnapshot(session.kitVersionId, q);
 
-      session = await this.advanceSessionStatus(q, session, 'preflight', {
-        preflightReport: body?.report ?? {},
-      });
+      // Idempotent: the interviewer may have already advanced a human-facilitated
+      // session to 'live' before the candidate clicks Start. In that case just
+      // let the candidate through without re-advancing or generating a turn.
+      if (session.status === 'live') {
+        if (session.conductor === 'human') {
+          const turn: SessionTurnResponse = { type: 'question', text: '', questionId: null };
+          return { session, turn };
+        }
+        return this.buildNextTurn(q, session, snapshot);
+      }
+
+      if (session.status !== 'consented' && session.status !== 'preflight') {
+        throw new ApiException(409, 'SESSION_STATE_INVALID', `session is ${session.status}`);
+      }
+
+      if (session.status === 'consented') {
+        session = await this.advanceSessionStatus(q, session, 'preflight', {
+          preflightReport: body?.report ?? {},
+        });
+      }
       session = await this.advanceSessionStatus(q, session, 'live', {
         startedAt: new Date(),
       });

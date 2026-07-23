@@ -3,9 +3,11 @@ import { useNavigate, useParams } from 'react-router-dom';
 import type { CockpitStateResponse, SessionCoverage, SessionTranscript } from '@zios/shared-types';
 import { Badge, Button, Card, Icon } from '@zios/ui';
 import {
+  ConnectionState,
   Room,
   RoomEvent,
   Track,
+  type DisconnectReason,
   type LocalVideoTrack,
   type RemoteTrack,
   type RemoteTrackPublication,
@@ -51,12 +53,29 @@ export function CockpitPage() {
   const [connectNonce, setConnectNonce] = useState(0);
   const [micEnabled, setMicEnabled] = useState(true);
   const [cameraEnabled, setCameraEnabled] = useState(true);
+  const [localVideoTrack, setLocalVideoTrack] = useState<LocalVideoTrack | null>(null);
 
-  const localVideoRef = useRef<HTMLVideoElement>(null);
-  const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const roomRef = useRef<Room | null>(null);
   const timersRef = useRef<Map<string, TimerState>>(new Map());
   const [, forceRender] = useState(0);
+
+  // Callback refs attach the track as soon as the <video> element is mounted.
+  const setRemoteVideoElement = useCallback(
+    (node: HTMLVideoElement | null) => {
+      if (node && remoteVideoTrack?.track) {
+        remoteVideoTrack.track.attach(node);
+      }
+    },
+    [remoteVideoTrack],
+  );
+  const setLocalVideoElement = useCallback(
+    (node: HTMLVideoElement | null) => {
+      if (node && localVideoTrack) {
+        localVideoTrack.attach(node);
+      }
+    },
+    [localVideoTrack],
+  );
 
   const load = useCallback(async () => {
     if (!sessionId) return;
@@ -99,13 +118,32 @@ export function CockpitPage() {
         const tokenResponse = await liveRoomsApi.issueInterviewerToken(sessionId!);
         if (cancelled) return;
 
+        console.log(
+          '[interviewer] LiveKit token received, connecting to',
+          tokenResponse.livekit.url,
+        );
+
         const room = new Room({
-          adaptiveStream: true,
-          dynacast: true,
+          adaptiveStream: false,
+          dynacast: false,
+          disconnectOnPageLeave: false,
+          reconnectPolicy: {
+            nextRetryDelayInMs: (ctx) => {
+              if (ctx.retryCount > 10) return null;
+              return Math.min(1000 * 1.5 ** ctx.retryCount, 30000);
+            },
+          },
           publishDefaults: { simulcast: false },
         });
         roomRef.current = room;
 
+        room.on(RoomEvent.ConnectionStateChanged, (state: ConnectionState) => {
+          console.log('[interviewer] connection state:', state);
+        });
+        room.on(RoomEvent.SignalReconnecting, () => {
+          console.log('[interviewer] signal reconnecting');
+          setIsReconnecting(true);
+        });
         room.on(
           RoomEvent.TrackSubscribed,
           (
@@ -113,11 +151,9 @@ export function CockpitPage() {
             publication: RemoteTrackPublication,
             participant: { identity: string },
           ) => {
+            console.log('[interviewer] track subscribed', publication.kind, participant.identity);
             if (publication.kind === Track.Kind.Video) {
               setRemoteVideoTrack({ track, participantIdentity: participant.identity });
-              if (remoteVideoRef.current) {
-                track.attach(remoteVideoRef.current);
-              }
             } else if (publication.kind === Track.Kind.Audio) {
               track.attach();
             }
@@ -126,15 +162,13 @@ export function CockpitPage() {
 
         room.on(
           RoomEvent.TrackUnsubscribed,
-          (
-            track: RemoteTrack,
-            publication: RemoteTrackPublication,
-            participant: { identity: string },
-          ) => {
+          (track: RemoteTrack, publication: RemoteTrackPublication) => {
+            console.log('[interviewer] track unsubscribed', publication.kind);
             if (publication.kind === Track.Kind.Video) {
-              setRemoteVideoTrack((current) =>
-                current?.participantIdentity === participant.identity ? null : current,
-              );
+              // Compare the actual track instance: when a participant reconnects,
+              // the new track may arrive before the old track unsubscribes, and
+              // identity-based cleanup would incorrectly clear the new track.
+              setRemoteVideoTrack((current) => (current?.track === track ? null : current));
               track.detach();
             } else if (publication.kind === Track.Kind.Audio) {
               track.detach();
@@ -143,34 +177,72 @@ export function CockpitPage() {
         );
 
         room.on(RoomEvent.Connected, () => {
+          console.log('[interviewer] connected');
           setConnectionStatus('connected');
           setIsReconnecting(false);
         });
-        room.on(RoomEvent.Disconnected, () => {
+        room.on(RoomEvent.Disconnected, (reason?: DisconnectReason) => {
+          console.log('[interviewer] disconnected, reason:', reason);
           setConnectionStatus('error');
           setIsReconnecting(false);
+          setRoomError(`Disconnected (${reason ?? 'unknown'})`);
         });
-        room.on(RoomEvent.Reconnecting, () => setIsReconnecting(true));
-        room.on(RoomEvent.Reconnected, () => setIsReconnecting(false));
+        room.on(RoomEvent.Reconnecting, () => {
+          console.log('[interviewer] reconnecting');
+          setIsReconnecting(true);
+        });
+        room.on(RoomEvent.Reconnected, () => {
+          console.log('[interviewer] reconnected');
+          setConnectionStatus('connected');
+          setIsReconnecting(false);
+          setRoomError(undefined);
+        });
         room.on(RoomEvent.ConnectionQualityChanged, (quality) => {
+          console.log('[interviewer] connection quality:', quality);
           setConnectionQuality(quality === 'excellent' || quality === 'good' ? 'good' : 'poor');
         });
         room.on(RoomEvent.LocalTrackPublished, (publication) => {
-          if (publication.kind === Track.Kind.Video && localVideoRef.current) {
-            publication.videoTrack?.attach(localVideoRef.current);
+          console.log('[interviewer] local track published', publication.kind);
+          if (publication.kind === Track.Kind.Video && publication.videoTrack) {
+            setLocalVideoTrack(publication.videoTrack);
           }
         });
+        room.on(RoomEvent.LocalTrackUnpublished, (publication) => {
+          console.log('[interviewer] local track unpublished', publication.kind);
+          if (publication.kind === Track.Kind.Video) {
+            setLocalVideoTrack(null);
+          }
+        });
+        room.on(RoomEvent.ParticipantConnected, (participant) => {
+          console.log('[interviewer] participant connected', participant.identity);
+        });
+        room.on(RoomEvent.ParticipantDisconnected, (participant) => {
+          console.log('[interviewer] participant disconnected', participant.identity);
+        });
+        room.on(RoomEvent.MediaDevicesError, (err) => {
+          console.error('[interviewer] media devices error', err);
+        });
 
-        await room.connect(tokenResponse.livekit.url, tokenResponse.livekit.token);
+        await room.connect(tokenResponse.livekit.url, tokenResponse.livekit.token, {
+          rtcConfig: {
+            iceServers: [
+              { urls: 'stun:stun.l.google.com:19302' },
+              { urls: 'stun:stun1.l.google.com:19302' },
+            ],
+          },
+        });
+        console.log('[interviewer] room.connect resolved');
         await room.localParticipant.enableCameraAndMicrophone();
+        console.log('[interviewer] camera/mic enabled');
         const localVideo = room.localParticipant.getTrackPublication(Track.Source.Camera)
           ?.videoTrack as LocalVideoTrack | undefined;
-        if (localVideo && localVideoRef.current) {
-          localVideo.attach(localVideoRef.current);
+        if (localVideo) {
+          setLocalVideoTrack(localVideo);
         }
         setMicEnabled(room.localParticipant.isMicrophoneEnabled);
         setCameraEnabled(room.localParticipant.isCameraEnabled);
       } catch (err) {
+        console.error('[interviewer] connect error', err);
         if (cancelled) return;
         setConnectionStatus('error');
         setRoomError(err instanceof Error ? err.message : 'Could not connect to the video room.');
@@ -183,13 +255,7 @@ export function CockpitPage() {
       cancelled = true;
       void roomRef.current?.disconnect();
     };
-  }, [sessionId, state, connectNonce]);
-
-  useEffect(() => {
-    if (remoteVideoTrack?.track && remoteVideoRef.current) {
-      remoteVideoTrack.track.attach(remoteVideoRef.current);
-    }
-  }, [remoteVideoTrack]);
+  }, [sessionId, state?.session.id, connectNonce]);
 
   const toggleMic = async () => {
     const room = roomRef.current;
@@ -405,9 +471,10 @@ export function CockpitPage() {
                   </div>
                 ) : (
                   <video
-                    ref={remoteVideoRef}
+                    ref={setRemoteVideoElement}
                     autoPlay
                     playsInline
+                    muted
                     className="absolute inset-0 w-full h-full object-cover"
                   />
                 )}
@@ -420,7 +487,7 @@ export function CockpitPage() {
               </div>
               <div className="aspect-video bg-surface-container-lowest relative">
                 <video
-                  ref={localVideoRef}
+                  ref={setLocalVideoElement}
                   autoPlay
                   playsInline
                   muted
