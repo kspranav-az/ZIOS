@@ -5,6 +5,10 @@ AI-Interview-Platform/
 .env
 .env.*
 !.env.example
+cloudflare.env
+cloudflare.env.template
+ip.env
+network.env
 *.pem
 *.key
 
