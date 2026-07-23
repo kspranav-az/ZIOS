@@ -9,6 +9,7 @@ function transcript(rows: Partial<SessionTranscript>[]): SessionTranscript[] {
     questionId: `q-${index}`,
     questionPrompt: `prompt-${index}`,
     answerText: row.answerText ?? null,
+    answerData: row.answerData ?? null,
     position: index,
     evidenceSpan: [],
     createdAt: row.createdAt ?? '2024-01-01T00:00:00.000Z',

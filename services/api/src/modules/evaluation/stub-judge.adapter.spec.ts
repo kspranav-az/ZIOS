@@ -38,6 +38,7 @@ function transcript(rows: Partial<SessionTranscript>[]): SessionTranscript[] {
     questionId: row.questionId ?? 'q1',
     questionPrompt: 'prompt',
     answerText: row.answerText ?? null,
+    answerData: row.answerData ?? null,
     position: index,
     evidenceSpan: [],
     createdAt: '2024-01-01T00:00:00.000Z',
@@ -108,7 +109,7 @@ describe('StubJudgeAdapter', () => {
     expect(spam.scores[0]!.score).toBeLessThan(5);
   });
 
-  it('maps evidence spans to the first 80 characters of an answer', async () => {
+  it('maps evidence spans to the full answer text', async () => {
     const criterionId = randomUUID();
     const question = makeQuestion('q1', [criterionId]);
     const answer = 'A'.repeat(200);
@@ -117,8 +118,79 @@ describe('StubJudgeAdapter', () => {
       transcript([{ questionId: 'q1', answerText: answer }]),
       [question],
     );
-    expect(result.scores[0]!.evidenceSpan.end).toBe(80);
-    expect(result.scores[0]!.evidenceSpan.quoteText).toBe('A'.repeat(80));
+    expect(result.scores[0]!.evidenceSpan.end).toBe(answer.length);
+    expect(result.scores[0]!.evidenceSpan.quoteText).toBe(answer);
+  });
+
+  it('scores rating_scale questions deterministically from the rating value', async () => {
+    const criterionId = randomUUID();
+    const question: KitQuestion = { ...makeQuestion('q1', [criterionId]), type: 'rating_scale' };
+    const result = await judge.evaluate(
+      { orgId: 'o1', sessionId: 's1', kitVersionId: 'kv1' },
+      transcript([
+        {
+          questionId: 'q1',
+          answerText: 'Rating: 4/5',
+          answerData: { type: 'rating_scale', rating: 4 },
+        },
+      ]),
+      [question],
+    );
+    expect(result.scores[0]!.score).toBe(4);
+    expect(result.scores[0]!.evidenceSpan.quoteText).toBe('Rating: 4/5');
+  });
+
+  it('scores mcq_single as full marks when the correct option is selected', async () => {
+    const criterionId = randomUUID();
+    const optionId = randomUUID();
+    const question: KitQuestion = {
+      ...makeQuestion('q1', [criterionId]),
+      type: 'mcq_single',
+      options: [
+        { id: optionId, text: 'Correct', correct: true },
+        { id: randomUUID(), text: 'Wrong', correct: false },
+      ],
+    };
+    const result = await judge.evaluate(
+      { orgId: 'o1', sessionId: 's1', kitVersionId: 'kv1' },
+      transcript([
+        {
+          questionId: 'q1',
+          answerText: 'Correct',
+          answerData: { type: 'mcq_single', selectedOptionIds: [optionId] },
+        },
+      ]),
+      [question],
+    );
+    expect(result.scores[0]!.score).toBe(5);
+  });
+
+  it('scores mcq_multi proportionally when only some correct options are selected', async () => {
+    const criterionId = randomUUID();
+    const correctA = randomUUID();
+    const correctB = randomUUID();
+    const question: KitQuestion = {
+      ...makeQuestion('q1', [criterionId]),
+      type: 'mcq_multi',
+      options: [
+        { id: correctA, text: 'A', correct: true },
+        { id: correctB, text: 'B', correct: true },
+        { id: randomUUID(), text: 'C', correct: false },
+      ],
+    };
+    const result = await judge.evaluate(
+      { orgId: 'o1', sessionId: 's1', kitVersionId: 'kv1' },
+      transcript([
+        {
+          questionId: 'q1',
+          answerText: 'A',
+          answerData: { type: 'mcq_multi', selectedOptionIds: [correctA] },
+        },
+      ]),
+      [question],
+    );
+    expect(result.scores[0]!.score).toBeGreaterThanOrEqual(3);
+    expect(result.scores[0]!.score).toBeLessThan(5);
   });
 
   it('returns a recommendation between 1 and 5', async () => {

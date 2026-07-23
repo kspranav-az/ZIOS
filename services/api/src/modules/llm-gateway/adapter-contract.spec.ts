@@ -106,6 +106,7 @@ describe('Adapter contract parity (stub vs gateway-backed)', () => {
         questionId: 'q1',
         questionPrompt: 'What is AI?',
         answerText: 'AI is artificial intelligence used to solve problems.',
+        answerData: null,
         position: 0,
         evidenceSpan: [],
         createdAt: new Date().toISOString(),

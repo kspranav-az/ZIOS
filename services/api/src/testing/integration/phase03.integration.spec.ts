@@ -83,6 +83,65 @@ async function createPublishedKit(
   return { kit, version: full };
 }
 
+async function createStructuredAnswerKit(
+  test: TestApp,
+  token: string,
+): Promise<{ kit: KitDetailResponse['kit']; version: KitVersion; mcqOptionId: string }> {
+  const create = await postJson(
+    test.baseUrl,
+    '/kits',
+    { title: 'Phase 03 Structured Kit', role: 'Engineer', level: 'Mid' } satisfies CreateKitBody,
+    bearer(token),
+  );
+  expect(create.status).toBe(201);
+  const kit = ((await create.json()) as KitDetailResponse).kit;
+
+  const mcqOptionId = randomUUID();
+  const q1: CreateQuestionBody = {
+    type: 'mcq_single',
+    prompt: 'Pick one.',
+    topic: 'Behaviour',
+    timeLimitSec: 60,
+    timeLimitType: 'soft',
+    mandatory: true,
+    followupPolicy: 'none',
+    options: [
+      { id: mcqOptionId, text: 'First', correct: true },
+      { id: randomUUID(), text: 'Second', correct: false },
+    ],
+    rubricLines: [{ id: randomUUID(), text: 'Accuracy', weight: 1 }],
+  };
+  const q2: CreateQuestionBody = {
+    type: 'rating_scale',
+    prompt: 'Rate your confidence.',
+    topic: 'Self-assessment',
+    timeLimitSec: 60,
+    timeLimitType: 'soft',
+    mandatory: true,
+    followupPolicy: 'none',
+    rubricLines: [{ id: randomUUID(), text: 'Honesty', weight: 1 }],
+  };
+
+  for (const q of [q1, q2]) {
+    const add = await postJson(test.baseUrl, `/kits/${kit.id}/questions`, q, bearer(token));
+    expect(add.status).toBe(201);
+  }
+
+  const publish = await postJson(test.baseUrl, `/kits/${kit.id}/publish`, undefined, bearer(token));
+  expect(publish.status).toBe(201);
+  const version = (
+    (await publish.json()) as { version: { id: string; kitId: string; version: number } }
+  ).version;
+
+  const getVersion = await fetch(`${test.baseUrl}/kits/${kit.id}/versions/${version.version}`, {
+    headers: bearer(token),
+  });
+  expect(getVersion.status).toBe(200);
+  const full = ((await getVersion.json()) as { version: KitVersion }).version;
+
+  return { kit, version: full, mcqOptionId };
+}
+
 describe.skipIf(!INTEGRATION_AVAILABLE)('Phase 03 invites & text interview (integration)', () => {
   let test: TestApp;
   let adminToken: string;
@@ -323,6 +382,70 @@ describe.skipIf(!INTEGRATION_AVAILABLE)('Phase 03 invites & text interview (inte
     expect(body.total).toBe(500);
     expect(body.successes).toBe(500);
     expect(body.errors).toBe(0);
+  });
+
+  it('accepts structured answers for mcq_single and rating_scale questions', async () => {
+    const { version, mcqOptionId } = await createStructuredAnswerKit(test, adminToken);
+
+    const email = ns.email('structured-candidate');
+    const inviteRes = await postJson(
+      test.baseUrl,
+      '/invites',
+      {
+        kitVersionId: version.id,
+        candidate: { name: 'Structured Alice', email },
+      },
+      bearer(adminToken),
+    );
+    expect(inviteRes.status).toBe(201);
+    const { token } = (await inviteRes.json()) as CreateCandidateInviteResponse;
+
+    const consentRes = await postJson(test.baseUrl, `/invites/by-token/${token}/consent`, {
+      name: 'Structured Alice',
+    });
+    expect(consentRes.status).toBe(200);
+    const { session, recoveryToken } = (await consentRes.json()) as ConsentByTokenResponse;
+
+    const preflight = await postJson(
+      test.baseUrl,
+      `/sessions/${session.id}/preflight`,
+      {},
+      { 'x-recovery-token': recoveryToken },
+    );
+    expect(preflight.status).toBe(200);
+
+    // Answer MCQ single with the correct option.
+    const mcqRes = await postJson(
+      test.baseUrl,
+      `/sessions/${session.id}/turn`,
+      { answerData: { type: 'mcq_single', selectedOptionIds: [mcqOptionId] } },
+      { 'x-recovery-token': recoveryToken },
+    );
+    expect(mcqRes.status).toBe(200);
+
+    // Answer rating scale.
+    const ratingRes = await postJson(
+      test.baseUrl,
+      `/sessions/${session.id}/turn`,
+      { answerData: { type: 'rating_scale', rating: 4 } },
+      { 'x-recovery-token': recoveryToken },
+    );
+    expect(ratingRes.status).toBe(200);
+    const ratingBody = (await ratingRes.json()) as TurnResponse;
+    expect(ratingBody.turn.type).toBe('wrapup');
+
+    const detail = await fetch(`${test.baseUrl}/sessions/${session.id}`, {
+      headers: bearer(adminToken),
+    });
+    expect(detail.status).toBe(200);
+    const detailBody = (await detail.json()) as SessionDetailResponse;
+    expect(detailBody.transcript).toHaveLength(2); // 2 answered questions; wrapup has no row
+    const mcqRow = detailBody.transcript.find((t) => t.answerData?.type === 'mcq_single');
+    expect(mcqRow).toBeTruthy();
+    expect(mcqRow!.answerText).toBe('First');
+    const ratingRow = detailBody.transcript.find((t) => t.answerData?.type === 'rating_scale');
+    expect(ratingRow).toBeTruthy();
+    expect(ratingRow!.answerText).toBe('Rating: 4/5');
   });
 
   it('sends a T-4h reminder when the invite is within the window', async () => {
