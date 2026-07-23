@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Card, Icon } from '@zios/ui';
+import type { KitQuestion, TurnBody } from '@zios/shared-types';
 import { ApiErrorResponse, submitTurn } from '../api';
 import {
   loadAnswerDraft,
@@ -24,6 +25,8 @@ export function InterviewPage() {
     setSession,
   } = useInterview();
   const [answer, setAnswer] = useState('');
+  const [selectedOptionIds, setSelectedOptionIds] = useState<string[]>([]);
+  const [rating, setRating] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [history, setHistory] = useState<Array<{ prompt: string; answer: string | null }>>([]);
@@ -33,6 +36,12 @@ export function InterviewPage() {
 
   const [recoveredSessionId, setRecoveredSessionId] = useState<string | null>(null);
   const [recoveredRecoveryToken, setRecoveredRecoveryToken] = useState<string | null>(null);
+
+  const currentQuestion = useMemo<KitQuestion | undefined>(
+    () => questions.find((q) => q.id === turn?.questionId),
+    [questions, turn?.questionId],
+  );
+  const questionType = currentQuestion?.type ?? 'open_ended';
 
   // Recover session context from sessionStorage when the page is reloaded directly.
   useEffect(() => {
@@ -72,19 +81,19 @@ export function InterviewPage() {
       setInitializing(false);
       return;
     }
-    if (!draftLoaded.current) {
+    if (questionType === 'open_ended' && !draftLoaded.current) {
       draftLoaded.current = true;
       setAnswer(loadAnswerDraft(sessionId));
     }
     recoverState().finally(() => setInitializing(false));
-  }, [sessionId, recoveryToken, recoverState]);
+  }, [sessionId, recoveryToken, recoverState, questionType]);
 
-  // Persist draft as the candidate types.
+  // Persist draft as the candidate types (text questions only).
   useEffect(() => {
-    if (sessionId && draftLoaded.current) {
+    if (sessionId && draftLoaded.current && questionType === 'open_ended') {
       storeAnswerDraft(sessionId, answer);
     }
-  }, [answer, sessionId]);
+  }, [answer, sessionId, questionType]);
 
   // If the resolved turn is already wrapup, go to completion.
   useEffect(() => {
@@ -92,6 +101,17 @@ export function InterviewPage() {
       navigate('/complete', { replace: true });
     }
   }, [turn, navigate]);
+
+  // Reset structured answer state whenever the question changes.
+  useEffect(() => {
+    setSelectedOptionIds([]);
+    setRating(null);
+    if (questionType === 'open_ended') {
+      setAnswer(sessionId ? loadAnswerDraft(sessionId) : '');
+    } else {
+      setAnswer('');
+    }
+  }, [turn?.questionId, questionType, sessionId]);
 
   if ((!sessionId || !recoveryToken) && recoveredFromStorage) {
     return (
@@ -102,17 +122,57 @@ export function InterviewPage() {
     );
   }
 
+  const buildTurnBody = (): TurnBody | null => {
+    if (questionType === 'rating_scale') {
+      if (rating === null) return null;
+      return { answerData: { type: 'rating_scale', rating } };
+    }
+    if (questionType === 'mcq_single' || questionType === 'mcq_multi') {
+      if (selectedOptionIds.length === 0) return null;
+      return { answerData: { type: questionType, selectedOptionIds } };
+    }
+    const text = answer.trim();
+    if (!text) return null;
+    return { answer: text };
+  };
+
+  const isAnswerReady = (): boolean => {
+    if (questionType === 'rating_scale') return rating !== null;
+    if (questionType === 'mcq_single' || questionType === 'mcq_multi')
+      return selectedOptionIds.length > 0;
+    return answer.trim().length > 0;
+  };
+
   const handleSubmit = async () => {
-    if (!answer.trim() || !sessionId || !recoveryToken) return;
+    if (!sessionId || !recoveryToken) return;
+    const body = buildTurnBody();
+    if (!body) return;
+
     setLoading(true);
     setError(null);
     try {
-      const response = await submitTurn(sessionId, recoveryToken, { answer: answer.trim() });
+      const response = await submitTurn(sessionId, recoveryToken, body);
       setSession(response.session);
       if (turn) {
-        setHistory((prev) => [...prev, { prompt: turn.text, answer: answer.trim() }]);
+        setHistory((prev) => [
+          ...prev,
+          {
+            prompt: turn.text,
+            answer:
+              questionType === 'rating_scale'
+                ? `Rating: ${rating}/5`
+                : questionType === 'mcq_single' || questionType === 'mcq_multi'
+                  ? (currentQuestion?.options
+                      ?.filter((o) => selectedOptionIds.includes(o.id))
+                      .map((o) => o.text)
+                      .join(', ') ?? '')
+                  : answer.trim(),
+          },
+        ]);
       }
       setAnswer('');
+      setSelectedOptionIds([]);
+      setRating(null);
       if (response.turn.type === 'wrapup') {
         navigate('/complete', { replace: true });
       } else {
@@ -127,6 +187,88 @@ export function InterviewPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const toggleOption = (optionId: string) => {
+    if (questionType === 'mcq_single') {
+      setSelectedOptionIds([optionId]);
+      return;
+    }
+    setSelectedOptionIds((prev) =>
+      prev.includes(optionId) ? prev.filter((id) => id !== optionId) : [...prev, optionId],
+    );
+  };
+
+  const renderInput = () => {
+    if (questionType === 'rating_scale') {
+      return (
+        <div className="flex flex-wrap items-center gap-3">
+          {[1, 2, 3, 4, 5].map((value) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setRating(value)}
+              className={`flex h-12 w-12 items-center justify-center rounded-xl text-lg font-bold transition-colors ${
+                rating === value
+                  ? 'bg-primary text-on-primary'
+                  : 'bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest'
+              }`}
+              aria-label={`Rate ${value} out of 5`}
+            >
+              {value}
+            </button>
+          ))}
+        </div>
+      );
+    }
+
+    if (questionType === 'mcq_single' || questionType === 'mcq_multi') {
+      return (
+        <div className="space-y-3">
+          {(currentQuestion?.options ?? []).map((option) => {
+            const selected = selectedOptionIds.includes(option.id);
+            return (
+              <button
+                key={option.id}
+                type="button"
+                onClick={() => toggleOption(option.id)}
+                className={`flex w-full items-center gap-3 rounded-xl border p-4 text-left transition-colors ${
+                  selected
+                    ? 'border-primary bg-primary-container/30'
+                    : 'border-outline-variant bg-surface-container-low hover:bg-surface-container'
+                }`}
+              >
+                <span
+                  className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border ${
+                    questionType === 'mcq_single' ? 'rounded-full' : 'rounded-md'
+                  } ${selected ? 'border-primary bg-primary text-on-primary' : 'border-outline-variant'}`}
+                >
+                  {selected && <Icon name="check" className="text-sm" />}
+                </span>
+                <span className="text-body-md text-on-surface">{option.text}</span>
+              </button>
+            );
+          })}
+        </div>
+      );
+    }
+
+    return (
+      <>
+        <label htmlFor="answer" className="sr-only">
+          Your answer
+        </label>
+        <textarea
+          id="answer"
+          rows={6}
+          className="w-full resize-y rounded-xl border border-outline-variant bg-white p-4 text-body-md text-on-surface outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/10"
+          placeholder="Type your answer here…"
+          value={answer}
+          onChange={(e) => setAnswer(e.target.value)}
+          disabled={loading}
+        />
+      </>
+    );
   };
 
   if (initializing) return <LoadingState message="Recovering your interview…" />;
@@ -171,18 +313,7 @@ export function InterviewPage() {
             </div>
           )}
 
-          <label htmlFor="answer" className="sr-only">
-            Your answer
-          </label>
-          <textarea
-            id="answer"
-            rows={6}
-            className="w-full resize-y rounded-xl border border-outline-variant bg-white p-4 text-body-md text-on-surface outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/10"
-            placeholder="Type your answer here…"
-            value={answer}
-            onChange={(e) => setAnswer(e.target.value)}
-            disabled={loading}
-          />
+          {renderInput()}
 
           {error && (
             <p className="mt-4 rounded-lg bg-error-container p-3 text-body-md text-on-error-container">
@@ -195,7 +326,7 @@ export function InterviewPage() {
               size="lg"
               onClick={handleSubmit}
               loading={loading}
-              disabled={!answer.trim()}
+              disabled={!isAnswerReady()}
               icon="send"
             >
               Submit answer
