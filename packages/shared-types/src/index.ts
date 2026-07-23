@@ -506,10 +506,21 @@ export interface SessionTranscript {
   questionId: string;
   questionPrompt: string;
   answerText: string | null;
+  /** Structured answer payload for mcq_single/mcq_multi/rating_scale questions. */
+  answerData: AnswerData | null;
   position: number;
   evidenceSpan: Array<{ start: number; end: number; transcriptId: string }>;
   createdAt: string;
   answeredAt: string | null;
+}
+
+/** Structured answer for non-open-ended question types. */
+export interface AnswerData {
+  type: QuestionType;
+  /** Selected option ids for mcq_single and mcq_multi. */
+  selectedOptionIds?: string[];
+  /** 1–5 rating for rating_scale questions. */
+  rating?: number;
 }
 
 export interface SessionEvent {
@@ -665,6 +676,8 @@ export interface PreflightResponse {
 export interface TurnBody {
   /** Candidate's answer to the question just asked. Omit on first turn / resume. */
   answer?: string;
+  /** Structured answer for mcq_single/mcq_multi/rating_scale questions. */
+  answerData?: AnswerData;
 }
 
 export interface TurnResponse {
