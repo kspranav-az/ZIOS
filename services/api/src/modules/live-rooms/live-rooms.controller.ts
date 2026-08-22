@@ -15,7 +15,7 @@ import { ApiException } from '@/common/errors';
 import { CurrentUser, Public } from '@/common/decorators';
 import { TokenService } from '@/common/tokens';
 import { CandidatesRepository } from '@/modules/candidates';
-import { InvitesRepository } from '@/modules/invites/invites.repository';
+import { InvitesRepository } from '@/modules/invites';
 import { LiveRoomsService } from './live-rooms.service';
 
 function recoveryToken(header: string | undefined): string {

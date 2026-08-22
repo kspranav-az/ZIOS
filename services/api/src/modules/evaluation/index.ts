@@ -5,3 +5,4 @@ export { JudgeEnsembleAdapter } from './judge-ensemble.adapter';
 export { StubJudgeAdapter } from './stub-judge.adapter';
 export { computeCommunicationMetrics } from './metrics';
 export { buildScoringUnits, type ScoringUnit } from './segmenter';
+export { InterviewNotesRepository } from './notes.repository';

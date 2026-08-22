@@ -1,10 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import type { InterviewNotes, SessionCoverage } from '@zios/shared-types';
+import type { InterviewNotes } from '@zios/shared-types';
 import { DatabaseService, type Queryable } from '@/modules/database';
 import { KitVersionsRepository } from '@/modules/kits';
-import { TranscriptRepository } from '@/modules/sessions/transcript.repository';
+import { TranscriptRepository } from '@/modules/sessions';
+import { InterviewNotesRepository } from '@/modules/evaluation';
 import { CoverageRepository } from './coverage.repository';
-import { InterviewNotesRepository } from '../evaluation/notes.repository';
 
 @Injectable()
 export class NotesService {

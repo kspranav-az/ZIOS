@@ -2,7 +2,6 @@ import { Injectable } from '@nestjs/common';
 import type {
   AppUser,
   CockpitStateResponse,
-  InterviewNotes,
   InterviewSlot,
   KitSnapshot,
   LiveEndResponse,
@@ -19,8 +18,7 @@ import { CandidatesRepository } from '@/modules/candidates';
 import { DatabaseService, type Queryable } from '@/modules/database';
 import { EvaluationService } from '@/modules/evaluation';
 import { KitVersionsRepository } from '@/modules/kits';
-import { SessionsRepository } from '@/modules/sessions';
-import { TranscriptRepository } from '@/modules/sessions/transcript.repository';
+import { SessionsRepository, TranscriptRepository } from '@/modules/sessions';
 import { CoverageRepository } from './coverage.repository';
 import { InterviewSlotRepository } from './slot.repository';
 import { NotesService } from './notes.service';

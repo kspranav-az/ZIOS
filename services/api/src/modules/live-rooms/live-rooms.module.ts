@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { CandidatesModule } from '@/modules/candidates';
 import { DatabaseModule } from '@/modules/database';
 import { EvaluationModule } from '@/modules/evaluation';
-import { InterviewNotesRepository } from '@/modules/evaluation/notes.repository';
+import { InterviewNotesRepository } from '@/modules/evaluation';
 import { InvitesModule } from '@/modules/invites';
 import { KitsModule } from '@/modules/kits';
 import { SessionsModule } from '@/modules/sessions';
