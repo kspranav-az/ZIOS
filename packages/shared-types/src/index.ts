@@ -516,11 +516,20 @@ export interface SessionTranscript {
 
 /** Structured answer for non-open-ended question types. */
 export interface AnswerData {
-  type: QuestionType;
+  type: QuestionType | 'video_answer';
   /** Selected option ids for mcq_single and mcq_multi. */
   selectedOptionIds?: string[];
   /** 1–5 rating for rating_scale questions. */
   rating?: number;
+  /** Video answer metadata for async video interviews. */
+  videoAnswer?: {
+    recordingUri: string;
+    objectName: string;
+    checksum: string;
+    sizeBytes: number;
+    durationSec?: number;
+    transcript?: string;
+  };
 }
 
 export interface SessionEvent {
@@ -599,6 +608,75 @@ export interface InviteDetailResponse {
   invite: Invite;
   candidate: Candidate;
   kitVersion: KitVersionSummary;
+}
+
+/* ---- async video interviews ---- */
+
+export interface AsyncVideoInterviewCreated {
+  sessionId: string;
+  inviteId: string;
+  candidateId: string;
+  token: string;
+  recoveryToken: string;
+  expiresAt: string;
+  questions: KitQuestion[];
+}
+
+export interface AsyncVideoConsentResponse {
+  session: InterviewSession;
+  recoveryToken: string;
+}
+
+export interface AsyncVideoAnswer {
+  id: string;
+  sessionId: string;
+  questionId: string;
+  questionPrompt: string;
+  answerText: string | null;
+  answerData: AnswerData | null;
+  position: number;
+  evidenceSpan: Array<{ start: number; end: number; transcriptId: string }>;
+  createdAt: string;
+  answeredAt: string | null;
+}
+
+export interface AsyncVideoQuestionsResponse {
+  session: InterviewSession;
+  questions: KitQuestion[];
+  answers: AsyncVideoAnswer[];
+  maxDurationSec: number;
+}
+
+export interface AsyncVideoUploadResponse {
+  transcriptId: string;
+  recordingUri: string;
+  checksum: string;
+  transcript?: string;
+}
+
+export interface AsyncVideoReviewScore {
+  id: string;
+  sessionId: string;
+  questionId: string;
+  score: number | null;
+  remarks: string | null;
+  reviewedBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AsyncVideoReviewDetail {
+  candidate: Candidate;
+  invite: Invite;
+  session: InterviewSession;
+  questions: KitQuestion[];
+  answers: AsyncVideoAnswer[];
+  scores: AsyncVideoReviewScore[];
+}
+
+export interface AsyncVideoScoreBody {
+  score?: number;
+  remarks?: string;
 }
 
 /* ---- public token / consent / OTP ---- */
