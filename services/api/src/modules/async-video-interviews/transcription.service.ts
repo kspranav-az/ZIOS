@@ -23,7 +23,7 @@ export class AsyncVideoTranscriptionService {
    */
   async transcribe(objectName: string, videoBuffer: Buffer): Promise<string> {
     const form = new FormData();
-    form.append('objectName', objectName);
+    form.append('object_name', objectName);
     form.append('video', new Blob([videoBuffer], { type: 'video/webm' }), 'answer.webm');
 
     const response = await fetch(`${this.orchestratorBaseUrl}/video/transcribe`, {
