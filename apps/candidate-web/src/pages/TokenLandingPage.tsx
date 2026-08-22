@@ -54,6 +54,8 @@ export function TokenLandingPage() {
           return;
         }
 
+        const isAsyncVideo = data.invite.metadata?.asyncVideo === true;
+
         // Recover an existing live/preflight session.
         if (
           data.session &&
@@ -65,8 +67,10 @@ export function TokenLandingPage() {
           if (recoveryToken) {
             storeRecovery(data.session.id, recoveryToken);
             setResolvedData({ recoveryToken });
-            // Human-facilitated video interviews use the live room, not the AI text flow.
-            if (data.session.conductor === 'human' && data.session.mode === 'video') {
+            if (isAsyncVideo) {
+              navigate('/async-interview', { replace: true });
+            } else if (data.session.conductor === 'human' && data.session.mode === 'video') {
+              // Human-facilitated video interviews use the live room, not the AI text flow.
               navigate('/live', { replace: true });
             } else {
               navigate('/interview', { replace: true });
@@ -74,13 +78,13 @@ export function TokenLandingPage() {
           } else {
             // Recovery token is not available (new device / storage cleared);
             // re-run consent so the candidate gets a fresh token.
-            navigate('/consent', { replace: true });
+            navigate(isAsyncVideo ? '/async-consent' : '/consent', { replace: true });
           }
           return;
         }
 
         // Fresh invite — show consent.
-        navigate('/consent', { replace: true });
+        navigate(isAsyncVideo ? '/async-consent' : '/consent', { replace: true });
       })
       .catch((err: unknown) => {
         if (err instanceof ApiErrorResponse) {

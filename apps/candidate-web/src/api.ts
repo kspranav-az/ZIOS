@@ -1,4 +1,5 @@
 import type {
+  AnswerData,
   ApiError,
   CandidateOtpRequestResponse,
   CandidateOtpVerifyBody,
@@ -7,6 +8,8 @@ import type {
   ConsentByTokenResponse,
   IntegrityEventBody,
   IntegrityFlagsResponse,
+  InterviewSession,
+  KitQuestion,
   LiveTokenResponse,
   PreflightBody,
   PreflightResponse,
@@ -208,4 +211,104 @@ export function getLiveToken(sessionId: string, recoveryToken: string): Promise<
     `/sessions/${encodeURIComponent(sessionId)}/live/token`,
     { headers: { 'x-recovery-token': recoveryToken } },
   );
+}
+
+/* ---- async video interviews ---- */
+
+export interface AsyncVideoConsentBody {
+  name?: string;
+  email?: string;
+  phone?: string;
+  noticeText?: string;
+}
+
+export interface AsyncVideoConsentResponse {
+  session: InterviewSession;
+  recoveryToken: string;
+}
+
+export interface AsyncVideoAnswer {
+  id: string;
+  sessionId: string;
+  questionId: string;
+  questionPrompt: string;
+  answerText: string | null;
+  answerData: AnswerData | null;
+  position: number;
+  answeredAt: string | null;
+}
+
+export interface AsyncVideoQuestionsResponse {
+  session: InterviewSession;
+  questions: KitQuestion[];
+  answers: AsyncVideoAnswer[];
+  maxDurationSec: number;
+}
+
+export interface AsyncVideoUploadResponse {
+  transcriptId: string;
+  recordingUri: string;
+  checksum: string;
+  transcript?: string;
+}
+
+export function asyncConsentByToken(
+  token: string,
+  body: AsyncVideoConsentBody,
+): Promise<AsyncVideoConsentResponse> {
+  return request<AsyncVideoConsentResponse>(
+    'POST',
+    `/async-video-interviews/by-token/${encodeURIComponent(token)}/consent`,
+    { body },
+  );
+}
+
+export function getAsyncVideoQuestions(
+  sessionId: string,
+  recoveryToken: string,
+): Promise<AsyncVideoQuestionsResponse> {
+  return request<AsyncVideoQuestionsResponse>(
+    'GET',
+    `/async-video-interviews/${encodeURIComponent(sessionId)}/questions`,
+    { headers: { 'x-recovery-token': recoveryToken } },
+  );
+}
+
+export async function uploadAsyncVideoAnswer(
+  sessionId: string,
+  questionId: string,
+  recoveryToken: string,
+  videoBlob: Blob,
+  durationSec?: number,
+): Promise<AsyncVideoUploadResponse> {
+  const form = new FormData();
+  form.append('video', videoBlob, 'answer.webm');
+  if (durationSec !== undefined) {
+    form.append('durationSec', String(durationSec));
+  }
+
+  const response = await fetch(
+    `${API_BASE}/async-video-interviews/${encodeURIComponent(sessionId)}/questions/${encodeURIComponent(questionId)}/video`,
+    {
+      method: 'POST',
+      headers: { 'x-recovery-token': recoveryToken },
+      body: form,
+    },
+  );
+
+  if (!response.ok) {
+    let errorBody: ApiError;
+    try {
+      errorBody = (await response.json()) as ApiError;
+    } catch {
+      errorBody = {
+        statusCode: response.status,
+        code: 'UNKNOWN_ERROR',
+        message: response.statusText || 'An unexpected error occurred',
+      };
+    }
+    throw new ApiErrorResponse(errorBody, response);
+  }
+
+  return response.json() as Promise<AsyncVideoUploadResponse>;
 }

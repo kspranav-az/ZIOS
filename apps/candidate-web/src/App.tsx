@@ -1,5 +1,7 @@
 import { createBrowserRouter, Navigate, Outlet, RouterProvider } from 'react-router-dom';
 import { InterviewProvider } from './InterviewContext';
+import { AsyncConsentPage } from './pages/AsyncConsentPage';
+import { AsyncVideoInterviewPage } from './pages/AsyncVideoInterviewPage';
 import { CompletionPage } from './pages/CompletionPage';
 import { ConsentPage } from './pages/ConsentPage';
 import { ExpiredPage } from './pages/ExpiredPage';
@@ -31,6 +33,8 @@ const router = createBrowserRouter([
       { path: '/voice', element: <VoiceInterviewPage /> },
       { path: '/video', element: <VideoInterviewPage /> },
       { path: '/live', element: <HumanLivePage /> },
+      { path: '/async-consent', element: <AsyncConsentPage /> },
+      { path: '/async-interview', element: <AsyncVideoInterviewPage /> },
       { path: '/complete', element: <CompletionPage /> },
       { path: '/expired', element: <ExpiredPage /> },
       { path: '*', element: <Navigate to="/" replace /> },
