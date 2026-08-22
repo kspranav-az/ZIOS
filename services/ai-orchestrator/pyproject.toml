@@ -12,6 +12,7 @@ dependencies = [
     "aiohttp>=3.11.0",
     "websockets>=14.0",
     "minio>=7.2.20",
+    "python-multipart>=0.0.20",
 ]
 
 [dependency-groups]
