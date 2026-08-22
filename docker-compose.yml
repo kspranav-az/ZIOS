@@ -148,6 +148,13 @@ services:
       ORCHESTRATOR_URL: http://ai-orchestrator:8000
       # Phase 07/09: external WebRTC signalling URL returned to browsers
       LIVEKIT_URL: ${LIVEKIT_URL:-ws://localhost:7880}
+      # Object storage (MinIO) — used by video answers, media, reports
+      MINIO_ENDPOINT: minio:9000
+      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:-http://localhost:9000}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_BUCKET_MEDIA: ${MINIO_BUCKET_MEDIA}
+      MINIO_SECURE: 'false'
       # Share the session cookie across app/API subdomains (e.g., hapkonic.com).
       COOKIE_DOMAIN: ${COOKIE_DOMAIN:-}
     ports:

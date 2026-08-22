@@ -62,6 +62,22 @@ export class StorageClient {
       'Content-Type': 'video/webm',
     });
     const url = await this.client.presignedGetObject(this.bucket, objectName, 24 * 60 * 60);
-    return { uri: url, checksum };
+    return { uri: this.publicUrl(url), checksum };
+  }
+
+  /**
+   * Rewrite a presigned S3 URL to the public-facing MinIO endpoint when one is
+   * configured. The internal endpoint (e.g. `minio:9000`) is used for SDK calls,
+   * but browsers need a host they can reach.
+   */
+  private publicUrl(presignedUrl: string): string {
+    const publicEndpoint = process.env.MINIO_PUBLIC_ENDPOINT;
+    if (!publicEndpoint) return presignedUrl;
+    const original = new URL(presignedUrl);
+    const target = new URL(publicEndpoint);
+    original.protocol = target.protocol;
+    original.host = target.host;
+    original.port = target.port;
+    return original.toString();
   }
 }
