@@ -12,6 +12,7 @@ import { AnalyticsPage } from './pages/shell/AnalyticsPage';
 import { InterviewsListPage } from './pages/reports/InterviewsListPage';
 import { InterviewDetailPage } from './pages/reports/InterviewDetailPage';
 import { ShareReportPage } from './pages/reports/ShareReportPage';
+import { AsyncVideoReviewPage } from './pages/reports/AsyncVideoReviewPage';
 import { CockpitPage } from './pages/reports/CockpitPage';
 import { ScorecardPage } from './pages/reports/ScorecardPage';
 import { KitsListPage } from './pages/kits/KitsListPage';
@@ -102,6 +103,7 @@ const router = createBrowserRouter([
           { path: 'interviews/:sessionId', element: <InterviewDetailPage /> },
           { path: 'interviews/:sessionId/cockpit', element: <CockpitPage /> },
           { path: 'interviews/:sessionId/scorecard', element: <ScorecardPage /> },
+          { path: 'interviews/:sessionId/async-review', element: <AsyncVideoReviewPage /> },
           { path: 'analytics', element: <AnalyticsPage /> },
         ],
       },
