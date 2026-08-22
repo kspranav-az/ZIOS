@@ -16,6 +16,7 @@ import { SessionsModule } from '@/modules/sessions';
 import { UsersModule } from '@/modules/users';
 import { VoiceModule } from '@/modules/voice';
 import { LiveRoomsModule } from '@/modules/live-rooms';
+import { AsyncVideoInterviewsModule } from '@/modules/async-video-interviews';
 
 @Module({
   imports: [
@@ -49,6 +50,7 @@ import { LiveRoomsModule } from '@/modules/live-rooms';
     VoiceModule,
     IntegrityModule,
     LiveRoomsModule,
+    AsyncVideoInterviewsModule,
   ],
 })
 export class AppModule {}

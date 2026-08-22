@@ -68,6 +68,19 @@ export class CandidatesRepository {
     return row ? mapRow(row) : null;
   }
 
+  async findByEmail(
+    orgId: string,
+    email: string,
+    q: Queryable = this.db,
+  ): Promise<Candidate | null> {
+    const result = await q.query(
+      `SELECT ${COLUMNS} FROM candidate WHERE email = $1 AND org_id = $2`,
+      [email, orgId],
+    );
+    const row = result.rows[0] as CandidateRow | undefined;
+    return row ? mapRow(row) : null;
+  }
+
   async update(
     orgId: string,
     id: string,

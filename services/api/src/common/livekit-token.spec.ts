@@ -3,7 +3,7 @@ import { issueLiveKitToken } from './livekit-token';
 
 function decodeJwt(token: string) {
   const [, payloadB64] = token.split('.');
-  return JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf8'));
+  return JSON.parse(Buffer.from(payloadB64!, 'base64url').toString('utf8'));
 }
 
 describe('issueLiveKitToken', () => {
