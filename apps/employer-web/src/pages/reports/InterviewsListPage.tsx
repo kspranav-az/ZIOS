@@ -166,7 +166,13 @@ export function InterviewsListPage() {
                   return (
                     <tr
                       key={item.session.id}
-                      onClick={() => navigate(`/interviews/${item.session.id}`)}
+                      onClick={() =>
+                        navigate(
+                          item.isAsyncVideo
+                            ? `/interviews/${item.session.id}/async-review`
+                            : `/interviews/${item.session.id}`,
+                        )
+                      }
                       className="hover:bg-surface-container-low cursor-pointer transition-colors"
                     >
                       <td className="px-6 py-4">

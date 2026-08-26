@@ -11,6 +11,7 @@ ip.env
 network.env
 *.pem
 *.key
+*.bak
 
 # --- Node / TypeScript ---
 node_modules/

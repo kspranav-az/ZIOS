@@ -42,6 +42,7 @@ export class DashboardController {
               c.external_ref AS candidate_external_ref, c.pii_vault_ref AS candidate_pii_vault_ref,
               c.created_at AS candidate_created_at,
               (kv.snapshot->'kit'->>'title') AS kit_title,
+              i.metadata AS invite_metadata,
               r.id AS report_id, r.status AS report_status,
               r.overall_recommendation, r.communication_metrics, r.error_message
        FROM interview_session s
@@ -103,6 +104,7 @@ export class DashboardController {
         reportStatus: (row.report_status as 'pending' | 'completed' | 'failed' | null) ?? null,
         overallRecommendation: (row.overall_recommendation as number | null) ?? null,
         flags,
+        isAsyncVideo: (row.invite_metadata as Record<string, unknown> | null)?.asyncVideo === true,
       };
     });
 

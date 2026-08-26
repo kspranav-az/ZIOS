@@ -1060,6 +1060,8 @@ export interface DashboardInterviewItem {
   reportStatus: EvaluationStatus | null;
   overallRecommendation: number | null;
   flags: string[];
+  /** True when the session was created via the async-video interview flow. */
+  isAsyncVideo: boolean;
 }
 
 export interface DashboardListResponse {

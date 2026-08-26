@@ -72,6 +72,10 @@ export function InterviewDetailPage() {
       if (!row) {
         throw new Error('Interview not found in dashboard');
       }
+      if (row.isAsyncVideo) {
+        navigate(`/interviews/${sessionId}/async-review`, { replace: true });
+        return;
+      }
       setState({
         report: detail.report,
         scores: detail.scores,
@@ -90,7 +94,7 @@ export function InterviewDetailPage() {
     } finally {
       setLoading(false);
     }
-  }, [sessionId]);
+  }, [sessionId, navigate]);
 
   useEffect(() => {
     void load();

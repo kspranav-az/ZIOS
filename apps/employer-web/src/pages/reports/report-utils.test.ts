@@ -59,6 +59,7 @@ function makeItem(overrides: Partial<DashboardInterviewItem> = {}): DashboardInt
     reportStatus: 'completed',
     overallRecommendation: 3.8,
     flags: [],
+    isAsyncVideo: false,
     ...overrides,
   };
 }
