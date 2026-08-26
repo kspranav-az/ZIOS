@@ -29,6 +29,7 @@ export function AsyncVideoInterviewPage() {
   const [recorderState, setRecorderState] = useState<RecorderState>('idle');
   const [finishOpen, setFinishOpen] = useState(false);
   const [toast, setToast] = useState<{ message: string; tone: 'success' | 'error' } | null>(null);
+  const [reRecordQuestionId, setReRecordQuestionId] = useState<string | null>(null);
 
   const session = contextSession;
   const recoveryToken = contextRecoveryToken ?? recoveredRecoveryToken;
@@ -83,6 +84,10 @@ export function AsyncVideoInterviewPage() {
   useEffect(() => {
     void loadQuestions();
   }, [loadQuestions]);
+
+  useEffect(() => {
+    setReRecordQuestionId(null);
+  }, [activeIndex]);
 
   const handleSubmit = async (blob: Blob, durationSec: number) => {
     const question = questions[activeIndex];
@@ -170,6 +175,10 @@ export function AsyncVideoInterviewPage() {
   }
 
   const activeQuestion = questions[activeIndex];
+  const activeAnswer = answers.find((a) => a.questionId === activeQuestion?.id);
+  const activeQuestionAnswered = activeAnswer?.answerData !== null;
+  const showRecorder =
+    activeQuestion && (!activeQuestionAnswered || reRecordQuestionId === activeQuestion.id);
   const answeredCount = answers.filter((a) => a.answerData !== null).length;
   const progress = questions.length > 0 ? Math.round((answeredCount / questions.length) * 100) : 0;
   const allAnswered = answeredCount === questions.length && questions.length > 0;
@@ -246,13 +255,29 @@ export function AsyncVideoInterviewPage() {
               </div>
             </div>
 
-            <VideoRecorder
-              key={activeQuestion.id}
-              maxDurationSec={maxDurationSec}
-              onSubmit={handleSubmit}
-              onStateChange={setRecorderState}
-              disabled={uploadingQuestionId === activeQuestion.id}
-            />
+            {showRecorder ? (
+              <VideoRecorder
+                key={activeQuestion.id}
+                maxDurationSec={maxDurationSec}
+                onSubmit={handleSubmit}
+                onStateChange={setRecorderState}
+                disabled={uploadingQuestionId === activeQuestion.id}
+              />
+            ) : (
+              <div className="rounded-xl bg-surface-container-low p-6 text-center">
+                <Icon name="check_circle" className="mx-auto text-3xl text-primary" />
+                <p className="mt-2 text-body-md text-on-surface">
+                  You have already answered this question.
+                </p>
+                <Button
+                  className="mt-4"
+                  variant="outline"
+                  onClick={() => setReRecordQuestionId(activeQuestion.id)}
+                >
+                  Re-record answer
+                </Button>
+              </div>
+            )}
 
             {hasUnsubmittedRecording && (
               <p className="mt-4 rounded-lg bg-warning-container p-3 text-body-md text-on-warning-container">
