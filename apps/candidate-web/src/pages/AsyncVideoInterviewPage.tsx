@@ -107,6 +107,7 @@ export function AsyncVideoInterviewPage() {
     }
   };
 
+  const hasUnsubmittedRecording = recorderState === 'review' || recorderState === 'uploading';
   const isBusy =
     recorderState === 'requesting' ||
     recorderState === 'recording' ||
@@ -207,11 +208,18 @@ export function AsyncVideoInterviewPage() {
               disabled={uploadingQuestionId === activeQuestion.id}
             />
 
+            {hasUnsubmittedRecording && (
+              <p className="mt-4 rounded-lg bg-warning-container p-3 text-body-md text-on-warning-container">
+                <Icon name="warning" className="mr-2 inline text-lg" />
+                Submit this answer before moving to another question.
+              </p>
+            )}
+
             <div className="mt-6 flex justify-between">
               <Button
                 variant="outline"
                 onClick={() => setActiveIndex((prev) => Math.max(0, prev - 1))}
-                disabled={activeIndex === 0 || isBusy}
+                disabled={activeIndex === 0 || isBusy || hasUnsubmittedRecording}
                 icon="arrow_back"
               >
                 Previous
@@ -219,11 +227,41 @@ export function AsyncVideoInterviewPage() {
               <Button
                 variant="outline"
                 onClick={() => setActiveIndex((prev) => Math.min(questions.length - 1, prev + 1))}
-                disabled={activeIndex === questions.length - 1 || isBusy}
+                disabled={activeIndex === questions.length - 1 || isBusy || hasUnsubmittedRecording}
                 icon="arrow_forward"
               >
                 Next
               </Button>
+            </div>
+
+            <div className="mt-6 border-t border-outline pt-4">
+              <p className="text-label-bold text-on-surface-variant mb-2">Question overview</p>
+              <div className="flex flex-wrap gap-2">
+                {questions.map((q, idx) => {
+                  const answered = answers[idx]?.answerData !== null;
+                  const isActive = idx === activeIndex;
+                  return (
+                    <button
+                      key={q.id}
+                      type="button"
+                      onClick={() => {
+                        if (!hasUnsubmittedRecording) setActiveIndex(idx);
+                      }}
+                      disabled={hasUnsubmittedRecording}
+                      className={`flex h-8 w-8 items-center justify-center rounded-full text-label-bold transition-colors ${
+                        answered
+                          ? 'bg-primary text-on-primary'
+                          : isActive
+                            ? 'bg-primary-container text-on-primary-container ring-2 ring-primary'
+                            : 'bg-surface-container text-on-surface-variant'
+                      } ${hasUnsubmittedRecording ? 'cursor-not-allowed opacity-50' : 'hover:bg-surface-container-high'}`}
+                      aria-label={`Question ${idx + 1}${answered ? ' answered' : ''}`}
+                    >
+                      {answered ? <Icon name="check" className="text-sm" /> : idx + 1}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </Card>
         ) : (

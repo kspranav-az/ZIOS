@@ -40,6 +40,14 @@ function getTranscript(answer: AsyncVideoAnswer): string | null {
   return null;
 }
 
+function getVideoObjectName(answer: AsyncVideoAnswer): string | null {
+  const data = answer.answerData;
+  if (!data) return null;
+  const video = data.videoAnswer;
+  if (video && typeof video.objectName === 'string') return video.objectName;
+  return null;
+}
+
 export function AsyncVideoReviewPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const { push: showToast } = useToast();
@@ -52,6 +60,7 @@ export function AsyncVideoReviewPage() {
     scores: new Map(),
     loading: true,
   });
+  const [videoErrors, setVideoErrors] = useState<Set<string>>(new Set());
 
   const setPartial = (patch: Partial<ReviewState>) => {
     setState((current) => ({ ...current, ...patch }));
@@ -193,6 +202,7 @@ export function AsyncVideoReviewPage() {
         {state.questions.map((question) => {
           const answer = state.answers.find((a) => a.questionId === question.id);
           const videoUri = answer ? getVideoUri(answer) : null;
+          const videoObjectName = answer ? getVideoObjectName(answer) : null;
           const transcript = answer ? getTranscript(answer) : null;
           const scoreRecord = state.scores.get(question.id);
           const currentScore = scoreRecord?.score ?? undefined;
@@ -209,19 +219,27 @@ export function AsyncVideoReviewPage() {
                 </div>
               </div>
 
-              {videoUri ? (
+              {videoUri && !videoErrors.has(question.id) ? (
                 <div className="mb-4 rounded-xl overflow-hidden bg-surface-container-low">
                   <video
+                    key={videoObjectName ?? videoUri}
                     src={videoUri}
                     controls
                     className="aspect-video w-full object-cover"
                     preload="metadata"
+                    onError={() => {
+                      setVideoErrors((prev) => new Set(prev).add(question.id));
+                    }}
                   />
                 </div>
               ) : (
                 <div className="mb-4 rounded-xl bg-surface-container-low p-8 text-center">
                   <Icon name="videocam_off" className="text-3xl text-on-surface-variant" />
-                  <p className="mt-2 text-body-md text-on-surface-variant">No video answer yet</p>
+                  <p className="mt-2 text-body-md text-on-surface-variant">
+                    {videoErrors.has(question.id)
+                      ? 'Could not load this video. The link may have expired.'
+                      : 'No video answer yet'}
+                  </p>
                 </div>
               )}
 
