@@ -250,6 +250,7 @@ export interface AsyncVideoUploadResponse {
   recordingUri: string;
   checksum: string;
   transcript?: string;
+  completed?: boolean;
 }
 
 export function asyncConsentByToken(

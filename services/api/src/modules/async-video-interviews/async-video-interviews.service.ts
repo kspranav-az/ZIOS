@@ -75,6 +75,7 @@ export interface AsyncUploadResult {
   recordingUri: string;
   checksum: string;
   transcript?: string;
+  completed?: boolean;
 }
 
 export interface AsyncReviewResult {
@@ -309,6 +310,13 @@ export class AsyncVideoInterviewsService {
   async getQuestions(sessionId: string, rawRecoveryToken: string): Promise<AsyncQuestionsResult> {
     return this.db.transaction(async (q) => {
       const session = await this.loadAuthorizedSession(sessionId, rawRecoveryToken, q);
+      if (session.status === 'completed') {
+        throw new ApiException(
+          409,
+          'SESSION_COMPLETED',
+          'this interview has already been completed',
+        );
+      }
       const snapshot = await this.loadSnapshot(session.kitVersionId, q);
       const answers = await this.transcript.listBySession(sessionId, q);
       const maxDurationSec = await this.loadMaxDurationSec(session.inviteId, q);
@@ -325,7 +333,7 @@ export class AsyncVideoInterviewsService {
   ): Promise<AsyncUploadResult> {
     return this.db.transaction(async (q) => {
       const session = await this.loadAuthorizedSession(sessionId, rawRecoveryToken, q);
-      if (session.status !== 'live' && session.status !== 'completed') {
+      if (session.status !== 'live') {
         throw new ApiException(409, 'SESSION_STATE_INVALID', `session is ${session.status}`);
       }
 
@@ -403,7 +411,29 @@ export class AsyncVideoInterviewsService {
         }
       }
 
-      return { transcriptId: row.id, recordingUri: uri, checksum, transcript: transcriptText };
+      const remainingResult = await q.query(
+        `SELECT COUNT(*) AS count
+         FROM session_transcript
+         WHERE session_id = $1 AND answer_data IS NULL`,
+        [sessionId],
+      );
+      const remainingCount = Number((remainingResult.rows[0] as { count: string }).count);
+      let completed = false;
+      if (remainingCount === 0) {
+        completed = true;
+        await this.advanceStatus(q, session, 'completed');
+        await q.query("UPDATE invite SET status = 'completed', updated_at = now() WHERE id = $1", [
+          session.inviteId,
+        ]);
+      }
+
+      return {
+        transcriptId: row.id,
+        recordingUri: uri,
+        checksum,
+        transcript: transcriptText,
+        completed,
+      };
     });
   }
 

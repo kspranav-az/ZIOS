@@ -5,15 +5,18 @@ interface VideoRecorderProps {
   maxDurationSec: number;
   onSubmit: (blob: Blob, durationSec: number) => void | Promise<void>;
   onCancel?: () => void;
+  onStateChange?: (state: RecorderState) => void;
   disabled?: boolean;
 }
 
-type RecorderState = 'idle' | 'requesting' | 'preview' | 'recording' | 'review' | 'uploading';
+export type RecorderState =
+  'idle' | 'requesting' | 'preview' | 'recording' | 'review' | 'uploading';
 
 export function VideoRecorder({
   maxDurationSec,
   onSubmit,
   onCancel,
+  onStateChange,
   disabled,
 }: VideoRecorderProps) {
   const [state, setState] = useState<RecorderState>('idle');
@@ -21,6 +24,10 @@ export function VideoRecorder({
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
   const [durationSec, setDurationSec] = useState(0);
   const [remainingSec, setRemainingSec] = useState(maxDurationSec);
+
+  useEffect(() => {
+    onStateChange?.(state);
+  }, [state, onStateChange]);
 
   const streamRef = useRef<MediaStream | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -130,6 +137,9 @@ export function VideoRecorder({
     setState('uploading');
     try {
       await onSubmit(recordedBlob, durationSec);
+      setRecordedBlob(null);
+      setDurationSec(0);
+      setState('idle');
     } catch {
       setState('review');
       setError('Upload failed. Please check your connection and try again.');
