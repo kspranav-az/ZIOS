@@ -5,6 +5,7 @@ import { Client } from 'minio';
 @Injectable()
 export class StorageClient {
   private readonly client: Client;
+  private readonly presignClient: Client;
   private readonly bucket: string;
   private readonly encryptionKey: Buffer;
 
@@ -13,13 +14,37 @@ export class StorageClient {
     const [host, portStr] = endpoint.split(':') as [string, string | undefined];
     const port = Number(portStr ?? '9000');
     const useSSL = (process.env.MINIO_SECURE ?? 'false').toLowerCase() === 'true';
+    const accessKey = process.env.MINIO_ROOT_USER ?? 'minioadmin';
+    const secretKey = process.env.MINIO_ROOT_PASSWORD ?? 'minioadmin';
+    const region = process.env.MINIO_REGION ?? 'us-east-1';
+
     this.client = new Client({
       endPoint: host,
       port,
       useSSL,
-      accessKey: process.env.MINIO_ROOT_USER ?? 'minioadmin',
-      secretKey: process.env.MINIO_ROOT_PASSWORD ?? 'minioadmin',
+      accessKey,
+      secretKey,
+      region,
     });
+
+    // Presigned URLs must be signed for the host the browser will use. Build a
+    // separate client from MINIO_PUBLIC_ENDPOINT when it is set; generating the
+    // URL is a local signing operation and does not require network reachability.
+    const publicEndpoint = process.env.MINIO_PUBLIC_ENDPOINT?.trim();
+    if (publicEndpoint) {
+      const publicUrl = new URL(publicEndpoint);
+      this.presignClient = new Client({
+        endPoint: publicUrl.hostname,
+        port: publicUrl.port ? Number(publicUrl.port) : publicUrl.protocol === 'https:' ? 443 : 80,
+        useSSL: publicUrl.protocol === 'https:',
+        accessKey,
+        secretKey,
+        region,
+      });
+    } else {
+      this.presignClient = this.client;
+    }
+
     this.bucket = process.env.MINIO_BUCKET_MEDIA ?? 'media';
     // Field-level encryption key for ID uploads. In production this is injected
     // from a KMS/secrets manager and never committed.
@@ -61,23 +86,7 @@ export class StorageClient {
     await this.client.putObject(this.bucket, objectName, data, data.length, {
       'Content-Type': 'video/webm',
     });
-    const url = await this.client.presignedGetObject(this.bucket, objectName, 24 * 60 * 60);
-    return { uri: this.publicUrl(url), checksum };
-  }
-
-  /**
-   * Rewrite a presigned S3 URL to the public-facing MinIO endpoint when one is
-   * configured. The internal endpoint (e.g. `minio:9000`) is used for SDK calls,
-   * but browsers need a host they can reach.
-   */
-  private publicUrl(presignedUrl: string): string {
-    const publicEndpoint = process.env.MINIO_PUBLIC_ENDPOINT;
-    if (!publicEndpoint) return presignedUrl;
-    const original = new URL(presignedUrl);
-    const target = new URL(publicEndpoint);
-    original.protocol = target.protocol;
-    original.host = target.host;
-    original.port = target.port;
-    return original.toString();
+    const url = await this.presignClient.presignedGetObject(this.bucket, objectName, 24 * 60 * 60);
+    return { uri: url, checksum };
   }
 }
