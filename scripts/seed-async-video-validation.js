@@ -129,28 +129,6 @@ async function seedRoleQuestions(roleId, roleName) {
   }
 }
 
-async function uploadFakeVideo(sessionId, questionId, recoveryToken) {
-  const bytes = Buffer.from('fake-webm-video-bytes-for-validation');
-  const blob = new Blob([bytes], { type: 'video/webm' });
-  const form = new FormData();
-  form.append('video', blob, 'answer.webm');
-  form.append('durationSec', '45');
-
-  const res = await fetch(
-    `${API_BASE}/async-video-interviews/${encodeURIComponent(sessionId)}/questions/${encodeURIComponent(questionId)}/video`,
-    {
-      method: 'POST',
-      headers: { 'x-recovery-token': recoveryToken },
-      body: form,
-    },
-  );
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`video upload failed: ${res.status} ${text}`);
-  }
-  return res.json();
-}
-
 async function main() {
   const tag = randomUUID().slice(0, 8);
   const adminEmail = `validation-admin-${tag}@local.test`;
@@ -181,7 +159,7 @@ async function main() {
   console.log(`   sessionId: ${created.sessionId}`);
   console.log(`   inviteId:  ${created.inviteId}`);
 
-  console.log('4. Candidate consent...');
+  console.log('4. Candidate consent (so the candidate link is ready)...');
   const consent = await postJson(
     `/async-video-interviews/by-token/${encodeURIComponent(created.token)}/consent`,
     {
@@ -190,12 +168,6 @@ async function main() {
     },
   );
   console.log(`   session status: ${consent.session.status}`);
-
-  console.log('5. Uploading fake video answer for question 1...');
-  const q1 = created.questions[0];
-  const upload = await uploadFakeVideo(created.sessionId, q1.id, consent.recoveryToken);
-  console.log(`   recordingUri: ${upload.recordingUri}`);
-  console.log(`   transcript:   ${upload.transcript ? 'generated' : 'none'}`);
 
   const employerReviewUrl = `${EMPLOYER_WEB_BASE_URL}/interviews/${created.sessionId}/async-review`;
   const candidateLandingUrl = `${CANDIDATE_WEB_BASE_URL}/?token=${encodeURIComponent(created.token)}`;
@@ -206,13 +178,12 @@ async function main() {
   console.log(`  2. Candidate landing (Chrome tab B): ${candidateLandingUrl}`);
   console.log('');
   console.log('Suggested validation flow:');
-  console.log('  a. Sign in to the employer review page (request OTP, read from Mailpit).');
-  console.log('  b. Confirm the candidate name, question list, and uploaded video render.');
-  console.log('  c. Play the video and confirm the transcript is shown.');
-  console.log('  d. Enter a score and remarks, then submit.');
-  console.log('  e. Refresh the page and confirm the score persists.');
-  console.log('  f. Open the candidate landing URL, accept consent, and record a real answer.');
-  console.log('  g. Return to the review page and confirm the new answer appears.');
+  console.log('  a. Open the candidate landing URL first, accept consent, and record answers');
+  console.log('     for both questions. Finish the interview.');
+  console.log('  b. Sign in to the employer review page (request OTP, read from Mailpit).');
+  console.log('  c. Confirm both questions show recorded videos and transcripts.');
+  console.log('  d. Enter scores and remarks for each question, then submit.');
+  console.log('  e. Refresh the review page and confirm the scores persist.');
   console.log('');
   console.log(`adminEmail:    ${adminEmail}`);
   console.log(`candidateEmail: ${candidateEmail}`);
