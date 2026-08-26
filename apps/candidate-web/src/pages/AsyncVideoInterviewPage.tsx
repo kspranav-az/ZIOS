@@ -176,7 +176,7 @@ export function AsyncVideoInterviewPage() {
 
   const activeQuestion = questions[activeIndex];
   const activeAnswer = answers.find((a) => a.questionId === activeQuestion?.id);
-  const activeQuestionAnswered = activeAnswer?.answerData !== null;
+  const activeQuestionAnswered = activeAnswer != null && activeAnswer.answerData != null;
   const showRecorder =
     activeQuestion && (!activeQuestionAnswered || reRecordQuestionId === activeQuestion.id);
   const answeredCount = answers.filter((a) => a.answerData !== null).length;
@@ -309,7 +309,8 @@ export function AsyncVideoInterviewPage() {
               <p className="text-label-bold text-on-surface-variant mb-2">Question overview</p>
               <div className="flex flex-wrap gap-2">
                 {questions.map((q, idx) => {
-                  const answered = answers[idx]?.answerData !== null;
+                  const answer = answers.find((a) => a.questionId === q.id);
+                  const answered = answer != null && answer.answerData != null;
                   const isActive = idx === activeIndex;
                   return (
                     <button
