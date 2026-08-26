@@ -28,6 +28,7 @@ export function AsyncVideoInterviewPage() {
   const [uploadingQuestionId, setUploadingQuestionId] = useState<string | null>(null);
   const [recorderState, setRecorderState] = useState<RecorderState>('idle');
   const [finishOpen, setFinishOpen] = useState(false);
+  const [toast, setToast] = useState<{ message: string; tone: 'success' | 'error' } | null>(null);
 
   const session = contextSession;
   const recoveryToken = contextRecoveryToken ?? recoveredRecoveryToken;
@@ -86,6 +87,12 @@ export function AsyncVideoInterviewPage() {
   const handleSubmit = async (blob: Blob, durationSec: number) => {
     const question = questions[activeIndex];
     if (!question || !sessionId || !recoveryToken) return;
+    console.log('[async-video] submitting answer', {
+      sessionId,
+      questionId: question.id,
+      activeIndex,
+      totalQuestions: questions.length,
+    });
     setUploadingQuestionId(question.id);
     try {
       const result = await uploadAsyncVideoAnswer(
@@ -95,15 +102,41 @@ export function AsyncVideoInterviewPage() {
         blob,
         durationSec,
       );
+      console.log('[async-video] upload result', {
+        completed: result.completed,
+        answeredCount: answers.filter((a) => a.answerData !== null).length,
+        totalQuestions: questions.length,
+      });
       await loadQuestions(true);
 
       if (result.completed) {
         setFinishOpen(true);
+        setToast({
+          message: 'All answers submitted. You can now finish the interview.',
+          tone: 'success',
+        });
       } else if (activeIndex < questions.length - 1) {
         setActiveIndex((prev) => prev + 1);
+        setToast({
+          message: `Answer ${activeIndex + 1} of ${questions.length} saved. Moving to question ${activeIndex + 2}.`,
+          tone: 'success',
+        });
+      } else {
+        setToast({
+          message: `Answer ${activeIndex + 1} of ${questions.length} saved.`,
+          tone: 'success',
+        });
       }
+    } catch (err) {
+      console.error('[async-video] upload failed', err);
+      setToast({
+        message: err instanceof ApiErrorResponse ? err.message : 'Upload failed. Please try again.',
+        tone: 'error',
+      });
+      throw err;
     } finally {
       setUploadingQuestionId(null);
+      window.setTimeout(() => setToast(null), 4000);
     }
   };
 
@@ -137,9 +170,9 @@ export function AsyncVideoInterviewPage() {
   }
 
   const activeQuestion = questions[activeIndex];
-  const progress =
-    questions.length > 0 ? Math.round(((activeIndex + 1) / questions.length) * 100) : 0;
   const answeredCount = answers.filter((a) => a.answerData !== null).length;
+  const progress = questions.length > 0 ? Math.round((answeredCount / questions.length) * 100) : 0;
+  const allAnswered = answeredCount === questions.length && questions.length > 0;
 
   return (
     <PageShell>
@@ -164,7 +197,7 @@ export function AsyncVideoInterviewPage() {
           </div>
         </div>
 
-        {finishOpen && (
+        {(finishOpen || allAnswered) && (
           <Card padding="lg" radius="2xl" className="mb-6">
             <div className="flex items-start gap-4">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-container">
@@ -181,6 +214,19 @@ export function AsyncVideoInterviewPage() {
               </div>
             </div>
           </Card>
+        )}
+
+        {toast && (
+          <div
+            className={`fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-xl px-4 py-3 text-body-md shadow-lg ${
+              toast.tone === 'success'
+                ? 'bg-primary-container text-on-primary-container'
+                : 'bg-error-container text-on-error-container'
+            }`}
+            role="status"
+          >
+            {toast.message}
+          </div>
         )}
 
         {activeQuestion && !finishOpen ? (
