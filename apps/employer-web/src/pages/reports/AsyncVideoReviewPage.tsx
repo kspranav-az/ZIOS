@@ -209,7 +209,7 @@ export function AsyncVideoReviewPage() {
           const currentRemarks = scoreRecord?.remarks ?? '';
 
           return (
-            <Card key={question.id}>
+            <Card key={question.id} data-testid="async-video-question-card">
               <div className="flex items-start justify-between gap-3 mb-4">
                 <div>
                   <p className="font-label-bold text-primary">{question.prompt}</p>

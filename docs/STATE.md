@@ -15,8 +15,8 @@ This file records the current implementation state, what is proven, what is not,
 | Employer lint          | ✅ Clean                 | `pnpm --filter employer-web lint`       |
 | Candidate typecheck    | ✅ Clean                 | `pnpm --filter candidate-web typecheck` |
 | Candidate lint         | ✅ Clean                 | `pnpm --filter candidate-web lint`      |
-| Employer E2E           | ✅ 11 passed             | `pnpm --filter employer-web e2e`        |
-| Candidate E2E          | ✅ 4 passed              | `pnpm --filter candidate-web e2e`       |
+| Employer E2E           | ✅ 12 passed             | `pnpm --filter employer-web e2e`        |
+| Candidate E2E          | ⚠️ 4 passed, 1 failing   | `pnpm --filter candidate-web e2e`       |
 | Docker Compose         | ✅ All healthy           | `docker compose up -d --build`          |
 
 ---
@@ -47,6 +47,8 @@ This file records the current implementation state, what is proven, what is not,
 | Async video interviews (role-based) | ✅ Core      | `POST /async-video-interviews` by role; per-question video recording; human review score page    |
 | Async video review page             | ✅           | Employer sees questions, videos, transcripts, per-question score + remarks                       |
 | Async video candidate flow          | ✅           | Consent → preflight → record per question → finish; guards against skipping unanswered questions |
+| Async video E2E (employer review)   | ✅           | `apps/employer-web/e2e/async-video-review.spec.ts`                                               |
+| Async video E2E (candidate journey) | ✅           | `apps/candidate-web/e2e/async-video-journey.spec.ts`                                             |
 
 > These async-video capabilities are **not in the PRD §3.4 IN list**; they were added to support a validation-layer use case. Before M1 ships, decide whether to (a) keep as a supported mode, (b) fold it under E6/E10 with full PRD acceptance, or (c) gate it behind a feature flag.
 
@@ -130,7 +132,8 @@ Everything below is **fixture-driven mock** today. Feature code is complete; rea
 | Phase 10 not started                           | No integration API, webhooks, or credit wallet                           | Decide scope and start `phase-10/*`                         |
 | Phase 11 not started                           | No pilot hardening, load test, or notifications                          | Start after Phase 10                                        |
 | Async video not in PRD acceptance              | Added feature lacks formal PRD criteria, X-metrics, and load assumptions | Decide keep/flag/deprecate; write acceptance if kept        |
-| Async video hardening incomplete               | No E2E, no redelivery/DLQ on transcription, no retry on upload failures  | Add tests + resilient upload/transcription pipeline if kept |
+| Async video hardening incomplete               | No redelivery/DLQ on transcription, no retry on upload failures          | Add resilient upload/transcription pipeline if kept         |
+| Candidate recovery E2E regression              | `recovery.spec.ts` fails: answer draft not restored after reload         | Investigate draft persistence timing / `storeAnswerDraft`   |
 | No real LLM/STT/TTS validation                 | X2, X6, X7, WER cannot be measured                                       | Wire real adapters when credentials arrive                  |
 | No real Google sign-in                         | FR-E1-1 not fully validated                                              | Add real Google OAuth app                                   |
 | No WhatsApp/SMS                                | E11 partial                                                              | File template approvals (already noted as Week-1 exception) |
