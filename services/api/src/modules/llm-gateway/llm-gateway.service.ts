@@ -90,20 +90,20 @@ export class LlmGateway {
       throw new ApiException(400, 'GUARDRAIL_BLOCKED', screen.reason ?? 'guardrail blocked');
     }
 
-    const mergedPolicy: LlmRequestPolicy = {
+    const basePolicy: LlmRequestPolicy = {
       ...definition.defaultPolicy,
       ...policy,
     };
 
     const cacheKey = this.cacheKey(task, promptVersion, variables);
-    if (mergedPolicy.cache) {
+    if (basePolicy.cache) {
       const cached = this.cache.get(cacheKey);
       if (cached && Date.now() - cached.cachedAt < this.cacheTtlMs) {
         return { ...(cached.output as LlmCompletionOutput<T>), cached: true, cost: 0 };
       }
     }
 
-    const providers = this.selectProviders(mergedPolicy);
+    const providers = this.selectProviders(basePolicy);
     if (providers.length === 0) {
       throw new ApiException(503, 'LLM_NO_PROVIDER', 'no LLM provider available for policy');
     }
@@ -117,7 +117,9 @@ export class LlmGateway {
         continue;
       }
       try {
-        const raw = await provider.complete({ task, promptText, variables });
+        const providerOverride = definition.providerOverrides?.[provider.name] ?? {};
+        const mergedPolicy: LlmRequestPolicy = { ...basePolicy, ...providerOverride };
+        const raw = await provider.complete({ task, promptText, variables, policy: mergedPolicy });
         const parsed = this.parseResponse<T>(raw.text, definition.outputSchema);
         const latencyMs = Date.now() - startedAt;
         const cost = this.calculateCost(provider, raw.tokensIn, raw.tokensOut);

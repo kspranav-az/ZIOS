@@ -473,6 +473,7 @@ export class MockLlmProvider implements LlmProvider {
     task: string;
     promptText: string;
     variables: Record<string, unknown>;
+    policy?: import('./contracts').LlmRequestPolicy;
   }): Promise<{ text: string; tokensIn: number; tokensOut: number; model?: string }> {
     const { task, promptText, variables } = input;
     const fixture = FIXTURES[task as keyof FixtureRegistry];

@@ -158,6 +158,11 @@ services:
       MINIO_SECURE: 'false'
       # Share the session cookie across app/API subdomains (e.g., hapkonic.com).
       COOKIE_DOMAIN: ${COOKIE_DOMAIN:-}
+      # Phase 06: LLM provider mode. 'mock' uses deterministic fixtures;
+      # 'gemini' requires GEMINI_API_KEY to be set.
+      LLM_MODE: ${LLM_MODE:-mock}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-1.5-flash}
     ports:
       - '${API_PORT}:3000'
     depends_on:

@@ -1,0 +1,21 @@
+{
+  "id": "analyze-jd",
+  "version": "1.0.0",
+  "task": "analyze_jd",
+  "template": "Extract a structured role profile from the job description below.\n\nReturn valid JSON with exactly these keys:\n- title (string or null)\n- seniority (string or null: junior, mid, senior, lead, principal)\n- skills (array of strings)\n- niceToHaveSkills (array of strings)\n- responsibilities (array of strings)\n- tools (array of strings)\n- languages (array of strings)\n\nJob description:\n{{jdText}}",
+  "variablesSchema": ["jdText"],
+  "outputSchema": [
+    "title",
+    "seniority",
+    "skills",
+    "niceToHaveSkills",
+    "responsibilities",
+    "tools",
+    "languages"
+  ],
+  "defaultPolicy": { "tier": "balanced", "fallback": true, "cache": true },
+  "guardrailProfile": "jd_input",
+  "providerOverrides": {
+    "gemini": { "model": "gemini-1.5-flash", "temperature": 0.2 }
+  }
+}

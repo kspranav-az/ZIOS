@@ -1,0 +1,13 @@
+{
+  "id": "judge-score",
+  "version": "1.0.0",
+  "task": "judge_score",
+  "template": "You are an evaluation judge. Score the candidate's answers against the rubric.\n\nQuestions: {{questions}}\nTranscript: {{transcript}}\n\nReturn valid JSON with exactly these keys:\n- scores (array of {questionId, criterionId, criterionText, score, weight, evidenceSpan: {transcriptId, questionId, start, end, quoteText}})\n- metrics (object with paceWpm, fillerCount, paragraphCount, avgSentenceLength)\n- recommendation (number 1-5)\n- confidence (number 0-1)",
+  "variablesSchema": ["questions", "transcript"],
+  "outputSchema": ["scores", "metrics", "recommendation", "confidence"],
+  "defaultPolicy": { "tier": "quality", "fallback": true, "cache": false },
+  "guardrailProfile": "internal_only",
+  "providerOverrides": {
+    "gemini": { "model": "gemini-1.5-flash", "temperature": 0.2 }
+  }
+}

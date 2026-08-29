@@ -1,0 +1,13 @@
+{
+  "id": "judge-adjudicate",
+  "version": "1.0.0",
+  "task": "judge_adjudicate",
+  "template": "Two judges disagreed on scores. Produce a final adjudicated result.\n\nJudge A result: {{judgeA}}\nJudge B result: {{judgeB}}\n\nReturn valid JSON with exactly these keys:\n- scores (array of {questionId, criterionId, criterionText, score, weight, evidenceSpan: {transcriptId, questionId, start, end, quoteText}})\n- metrics (object with paceWpm, fillerCount, paragraphCount, avgSentenceLength)\n- recommendation (number 1-5)\n- confidence (number 0-1)\n- rationale (string)",
+  "variablesSchema": ["judgeA", "judgeB"],
+  "outputSchema": ["scores", "metrics", "recommendation", "confidence", "rationale"],
+  "defaultPolicy": { "tier": "quality", "fallback": false, "cache": false },
+  "guardrailProfile": "internal_only",
+  "providerOverrides": {
+    "gemini": { "model": "gemini-1.5-pro", "temperature": 0.2 }
+  }
+}

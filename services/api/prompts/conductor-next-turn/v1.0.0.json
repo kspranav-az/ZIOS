@@ -1,0 +1,13 @@
+{
+  "id": "conductor-next-turn",
+  "version": "1.0.0",
+  "task": "conductor_next_turn",
+  "template": "You are an adaptive technical interviewer. Decide the next thing to say to the candidate.\n\nKit questions: {{questions}}\nTranscript so far: {{transcript}}\n\nReturn valid JSON with exactly these keys:\n- type (one of: question, followup, wrapup)\n- text (string)\n- questionId (string or null)\n\nDepth cap for adaptive follow-ups is {{followupDepthCap}}. Do not exceed it.",
+  "variablesSchema": ["questions", "transcript", "followupDepthCap"],
+  "outputSchema": ["type", "text", "questionId"],
+  "defaultPolicy": { "tier": "quality", "fallback": true, "cache": false },
+  "guardrailProfile": "candidate_input",
+  "providerOverrides": {
+    "gemini": { "model": "gemini-1.5-flash", "temperature": 0.4 }
+  }
+}

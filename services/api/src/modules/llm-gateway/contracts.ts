@@ -18,6 +18,14 @@ export interface LlmRequestPolicy {
   fallback?: boolean;
   /** Whether response caching is allowed for this request. */
   cache?: boolean;
+  /** Provider-specific model override (e.g. gemini-1.5-pro). */
+  model?: string;
+  /** Provider-specific generation parameter. */
+  temperature?: number;
+  /** Provider-specific top-p parameter. */
+  topP?: number;
+  /** Provider-specific max output tokens parameter. */
+  maxOutputTokens?: number;
 }
 
 export interface LlmCompletionInput<
@@ -54,6 +62,7 @@ export interface LlmProvider {
     task: string;
     promptText: string;
     variables: Record<string, unknown>;
+    policy?: LlmRequestPolicy;
   }): Promise<{
     text: string;
     tokensIn: number;
@@ -72,6 +81,8 @@ export interface PromptDefinition {
   outputSchema: string[];
   defaultPolicy: LlmRequestPolicy;
   guardrailProfile?: GuardrailProfile;
+  /** Per-provider policy/model overrides declared in the prompt file. */
+  providerOverrides?: Record<string, Partial<LlmRequestPolicy> & Record<string, unknown>>;
 }
 
 export type GuardrailProfile = 'candidate_input' | 'jd_input' | 'internal_only';

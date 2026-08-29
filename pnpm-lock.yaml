@@ -283,6 +283,9 @@ importers:
 
   services/api:
     dependencies:
+      '@google/generative-ai':
+        specifier: ^0.21.0
+        version: 0.21.0
       '@nestjs/common':
         specifier: ^11.0.12
         version: 11.1.28(reflect-metadata@0.2.2)(rxjs@7.8.2)
@@ -823,6 +826,10 @@ packages:
 
   '@fontsource/plus-jakarta-sans@5.2.8':
     resolution: {integrity: sha512-P5qE49fqdeD+7DXH1KBxmMPlB17LTz1zvBhFH0tFzfnYTKVJVyb0pR6plh0ZGXxcB+Oayb54FZZw3V42/DawTw==}
+
+  '@google/generative-ai@0.21.0':
+    resolution: {integrity: sha512-7XhUbtnlkSEZK15kN3t+tzIMxsbKm/dSkKBFalj+20NvPKe1kBY7mR2P7vuijEn+f06z5+A8bVGKO0v39cr6Wg==}
+    engines: {node: '>=18.0.0'}
 
   '@humanfs/core@0.19.2':
     resolution: {integrity: sha512-UhXNm+CFMWcbChXywFwkmhqjs3PRCmcSa/hfBgLIb7oQ5HNb1wS0icWsGtSAUNgefHeI+eBrA8I1fxmbHsGdvA==}
@@ -4751,6 +4758,8 @@ snapshots:
       levn: 0.4.1
 
   '@fontsource/plus-jakarta-sans@5.2.8': {}
+
+  '@google/generative-ai@0.21.0': {}
 
   '@humanfs/core@0.19.2':
     dependencies:

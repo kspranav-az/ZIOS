@@ -1,0 +1,13 @@
+{
+  "id": "draft-questions",
+  "version": "1.0.0",
+  "task": "draft_questions",
+  "template": "Draft {{count}} interview question(s) for a {{seniority}} {{title}} role.\nTopic: {{topic}}\nQuestion type: {{type}}\n\nReturn a JSON array where each object has:\n- topic (string)\n- type (one of: open_ended, mcq_single, mcq_multi, rating_scale)\n- prompt (string)\n- options (array of {id, text, correct} for MCQ; null otherwise)\n- difficulty (one of: easy, medium, hard)\n- timeLimitSec (number)\n- timeLimitType (string \"soft\")\n- mandatory (boolean)\n- followupPolicy (one of: none, fixed, adaptive_ai)\n- followupFixed (array of strings or null)\n- followupDepthCap (number or null)\n- rubricLines (array of {id, text, weight})\n- source (string \"jd_generated\")\n- sourceRef (null)\n\nProfile: {{profile}}",
+  "variablesSchema": ["profile", "topic", "type", "count"],
+  "outputSchema": [],
+  "defaultPolicy": { "tier": "balanced", "fallback": true, "cache": true },
+  "guardrailProfile": "internal_only",
+  "providerOverrides": {
+    "gemini": { "model": "gemini-1.5-flash", "temperature": 0.3 }
+  }
+}

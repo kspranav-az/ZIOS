@@ -16,6 +16,7 @@
     "@nestjs/platform-express": "^11.0.12",
     "@nestjs/schedule": "^5.0.1",
     "@zios/shared-types": "workspace:*",
+    "@google/generative-ai": "^0.21.0",
     "cookie-parser": "^1.4.7",
     "minio": "^8.0.7",
     "nestjs-pino": "^4.4.0",

@@ -37,14 +37,14 @@ export class JudgeEnsembleAdapter implements JudgePort {
       this.gateway.complete<RawJudgeOutput>({
         task: 'judge_score',
         variables,
-        policy: { provider: 'mock', cache: false },
+        policy: { tier: 'quality', cache: false },
         orgId: report.orgId,
         sessionId: report.sessionId,
       }),
       this.gateway.complete<RawJudgeOutput>({
         task: 'judge_score',
         variables,
-        policy: { provider: 'mock', cache: false },
+        policy: { tier: 'quality', cache: false },
         orgId: report.orgId,
         sessionId: report.sessionId,
       }),
@@ -60,7 +60,7 @@ export class JudgeEnsembleAdapter implements JudgePort {
         judgeA: a.parsed,
         judgeB: b.parsed,
       },
-      policy: { provider: 'mock', fallback: false, cache: false },
+      policy: { tier: 'quality', fallback: false, cache: false },
       orgId: report.orgId,
       sessionId: report.sessionId,
     });
