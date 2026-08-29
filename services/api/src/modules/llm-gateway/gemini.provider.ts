@@ -48,7 +48,7 @@ export class GeminiLlmProvider implements LlmProvider {
       throw new Error('GeminiLlmProvider requires GEMINI_API_KEY or an explicit apiKey');
     }
     this.defaultModel =
-      defaultModel?.trim() || process.env.GEMINI_MODEL?.trim() || 'gemini-1.5-flash';
+      defaultModel?.trim() || process.env.GEMINI_MODEL?.trim() || 'gemini-3.5-flash-lite';
     this.client = new GoogleGenerativeAI(key);
     this.costPer1kInput = resolveCostPer1k(this.defaultModel, 'input');
     this.costPer1kOutput = resolveCostPer1k(this.defaultModel, 'output');
