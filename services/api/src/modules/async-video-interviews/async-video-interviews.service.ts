@@ -389,7 +389,10 @@ export class AsyncVideoInterviewsService {
           [jobId, row.id, objectName],
         );
         try {
-          transcriptText = await this.transcription.transcribe(objectName, videoBuffer);
+          await q.query(`UPDATE transcription_job SET status = 'running' WHERE id = $1`, [jobId]);
+          // The orchestrator downloads the stored video, extracts audio with
+          // ffmpeg, and routes it through the configured STT port.
+          transcriptText = await this.transcription.transcribe(objectName);
           await q.query(
             `UPDATE transcription_job
              SET status = 'completed', result = $1, completed_at = now()

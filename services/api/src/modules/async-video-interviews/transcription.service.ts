@@ -4,31 +4,30 @@ import { ApiException } from '@/common/errors';
 /**
  * Thin client for the AI orchestrator's video transcription endpoint.
  *
- * In mock mode the orchestrator returns deterministic placeholder text so the
- * whole flow can be exercised without real STT credentials.
+ * The orchestrator now owns the full pipeline: download the stored video,
+ * extract audio with ffmpeg, and route the audio through the mock (or real)
+ * STT port. The API only needs to provide the object name.
  */
 @Injectable()
 export class AsyncVideoTranscriptionService {
-  private readonly orchestratorBaseUrl: string;
-
-  constructor() {
-    this.orchestratorBaseUrl = process.env.ORCHESTRATOR_URL ?? 'http://ai-orchestrator:8000';
+  private orchestratorBaseUrl(): string {
+    // Read lazily so tests can set ORCHESTRATOR_URL after the module is built.
+    return process.env.ORCHESTRATOR_URL ?? 'http://ai-orchestrator:8000';
   }
 
   /**
-   * Sends a video buffer to the orchestrator and returns the transcript text.
+   * Ask the orchestrator to transcribe the video stored at `objectName`.
    *
-   * @param objectName Storage object name (passed to the orchestrator for logging).
-   * @param videoBuffer Raw video bytes (webm/mp4).
+   * @param objectName Storage object name for the uploaded video.
    */
-  async transcribe(objectName: string, videoBuffer: Buffer): Promise<string> {
-    const form = new FormData();
-    form.append('object_name', objectName);
-    form.append('video', new Blob([videoBuffer], { type: 'video/webm' }), 'answer.webm');
+  async transcribe(objectName: string): Promise<string> {
+    const params = new URLSearchParams();
+    params.append('object_name', objectName);
 
-    const response = await fetch(`${this.orchestratorBaseUrl}/video/transcribe`, {
+    const response = await fetch(`${this.orchestratorBaseUrl()}/video/transcribe`, {
       method: 'POST',
-      body: form,
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: params.toString(),
     });
 
     if (!response.ok) {

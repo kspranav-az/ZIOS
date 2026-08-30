@@ -71,7 +71,10 @@ test.describe('async video review', () => {
     // Each question has a video player and a transcript.
     const videos = page.locator('video');
     await expect(videos).toHaveCount(2);
-    await expect(page.getByText(/placeholder transcript/i).first()).toBeVisible();
+    // The mock STT fixture produces this deterministic final transcript.
+    await expect(
+      page.getByText(/most challenging part was aligning the team/i).first(),
+    ).toBeVisible();
 
     // Score the first question.
     const firstQuestionCard = page.getByTestId('async-video-question-card').first();

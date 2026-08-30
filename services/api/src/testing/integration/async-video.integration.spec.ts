@@ -150,6 +150,14 @@ describe.runIf(INTEGRATION_AVAILABLE)('Async video interviews', () => {
     expect(uploadBody.checksum).toBeTruthy();
     expect(uploadBody.transcript).toBeTruthy();
 
+    const jobRows = await test.db.query(
+      `SELECT status, result FROM transcription_job WHERE transcript_id = $1`,
+      [uploadBody.transcriptId],
+    );
+    expect(jobRows.rows).toHaveLength(1);
+    expect(jobRows.rows[0]?.status).toBe('completed');
+    expect(typeof jobRows.rows[0]?.result).toBe('string');
+
     const reviewRes = await fetch(
       `${test.baseUrl}/async-video-interviews/${created.sessionId}/review`,
       { headers: bearer(adminToken) },
