@@ -1,6 +1,6 @@
 # State — InterviewOS / Meridian MVP
 
-**Snapshot date:** 2026-08-30 · **HEAD:** `32e575c` (`test(async-video): add E2E coverage for candidate journey and employer review`) · **Tag:** `phase-09-complete`, `v0.1.0-mvp0-mock`
+**Snapshot date:** 2026-08-30 · **HEAD:** `92dcaac` (`docs(state): update async-video transcription worker + DLQ status`) · **Tag:** `phase-09-complete`, `v0.1.0-mvp0-mock`
 
 This file records the current implementation state, what is proven, what is not, and where the blockers are.
 
@@ -10,12 +10,12 @@ This file records the current implementation state, what is proven, what is not,
 
 | Check                  | Result                   | Command                                 |
 | ---------------------- | ------------------------ | --------------------------------------- |
-| API unit + integration | ✅ 201 passed / 35 files | `pnpm --filter @zios/api test`          |
+| API unit + integration | ✅ 220 passed / 41 files | `pnpm --filter @zios/api test`          |
 | Employer typecheck     | ✅ Clean                 | `pnpm --filter employer-web typecheck`  |
 | Employer lint          | ✅ Clean                 | `pnpm --filter employer-web lint`       |
 | Candidate typecheck    | ✅ Clean                 | `pnpm --filter candidate-web typecheck` |
 | Candidate lint         | ✅ Clean                 | `pnpm --filter candidate-web lint`      |
-| Employer E2E           | ✅ 12 passed             | `pnpm --filter employer-web e2e`        |
+| Employer E2E           | ⚠️ 11 passed, 1 failing  | `pnpm --filter employer-web e2e`        |
 | Candidate E2E          | ⚠️ 4 passed, 1 failing   | `pnpm --filter candidate-web e2e`       |
 | Docker Compose         | ✅ All healthy           | `docker compose up -d --build`          |
 
@@ -58,18 +58,18 @@ This file records the current implementation state, what is proven, what is not,
 
 Everything below is **fixture-driven mock** today. Feature code is complete; real adapter plugs into the same port.
 
-| Capability                         | Port / adapter                               | Mock behavior                                                  | Real handover item                              |
-| ---------------------------------- | -------------------------------------------- | -------------------------------------------------------------- | ----------------------------------------------- |
-| LLM (generation, conductor, judge) | `LlmProvider` → `MockLlmProvider`            | Deterministic fixtures for JD analysis, follow-ups, scores     | Real provider + prompt tuning + cost validation |
-| STT                                | Orchestrator contract → `MockSttAdapter`     | Scripted transcript fixtures                                   | Deepgram/AssemblyAI + WER measurement           |
-| TTS                                | Orchestrator contract → `MockTtsAdapter`     | Pre-recorded audio fixtures                                    | ElevenLabs/PlayHT + latency measurement         |
-| Google OAuth                       | `OAuthPort` → `MockOAuthAdapter`             | Accepts any `code` and returns deterministic profile           | Real Google OAuth app + verification            |
-| Email                              | `EmailSender` → `MailpitAdapter`             | Sends via local SMTP                                           | Production SMTP/SES + deliverability            |
-| Storage                            | `S3Client` → `MinIOAdapter`                  | Local S3-compatible buckets                                    | AWS S3/GCS + lifecycle policies                 |
-| Media                              | LiveKit self-hosted                          | Real WebRTC rooms, dev keys                                    | LiveKit Cloud/managed cluster + TURN            |
-| Payments                           | Wallet schema stub                           | Manual ledger only                                             | Razorpay KYC + payment port                     |
-| WhatsApp/SMS                       | —                                            | Not implemented                                                | Twilio/WhatsApp Business approval               |
-| Async video transcription          | `AsyncVideoTranscriptionService` → `SttPort` | ffmpeg audio extraction + mock STT (fallback on invalid video) | Real STT adapter + async worker                 |
+| Capability                         | Port / adapter                               | Mock behavior                                                          | Real handover item                              |
+| ---------------------------------- | -------------------------------------------- | ---------------------------------------------------------------------- | ----------------------------------------------- |
+| LLM (generation, conductor, judge) | `LlmProvider` → `MockLlmProvider`            | Deterministic fixtures for JD analysis, follow-ups, scores             | Real provider + prompt tuning + cost validation |
+| STT                                | Orchestrator contract → `MockSttAdapter`     | Scripted transcript fixtures                                           | Deepgram/AssemblyAI + WER measurement           |
+| TTS                                | Orchestrator contract → `MockTtsAdapter`     | Pre-recorded audio fixtures                                            | ElevenLabs/PlayHT + latency measurement         |
+| Google OAuth                       | `OAuthPort` → `MockOAuthAdapter`             | Accepts any `code` and returns deterministic profile                   | Real Google OAuth app + verification            |
+| Email                              | `EmailSender` → `MailpitAdapter`             | Sends via local SMTP                                                   | Production SMTP/SES + deliverability            |
+| Storage                            | `S3Client` → `MinIOAdapter`                  | Local S3-compatible buckets                                            | AWS S3/GCS + lifecycle policies                 |
+| Media                              | LiveKit self-hosted                          | Real WebRTC rooms, dev keys                                            | LiveKit Cloud/managed cluster + TURN            |
+| Payments                           | Wallet schema stub                           | Manual ledger only                                                     | Razorpay KYC + payment port                     |
+| WhatsApp/SMS                       | —                                            | Not implemented                                                        | Twilio/WhatsApp Business approval               |
+| Async video transcription          | `AsyncVideoTranscriptionService` → `SttPort` | ffmpeg audio extraction + mock STT; BullMQ worker with 3 retries + DLQ | Real STT adapter only; worker infra is ready    |
 
 ---
 
@@ -78,6 +78,7 @@ Everything below is **fixture-driven mock** today. Feature code is complete; rea
 ### Async video interviews (post-Phase 09 addition)
 
 - `services/api/src/testing/integration/async-video.integration.spec.ts`: create, consent, questions, upload, review, score; verifies `transcription_job` is created and completed.
+- `services/api/src/testing/integration/async-video-dlq.integration.spec.ts`: isolates a failing orchestrator and confirms the worker retries and then writes to `transcription_job_dlq`.
 - `services/ai-orchestrator/tests/test_video_transcription.py`: ffmpeg extraction + `SttPort` routing, fallback on invalid video/STT failure, healthcheck.
 - `apps/employer-web/e2e/async-video-review.spec.ts`: employer reviews videos + transcripts + per-question scores.
 - `apps/candidate-web/e2e/async-video-journey.spec.ts`: candidate consent → recorder UI → question navigation.
@@ -129,18 +130,17 @@ Everything below is **fixture-driven mock** today. Feature code is complete; rea
 
 ## 5. Known gaps / blockers
 
-| Gap                                            | Why it matters                                                                                       | Next action                                                 |
-| ---------------------------------------------- | ---------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| Phase 10 not started                           | No integration API, webhooks, or credit wallet                                                       | Decide scope and start `phase-10/*`                         |
-| Phase 11 not started                           | No pilot hardening, load test, or notifications                                                      | Start after Phase 10                                        |
-| Async video not in PRD acceptance              | Added feature lacks formal PRD criteria, X-metrics, and load assumptions                             | Decide keep/flag/deprecate; write acceptance if kept        |
-| Async video hardening incomplete               | Transcription is processed synchronously in the HTTP request; no redelivery/DLQ or retry on failures | Move transcription to an async worker queue if kept         |
-| Candidate recovery E2E regression              | `recovery.spec.ts` fails: answer draft not restored after reload                                     | Investigate draft persistence timing / `storeAnswerDraft`   |
-| No real LLM/STT/TTS validation                 | X2, X6, X7, WER cannot be measured                                                                   | Wire real adapters when credentials arrive                  |
-| No real Google sign-in                         | FR-E1-1 not fully validated                                                                          | Add real Google OAuth app                                   |
-| No WhatsApp/SMS                                | E11 partial                                                                                          | File template approvals (already noted as Week-1 exception) |
-| No production infra                            | Cannot deploy outside Docker Compose                                                                 | Define k8s/managed infra post-M1                            |
-| Human-facilitated video stability under stress | LiveKit rooms work locally; multi-participant + TURN not validated                                   | Re-test after Cloud TURN + run load scenario                |
+| Gap                                            | Why it matters                                                           | Next action                                                 |
+| ---------------------------------------------- | ------------------------------------------------------------------------ | ----------------------------------------------------------- |
+| Phase 10 not started                           | No integration API, webhooks, or credit wallet                           | Decide scope and start `phase-10/*`                         |
+| Phase 11 not started                           | No pilot hardening, load test, or notifications                          | Start after Phase 10                                        |
+| Async video not in PRD acceptance              | Added feature lacks formal PRD criteria, X-metrics, and load assumptions | Decide keep/flag/deprecate; write acceptance if kept        |
+| Candidate recovery E2E regression              | `recovery.spec.ts` fails: answer draft not restored after reload         | Investigate draft persistence timing / `storeAnswerDraft`   |
+| No real LLM/STT/TTS validation                 | X2, X6, X7, WER cannot be measured                                       | Wire real adapters when credentials arrive                  |
+| No real Google sign-in                         | FR-E1-1 not fully validated                                              | Add real Google OAuth app                                   |
+| No WhatsApp/SMS                                | E11 partial                                                              | File template approvals (already noted as Week-1 exception) |
+| No production infra                            | Cannot deploy outside Docker Compose                                     | Define k8s/managed infra post-M1                            |
+| Human-facilitated video stability under stress | LiveKit rooms work locally; multi-participant + TURN not validated       | Re-test after Cloud TURN + run load scenario                |
 
 ---
 
@@ -155,7 +155,7 @@ All migrations through Phase 09 are applied in the compose stack. Key tables:
 - Human-facilitated: `interview_slot`, `session_coverage`
 - Integrity: `integrity_flag`, `integrity_snapshot`
 - Generation: `jd_generation`
-- Async video: `role_based_questions`, `async_video_review_score`, `transcription_job`
+- Async video: `role_based_questions`, `async_video_review_score`, `transcription_job`, `transcription_job_dlq`
 - Infra: `evaluation_pipeline_log`, `preview_token`
 
 Run `pnpm migrate` to verify no pending migrations.
