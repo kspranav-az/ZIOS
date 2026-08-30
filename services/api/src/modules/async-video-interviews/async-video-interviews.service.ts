@@ -20,6 +20,7 @@ import { SessionsRepository, TranscriptRepository, transition } from '@/modules/
 import { StorageClient } from '@/modules/storage';
 import { AsyncVideoTranscriptionService } from './transcription.service';
 import { RoleKitResolverService } from './role-kit-resolver.service';
+import { TranscriptionQueue } from './transcription.queue';
 
 const ZETHEETA_ORG_ID = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11';
 const SYSTEM_USER_ID = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12';
@@ -74,7 +75,6 @@ export interface AsyncUploadResult {
   transcriptId: string;
   recordingUri: string;
   checksum: string;
-  transcript?: string;
   completed?: boolean;
 }
 
@@ -128,6 +128,7 @@ export class AsyncVideoInterviewsService {
     private readonly storage: StorageClient,
     private readonly transcription: AsyncVideoTranscriptionService,
     private readonly roleKitResolver: RoleKitResolverService,
+    private readonly transcriptionQueue: TranscriptionQueue,
   ) {}
 
   async create(input: CreateAsyncVideoInterviewInput): Promise<AsyncVideoInterviewCreated> {
@@ -331,7 +332,8 @@ export class AsyncVideoInterviewsService {
     videoBuffer: Buffer,
     opts?: { durationSec?: number },
   ): Promise<AsyncUploadResult> {
-    return this.db.transaction(async (q) => {
+    // 1. Persist the answer and the transcription job row in a single transaction.
+    const uploadResult = await this.db.transaction(async (q) => {
       const session = await this.loadAuthorizedSession(sessionId, rawRecoveryToken, q);
       if (session.status !== 'live') {
         throw new ApiException(409, 'SESSION_STATE_INVALID', `session is ${session.status}`);
@@ -379,7 +381,7 @@ export class AsyncVideoInterviewsService {
         q,
       );
 
-      let transcriptText: string | undefined;
+      let transcriptionEnqueued = false;
       const enableTranscription = await this.isTranscriptionEnabled(session.inviteId, q);
       if (enableTranscription) {
         const jobId = randomUUID();
@@ -388,30 +390,7 @@ export class AsyncVideoInterviewsService {
            VALUES ($1, $2, $3, 'pending')`,
           [jobId, row.id, objectName],
         );
-        try {
-          await q.query(`UPDATE transcription_job SET status = 'running' WHERE id = $1`, [jobId]);
-          // The orchestrator downloads the stored video, extracts audio with
-          // ffmpeg, and routes it through the configured STT port.
-          transcriptText = await this.transcription.transcribe(objectName);
-          await q.query(
-            `UPDATE transcription_job
-             SET status = 'completed', result = $1, completed_at = now()
-             WHERE id = $2`,
-            [transcriptText, jobId],
-          );
-          await this.transcript.answer(row.id, transcriptText, q, undefined, {
-            ...answerData,
-            videoAnswer: { ...answerData.videoAnswer, transcript: transcriptText },
-          } as unknown as import('@zios/shared-types').AnswerData);
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
-          await q.query(
-            `UPDATE transcription_job
-             SET status = 'failed', error_message = $1, completed_at = now()
-             WHERE id = $2`,
-            [message, jobId],
-          );
-        }
+        transcriptionEnqueued = true;
       }
 
       const remainingResult = await q.query(
@@ -434,10 +413,33 @@ export class AsyncVideoInterviewsService {
         transcriptId: row.id,
         recordingUri: uri,
         checksum,
-        transcript: transcriptText,
         completed,
+        transcriptionEnqueued,
+        objectName,
+        sessionId,
+        questionId,
+        inviteId: session.inviteId,
       };
     });
+
+    // 2. Enqueue the background job only after the transaction has committed so
+    //    the worker never races with an uncommitted answer row.
+    if (uploadResult.transcriptionEnqueued) {
+      await this.transcriptionQueue.add({
+        transcriptId: uploadResult.transcriptId,
+        objectName: uploadResult.objectName,
+        sessionId: uploadResult.sessionId,
+        questionId: uploadResult.questionId,
+        inviteId: uploadResult.inviteId,
+      });
+    }
+
+    return {
+      transcriptId: uploadResult.transcriptId,
+      recordingUri: uploadResult.recordingUri,
+      checksum: uploadResult.checksum,
+      completed: uploadResult.completed,
+    };
   }
 
   async getReview(orgId: string, sessionId: string): Promise<AsyncReviewResult> {
