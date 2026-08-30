@@ -1,6 +1,6 @@
 # State — InterviewOS / Meridian MVP
 
-**Snapshot date:** 2026-08-30 · **HEAD:** `7a0dc50` (`feat(queue): add Redis client provider for BullMQ worker`) · **Tag:** `phase-09-complete`, `v0.1.0-mvp0-mock`
+**Snapshot date:** 2026-08-30 · **HEAD:** `6e3047b` (`feat(queue): add Redis client provider for BullMQ worker`) · **Tag:** `phase-09-complete`, `v0.1.0-mvp0-mock`
 
 This file records the current implementation state, what is proven, what is not, and where the blockers are.
 
@@ -15,42 +15,33 @@ This file records the current implementation state, what is proven, what is not,
 | Employer lint          | ✅ Clean                 | `pnpm --filter employer-web lint`       |
 | Candidate typecheck    | ✅ Clean                 | `pnpm --filter candidate-web typecheck` |
 | Candidate lint         | ✅ Clean                 | `pnpm --filter candidate-web lint`      |
-| Employer E2E           | ⚠️ 11 passed, 1 failing  | `pnpm --filter employer-web e2e`        |
-| Candidate E2E          | ⚠️ 4 passed, 1 failing   | `pnpm --filter candidate-web e2e`       |
+| Employer E2E           | ✅ 12 passed             | `pnpm --filter employer-web e2e`        |
+| Candidate E2E          | ✅ 5 passed              | `pnpm --filter candidate-web e2e`       |
 | Docker Compose         | ✅ All healthy           | `docker compose up -d --build`          |
 
 ---
 
 ## 2. Feature completion by PRD epic
 
-| Epic | Description               | Implemented? | Notes                                                                                                                   |
-| ---- | ------------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------- |
-| E1   | Employer onboarding       | ✅           | Email OTP, org auto-creation, Admin/Interviewer roles; Google OAuth stubbed                                             |
-| E2   | Interview Kit Builder     | ✅           | CRUD, topics/questions, follow-up policy, timers, versioning, preview-as-candidate                                      |
-| E3   | JD-based generation       | ✅           | JD → proposal → review → publish; per-question regenerate; template gallery                                             |
-| E4   | Question sources          | ✅           | Seeded question bank + external adapter interface; provenance tracked; role-based question table added for async video  |
-| E5   | Scheduling & invites      | ✅           | Single + CSV bulk invites, token-bound links, candidate identity, optional OTP, reschedule-by-link, .ics for human mode |
-| E6   | Candidate experience      | ✅           | Mobile-first web, preflight, consent, practice question, text/voice/video, session recovery                             |
-| E7   | AI interviewer            | ✅           | Text + voice conductor; adaptive follow-ups behind mock LLM; timers; wrap-up                                            |
-| E8   | Human-facilitated mode    | ✅           | LiveKit room, slot scheduling, cockpit, coverage tracking, auto-notes, structured scorecard                             |
-| E9   | Proctoring (baseline)     | ✅           | Consent-gated snapshots, tab-switch/fullscreen-exit, copy-paste capture, integrity flags panel                          |
-| E10  | Evaluation & report       | ✅           | Transcript, rubric scores + evidence, communication metrics, integrity panel, override, PDF, share link                 |
-| E11  | Notifications             | ⚠️ Partial   | Email via Mailpit only; WhatsApp/SMS deferred to Phase 11                                                               |
-| E12  | Dashboard (pipeline-lite) | ✅           | Interview list, statuses, kit stats, filters; async-video rows now route to review page instead of report               |
-| E13  | Integration API           | ❌           | Phase 10 scope; API keys, create-interview, webhooks not started                                                        |
-| E14  | Billing-lite              | ❌           | Phase 10 scope; wallet/credits not started                                                                              |
+| Epic | Description               | Implemented? | Notes                                                                                                                                                        |
+| ---- | ------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| E1   | Employer onboarding       | ✅           | Email OTP, org auto-creation, Admin/Interviewer roles; Google OAuth stubbed                                                                                  |
+| E2   | Interview Kit Builder     | ✅           | CRUD, topics/questions, follow-up policy, timers, versioning, preview-as-candidate                                                                           |
+| E3   | JD-based generation       | ✅           | JD → proposal → review → publish; per-question regenerate; template gallery                                                                                  |
+| E4   | Question sources          | ✅           | Seeded question bank + external adapter interface; provenance tracked; role-based question table added for async video                                       |
+| E5   | Scheduling & invites      | ✅           | Single + CSV bulk invites, token-bound links, candidate identity, optional OTP, reschedule-by-link, .ics for human mode                                      |
+| E6   | Candidate experience      | ✅           | Mobile-first web, preflight, consent, practice question, text/voice/video/async video, session recovery                                                      |
+| E7   | AI interviewer            | ✅           | Text + voice conductor; adaptive follow-ups behind mock LLM; timers; wrap-up                                                                                 |
+| E8   | Human-facilitated mode    | ✅           | LiveKit room, slot scheduling, cockpit, coverage tracking, auto-notes, structured scorecard                                                                  |
+| E9   | Proctoring (baseline)     | ✅           | Consent-gated snapshots, tab-switch/fullscreen-exit, copy-paste capture, integrity flags panel                                                               |
+| E10  | Evaluation & report       | ✅           | Transcript, rubric scores + evidence, communication metrics, integrity panel, override, PDF, share link                                                      |
+| E11  | Notifications             | ⚠️ Partial   | Email via Mailpit only; WhatsApp/SMS deferred to Phase 11                                                                                                    |
+| E12  | Dashboard (pipeline-lite) | ✅           | Interview list, statuses, kit stats, filters; async-video rows now route to review page instead of report                                                    |
+| E13  | Integration API           | ❌           | Phase 10 scope; API keys, create-interview, webhooks not started                                                                                             |
+| E14  | Billing-lite              | ❌           | Phase 10 scope; wallet/credits not started                                                                                                                   |
+| E15  | Async video interviews    | ✅ Core      | Formal M1 mode as of PRD update; role-based creation, per-question recording, transcription, review, report; see `phases/phase-09b-async-video-hardening.md` |
 
-### Beyond original PRD scope (added during mock-credential hardening)
-
-| Feature                             | Implemented? | Notes                                                                                            |
-| ----------------------------------- | ------------ | ------------------------------------------------------------------------------------------------ |
-| Async video interviews (role-based) | ✅ Core      | `POST /async-video-interviews` by role; per-question video recording; human review score page    |
-| Async video review page             | ✅           | Employer sees questions, videos, transcripts, per-question score + remarks                       |
-| Async video candidate flow          | ✅           | Consent → preflight → record per question → finish; guards against skipping unanswered questions |
-| Async video E2E (employer review)   | ✅           | `apps/employer-web/e2e/async-video-review.spec.ts`                                               |
-| Async video E2E (candidate journey) | ✅           | `apps/candidate-web/e2e/async-video-journey.spec.ts`                                             |
-
-> These async-video capabilities are **not in the PRD §3.4 IN list**; they were added to support a validation-layer use case. Before M1 ships, decide whether to (a) keep as a supported mode, (b) fold it under E6/E10 with full PRD acceptance, or (c) gate it behind a feature flag.
+> Async video was originally added as a validation-layer shortcut. It is now **E15 in the PRD §3.4 IN list** with formal acceptance criteria and a scope trade (FR-E10-5 candidate comparison view deferred to M2).
 
 ---
 
@@ -130,17 +121,16 @@ Everything below is **fixture-driven mock** today. Feature code is complete; rea
 
 ## 5. Known gaps / blockers
 
-| Gap                                            | Why it matters                                                           | Next action                                                 |
-| ---------------------------------------------- | ------------------------------------------------------------------------ | ----------------------------------------------------------- |
-| Phase 10 not started                           | No integration API, webhooks, or credit wallet                           | Decide scope and start `phase-10/*`                         |
-| Phase 11 not started                           | No pilot hardening, load test, or notifications                          | Start after Phase 10                                        |
-| Async video not in PRD acceptance              | Added feature lacks formal PRD criteria, X-metrics, and load assumptions | Decide keep/flag/deprecate; write acceptance if kept        |
-| Candidate recovery E2E regression              | `recovery.spec.ts` fails: answer draft not restored after reload         | Investigate draft persistence timing / `storeAnswerDraft`   |
-| No real LLM/STT/TTS validation                 | X2, X6, X7, WER cannot be measured                                       | Wire real adapters when credentials arrive                  |
-| No real Google sign-in                         | FR-E1-1 not fully validated                                              | Add real Google OAuth app                                   |
-| No WhatsApp/SMS                                | E11 partial                                                              | File template approvals (already noted as Week-1 exception) |
-| No production infra                            | Cannot deploy outside Docker Compose                                     | Define k8s/managed infra post-M1                            |
-| Human-facilitated video stability under stress | LiveKit rooms work locally; multi-participant + TURN not validated       | Re-test after Cloud TURN + run load scenario                |
+| Gap                                            | Why it matters                                                                 | Next action                                                 |
+| ---------------------------------------------- | ------------------------------------------------------------------------------ | ----------------------------------------------------------- |
+| Phase 09b not complete                         | Async video needs AI judge pre-fill, report hardening, and credit debit wiring | Execute `phases/phase-09b-async-video-hardening.md`         |
+| Phase 10 not started                           | No integration API, webhooks, or credit wallet                                 | Decide scope and start `phase-10/*`                         |
+| Phase 11 not started                           | No pilot hardening, load test, or notifications                                | Start after Phase 10                                        |
+| No real LLM/STT/TTS validation                 | X2, X6, X7, WER cannot be measured                                             | Wire real adapters when credentials arrive                  |
+| No real Google sign-in                         | FR-E1-1 not fully validated                                                    | Add real Google OAuth app                                   |
+| No WhatsApp/SMS                                | E11 partial                                                                    | File template approvals (already noted as Week-1 exception) |
+| No production infra                            | Cannot deploy outside Docker Compose                                           | Define k8s/managed infra post-M1                            |
+| Human-facilitated video stability under stress | LiveKit rooms work locally; multi-participant + TURN not validated             | Re-test after Cloud TURN + run load scenario                |
 
 ---
 
@@ -172,7 +162,7 @@ Run `pnpm migrate` to verify no pending migrations.
 
 ## 8. Immediate next steps
 
-1. **Decide async video status:** Keep as supported mode, gate behind flag, or remove from M1 scope; write acceptance criteria if kept.
+1. **Phase 09b execution:** Complete async-video judge pre-fill, report hardening, credit-debit wiring, and tag `phase-09b-complete`.
 2. **Phase 10 kickoff:** Create `phase-10/*` branch for integration API, webhooks, and wallet.
 3. **Provider procurement:** Select and obtain credentials for LLM, STT, TTS, Google OAuth, WhatsApp, and payments.
 4. **Key handover re-run:** Re-execute credential-gated phase validations with real providers.
