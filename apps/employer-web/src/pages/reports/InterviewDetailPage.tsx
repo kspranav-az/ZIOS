@@ -72,7 +72,7 @@ export function InterviewDetailPage() {
       if (!row) {
         throw new Error('Interview not found in dashboard');
       }
-      if (row.isAsyncVideo) {
+      if (row.isAsyncVideo && row.reportStatus !== 'completed') {
         navigate(`/interviews/${sessionId}/async-review`, { replace: true });
         return;
       }

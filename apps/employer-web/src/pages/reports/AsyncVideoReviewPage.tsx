@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Button, Card, Icon } from '@zios/ui';
 import { useToast } from '../../components/Toast';
 import { userMessageForError } from '../../lib/errors';
@@ -8,7 +8,9 @@ import {
   AsyncVideoReviewQuestion,
   AsyncVideoReviewScore,
   getAsyncVideoReview,
+  prefillAsyncVideoScorecard,
   submitAsyncVideoScore,
+  submitAsyncVideoScorecard,
 } from '../../lib/async-video-api';
 
 interface ReviewState {
@@ -18,6 +20,8 @@ interface ReviewState {
   answers: AsyncVideoAnswer[];
   scores: Map<string, AsyncVideoReviewScore>;
   loading: boolean;
+  prefillLoading: boolean;
+  submitLoading: boolean;
   error?: string;
 }
 
@@ -50,6 +54,7 @@ function getVideoObjectName(answer: AsyncVideoAnswer): string | null {
 
 export function AsyncVideoReviewPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
+  const navigate = useNavigate();
   const { push: showToast } = useToast();
 
   const [state, setState] = useState<ReviewState>({
@@ -59,7 +64,11 @@ export function AsyncVideoReviewPage() {
     answers: [],
     scores: new Map(),
     loading: true,
+    prefillLoading: false,
+    submitLoading: false,
   });
+  const [prefillAccepted, setPrefillAccepted] = useState(false);
+  const [editCount, setEditCount] = useState(0);
   const [videoErrors, setVideoErrors] = useState<Set<string>>(new Set());
 
   const setPartial = (patch: Partial<ReviewState>) => {
@@ -82,11 +91,15 @@ export function AsyncVideoReviewPage() {
         answers: detail.answers,
         scores: scoreMap,
         loading: false,
+        prefillLoading: false,
+        submitLoading: false,
       });
     } catch (err) {
       setState((current) => ({
         ...current,
         loading: false,
+        prefillLoading: false,
+        submitLoading: false,
         error: userMessageForError(err),
       }));
     }
@@ -100,6 +113,7 @@ export function AsyncVideoReviewPage() {
     setState((current) => {
       const next = new Map(current.scores);
       const existing = next.get(questionId);
+      const hadPrefill = existing?.source === 'ai_prefill';
       next.set(questionId, {
         ...(existing ?? {
           id: '',
@@ -112,7 +126,11 @@ export function AsyncVideoReviewPage() {
           updatedAt: '',
         }),
         score: score ?? null,
+        source: 'human',
       });
+      if (hadPrefill) {
+        setEditCount((c) => c + 1);
+      }
       return { ...current, scores: next };
     });
   };
@@ -121,6 +139,7 @@ export function AsyncVideoReviewPage() {
     setState((current) => {
       const next = new Map(current.scores);
       const existing = next.get(questionId);
+      const hadPrefill = existing?.source === 'ai_prefill';
       next.set(questionId, {
         ...(existing ?? {
           id: '',
@@ -133,7 +152,11 @@ export function AsyncVideoReviewPage() {
           updatedAt: '',
         }),
         remarks: remarks.trim() || null,
+        source: 'human',
       });
+      if (hadPrefill) {
+        setEditCount((c) => c + 1);
+      }
       return { ...current, scores: next };
     });
   };
@@ -153,6 +176,50 @@ export function AsyncVideoReviewPage() {
       });
       showToast('Score saved', 'success');
     } catch (err) {
+      showToast(userMessageForError(err), 'error');
+    }
+  };
+
+  const handlePrefill = async () => {
+    if (!sessionId) return;
+    setState((current) => ({ ...current, prefillLoading: true }));
+    try {
+      const detail = await prefillAsyncVideoScorecard(sessionId);
+      const scoreMap = new Map<string, AsyncVideoReviewScore>();
+      for (const score of detail.scores) {
+        scoreMap.set(score.questionId, score);
+      }
+      setState((current) => ({
+        ...current,
+        scores: scoreMap,
+        prefillLoading: false,
+      }));
+      setPrefillAccepted(true);
+      setEditCount(0);
+      showToast('AI pre-fill applied', 'success');
+    } catch (err) {
+      setState((current) => ({ ...current, prefillLoading: false }));
+      showToast(userMessageForError(err), 'error');
+    }
+  };
+
+  const handleSubmitScorecard = async () => {
+    if (!sessionId) return;
+    const unanswered = state.questions.filter((q) => !state.scores.get(q.id)?.score);
+    if (unanswered.length > 0) {
+      showToast(`Score all ${unanswered.length} unanswered question(s) first`, 'error');
+      return;
+    }
+    setState((current) => ({ ...current, submitLoading: true }));
+    try {
+      await submitAsyncVideoScorecard(sessionId, {
+        prefillAccepted,
+        editCount,
+      });
+      showToast('Scorecard submitted', 'success');
+      navigate(`/interviews/${sessionId}`);
+    } catch (err) {
+      setState((current) => ({ ...current, submitLoading: false }));
       showToast(userMessageForError(err), 'error');
     }
   };
@@ -195,6 +262,23 @@ export function AsyncVideoReviewPage() {
           <p className="font-body-lg text-body-lg text-on-surface-variant mt-1">
             {state.candidateName} · {state.candidateEmail}
           </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            icon="auto_awesome"
+            loading={state.prefillLoading}
+            onClick={() => void handlePrefill()}
+          >
+            Generate AI pre-fill
+          </Button>
+          <Button
+            icon="check_circle"
+            loading={state.submitLoading}
+            onClick={() => void handleSubmitScorecard()}
+          >
+            Submit scorecard
+          </Button>
         </div>
       </section>
 
