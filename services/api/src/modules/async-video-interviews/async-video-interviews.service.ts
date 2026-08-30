@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type {
   AppUser,
@@ -17,6 +17,12 @@ import { DatabaseService, type Queryable } from '@/modules/database';
 import { InvitesRepository } from '@/modules/invites';
 import { KitVersionsRepository } from '@/modules/kits';
 import { SessionsRepository, TranscriptRepository, transition } from '@/modules/sessions';
+import { CreditsService } from '@/modules/credits';
+import { EvaluationRepository } from '@/modules/evaluation';
+import { EvaluationScoreRepository } from '@/modules/evaluation/score.repository';
+import { EvidenceSpanRepository } from '@/modules/evaluation/evidence-span.repository';
+import { computeCommunicationMetrics } from '@/modules/evaluation/metrics';
+import { JUDGE_PORT, type JudgePort } from '@/modules/evaluation/judge.port';
 import { StorageClient } from '@/modules/storage';
 import { AsyncVideoTranscriptionService } from './transcription.service';
 import { RoleKitResolverService } from './role-kit-resolver.service';
@@ -26,6 +32,7 @@ const ZETHEETA_ORG_ID = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11';
 const SYSTEM_USER_ID = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12';
 const DEFAULT_EXPIRY_DAYS = 180;
 const DEFAULT_MAX_DURATION_SEC = 180;
+const ASYNC_VIDEO_CREDIT_COST = 3;
 
 export interface CreateAsyncVideoInterviewInput {
   roleId: number;
@@ -94,6 +101,8 @@ export interface AsyncReviewScoreRow {
   score: number | null;
   remarks: string | null;
   reviewedBy: string | null;
+  source?: 'human' | 'ai_prefill';
+  scorerId?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -129,6 +138,11 @@ export class AsyncVideoInterviewsService {
     private readonly transcription: AsyncVideoTranscriptionService,
     private readonly roleKitResolver: RoleKitResolverService,
     private readonly transcriptionQueue: TranscriptionQueue,
+    private readonly credits: CreditsService,
+    @Inject(JUDGE_PORT) private readonly judge: JudgePort,
+    private readonly reports: EvaluationRepository,
+    private readonly scores: EvaluationScoreRepository,
+    private readonly evidenceSpans: EvidenceSpanRepository,
   ) {}
 
   async create(input: CreateAsyncVideoInterviewInput): Promise<AsyncVideoInterviewCreated> {
@@ -150,6 +164,10 @@ export class AsyncVideoInterviewsService {
         : DEFAULT_EXPIRY_DAYS;
 
     return this.db.transaction(async (q) => {
+      await this.credits.debit(orgId, ASYNC_VIDEO_CREDIT_COST, 'async_video_created', q, {
+        metadata: { roleId: input.roleId },
+      });
+
       const { versionId, questions } = await this.roleKitResolver.resolveKitVersionId(
         orgId,
         input.roleId,
@@ -484,18 +502,274 @@ export class AsyncVideoInterviewsService {
       }
 
       const result = await q.query(
-        `INSERT INTO async_video_review_score (session_id, question_id, score, remarks, reviewed_by)
-         VALUES ($1, $2, $3, $4, $5)
+        `INSERT INTO async_video_review_score (session_id, question_id, score, remarks, reviewed_by, source, scorer_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
          ON CONFLICT (session_id, question_id)
          DO UPDATE SET score = EXCLUDED.score,
                        remarks = EXCLUDED.remarks,
                        reviewed_by = EXCLUDED.reviewed_by,
+                       source = EXCLUDED.source,
+                       scorer_id = EXCLUDED.scorer_id,
                        updated_at = now()
-         RETURNING id, session_id, question_id, score, remarks, reviewed_by, created_at, updated_at`,
-        [sessionId, questionId, input.score ?? null, input.remarks ?? null, user.id],
+         RETURNING id, session_id, question_id, score, remarks, reviewed_by, source, scorer_id, created_at, updated_at`,
+        [
+          sessionId,
+          questionId,
+          input.score ?? null,
+          input.remarks ?? null,
+          user.id,
+          'human',
+          user.id,
+        ],
       );
       const row = result.rows[0] as Record<string, unknown>;
       return this.mapScoreRow(row);
+    });
+  }
+
+  /**
+   * AI judge pre-fill for the async video scorecard. Runs the shared judge port
+   * over the recorded answers and writes suggested scores into
+   * async_video_review_score with source='ai_prefill'. The human reviewer can
+   * edit these before submitting the scorecard.
+   */
+  async prefillScorecard(
+    orgId: string,
+    sessionId: string,
+    user: AppUser,
+  ): Promise<AsyncReviewResult> {
+    const session = await this.sessions.findById(sessionId);
+    if (!session) {
+      throw new ApiException(404, 'SESSION_NOT_FOUND', 'session not found');
+    }
+    const invite = await this.invites.findById(orgId, session.inviteId);
+    if (!invite) {
+      throw new ApiException(404, 'INVITE_NOT_FOUND', 'invite not found');
+    }
+    if (!invite.metadata?.asyncVideo) {
+      throw new ApiException(400, 'INVALID_INVITE_TYPE', 'not an async video interview');
+    }
+
+    const transcript = await this.loadTranscript(sessionId);
+    const questions = await this.loadQuestions(session.kitVersionId);
+    const judgeResult = await this.judge.evaluate(
+      { orgId, sessionId: session.id, kitVersionId: session.kitVersionId },
+      transcript,
+      questions,
+    );
+
+    await this.db.transaction(async (q) => {
+      // Group judge scores by question and store one async_video_review_score row
+      // per question using the weighted average of criterion scores.
+      const scoresByQuestion = new Map<string, { sum: number; weight: number; evidence: string }>();
+      for (const score of judgeResult.scores) {
+        const current = scoresByQuestion.get(score.questionId) ?? {
+          sum: 0,
+          weight: 0,
+          evidence: '',
+        };
+        current.sum += score.score * score.weight;
+        current.weight += score.weight;
+        if (!current.evidence && score.evidenceSpan.quoteText) {
+          current.evidence = score.evidenceSpan.quoteText;
+        }
+        scoresByQuestion.set(score.questionId, current);
+      }
+
+      for (const [questionId, aggregate] of scoresByQuestion.entries()) {
+        const weightedScore = aggregate.weight > 0 ? aggregate.sum / aggregate.weight : 0;
+        const score = Math.max(1, Math.min(5, Math.round(weightedScore)));
+        await q.query(
+          `INSERT INTO async_video_review_score (session_id, question_id, score, remarks, reviewed_by, source, scorer_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
+           ON CONFLICT (session_id, question_id)
+           DO UPDATE SET score = EXCLUDED.score,
+                         remarks = EXCLUDED.remarks,
+                         reviewed_by = EXCLUDED.reviewed_by,
+                         source = EXCLUDED.source,
+                         scorer_id = EXCLUDED.scorer_id,
+                         updated_at = now()`,
+          [
+            sessionId,
+            questionId,
+            score,
+            aggregate.evidence || null,
+            user.id,
+            'ai_prefill',
+            user.id,
+          ],
+        );
+      }
+    });
+
+    return this.getReview(orgId, sessionId);
+  }
+
+  /**
+   * Submits the async video scorecard, creating a completed evaluation_report
+   * with the same schema as live-mode reports.
+   */
+  async submitScorecard(
+    orgId: string,
+    sessionId: string,
+    user: AppUser,
+    opts?: { prefillAccepted?: boolean; editCount?: number },
+  ) {
+    return this.db.transaction(async (q) => {
+      let session = await this.sessions.findById(sessionId, q);
+      if (!session) {
+        throw new ApiException(404, 'SESSION_NOT_FOUND', 'session not found');
+      }
+      const invite = await this.invites.findById(orgId, session.inviteId, q);
+      if (!invite) {
+        throw new ApiException(404, 'INVITE_NOT_FOUND', 'invite not found');
+      }
+      if (!invite.metadata?.asyncVideo) {
+        throw new ApiException(400, 'INVALID_INVITE_TYPE', 'not an async video interview');
+      }
+
+      const scores = await this.listScores(sessionId, q);
+      if (scores.length === 0) {
+        throw new ApiException(400, 'SCORECARD_EMPTY', 'no scores to submit');
+      }
+      const unscored = scores.filter((s) => s.score === null);
+      if (unscored.length > 0) {
+        throw new ApiException(400, 'SCORECARD_INCOMPLETE', 'all questions must be scored');
+      }
+
+      const transcript = await this.loadTranscript(sessionId);
+      const questions = await this.loadQuestions(session.kitVersionId);
+      const metrics = computeCommunicationMetrics(transcript);
+
+      const weightedScore = scores.reduce((sum, s) => sum + (s.score ?? 0), 0) / scores.length;
+      const overallRecommendation = Math.max(1, Math.min(5, Math.round(weightedScore)));
+
+      // Use the live-mode evaluation pipeline to create/update the report.
+      let report = await this.reports.findBySessionId(sessionId, q);
+      if (!report) {
+        report = await this.reports.insert(
+          {
+            orgId,
+            sessionId,
+            inviteId: invite.id,
+            kitVersionId: session.kitVersionId,
+            status: 'pending',
+            modelRoute: 'async-video-scorecard',
+          },
+          q,
+        );
+      }
+
+      await this.scores.deleteByReportId(report.id, q);
+      await this.evidenceSpans.deleteByReportId(report.id, q);
+
+      // Build simple evidence spans from the remarks/human input or transcript.
+      const spanIdByQuestion = new Map<string, string>();
+      for (const score of scores) {
+        const transcriptRow = transcript.find((t) => t.questionId === score.questionId);
+        const quoteText = score.remarks?.trim() || transcriptRow?.answerText || '';
+        const span = await this.evidenceSpans.insert(
+          {
+            reportId: report.id,
+            transcriptId: transcriptRow?.id ?? null,
+            questionId: score.questionId,
+            start: 0,
+            end: quoteText.length,
+            quoteText,
+          },
+          q,
+        );
+        spanIdByQuestion.set(score.questionId, span.id);
+      }
+
+      const questionMap = new Map<string, KitQuestion>(
+        questions.map((question) => [question.id, question]),
+      );
+      for (const score of scores) {
+        const question = questionMap.get(score.questionId);
+        const spanId = spanIdByQuestion.get(score.questionId);
+        if (!spanId) {
+          throw new Error(`missing evidence span for question ${score.questionId}`);
+        }
+        await this.scores.insert(
+          {
+            reportId: report.id,
+            questionId: score.questionId,
+            criterionId: 'overall',
+            criterionText: question?.rubricLines?.[0]?.text ?? 'Overall assessment',
+            score: score.score ?? 0,
+            weight: 1,
+            evidenceSpanIds: [spanId],
+            source: score.source ?? 'human',
+            scorerId: score.scorerId ?? user.id,
+          },
+          q,
+        );
+      }
+
+      await this.reports.updateScorecard(
+        report.id,
+        {
+          overallRecommendation,
+          overallConfidence: 0.7,
+          communicationMetrics: metrics,
+          cost: 0,
+          promptVersions: { source: 'async-video-scorecard' },
+          scorecardMeta: {
+            submittedAt: new Date().toISOString(),
+            submittedBy: user.id,
+            prefillAccepted: opts?.prefillAccepted ?? false,
+            editCount: opts?.editCount ?? 0,
+          },
+        },
+        q,
+      );
+
+      session = await this.advanceStatus(q, session, 'scoring');
+      session = await this.advanceStatus(q, session, 'reported');
+
+      return this.reports.findById(report.id, q);
+    });
+  }
+
+  /**
+   * Refunds the async-video credit cost if and only if no video answers have
+   * been uploaded yet. Once an answer exists, the session is considered
+   * consumed and no refund is issued.
+   */
+  async refundCredits(orgId: string, sessionId: string): Promise<{ refunded: boolean }> {
+    return this.db.transaction(async (q) => {
+      const session = await this.sessions.findById(sessionId, q);
+      if (!session) {
+        throw new ApiException(404, 'SESSION_NOT_FOUND', 'session not found');
+      }
+      const invite = await this.invites.findById(orgId, session.inviteId, q);
+      if (!invite) {
+        throw new ApiException(404, 'INVITE_NOT_FOUND', 'invite not found');
+      }
+      if (!invite.metadata?.asyncVideo) {
+        throw new ApiException(400, 'INVALID_INVITE_TYPE', 'not an async video interview');
+      }
+
+      const answersResult = await q.query(
+        `SELECT COUNT(*) AS count
+         FROM session_transcript
+         WHERE session_id = $1 AND answer_data IS NOT NULL`,
+        [sessionId],
+      );
+      const answeredCount = Number((answersResult.rows[0] as { count: string }).count);
+      if (answeredCount > 0) {
+        return { refunded: false };
+      }
+
+      await this.credits.credit(
+        orgId,
+        ASYNC_VIDEO_CREDIT_COST,
+        'async_video_refund_no_answers',
+        q,
+        { sessionRef: sessionId },
+      );
+      return { refunded: true };
     });
   }
 
@@ -543,6 +817,38 @@ export class AsyncVideoInterviewsService {
     return version.snapshot;
   }
 
+  private async loadQuestions(kitVersionId: string, q?: Queryable): Promise<KitQuestion[]> {
+    const snapshot = await this.loadSnapshot(kitVersionId, q ?? this.db);
+    return snapshot.questions;
+  }
+
+  private async loadTranscript(sessionId: string, q?: Queryable): Promise<SessionTranscript[]> {
+    const queryable = q ?? this.db;
+    const result = await queryable.query(
+      `SELECT id, session_id, question_id, question_prompt, answer_text, answer_data, position, evidence_span, created_at, answered_at
+       FROM session_transcript
+       WHERE session_id = $1
+       ORDER BY position ASC, created_at ASC`,
+      [sessionId],
+    );
+    return result.rows.map((row) => ({
+      id: row.id as string,
+      sessionId: row.session_id as string,
+      questionId: row.question_id as string,
+      questionPrompt: row.question_prompt as string,
+      answerText: row.answer_text as string | null,
+      answerData: (row.answer_data ?? null) as SessionTranscript['answerData'],
+      position: row.position as number,
+      evidenceSpan: (row.evidence_span ?? []) as Array<{
+        start: number;
+        end: number;
+        transcriptId: string;
+      }>,
+      createdAt: (row.created_at as Date).toISOString(),
+      answeredAt: row.answered_at ? (row.answered_at as Date).toISOString() : null,
+    }));
+  }
+
   private async advanceStatus(
     q: Queryable,
     session: InterviewSession,
@@ -574,7 +880,7 @@ export class AsyncVideoInterviewsService {
 
   private async listScores(sessionId: string, q: Queryable): Promise<AsyncReviewScoreRow[]> {
     const result = await q.query(
-      `SELECT id, session_id, question_id, score, remarks, reviewed_by, created_at, updated_at
+      `SELECT id, session_id, question_id, score, remarks, reviewed_by, source, scorer_id, created_at, updated_at
        FROM async_video_review_score
        WHERE session_id = $1
        ORDER BY created_at ASC`,
@@ -591,6 +897,8 @@ export class AsyncVideoInterviewsService {
       score: row.score as number | null,
       remarks: row.remarks as string | null,
       reviewedBy: row.reviewed_by as string | null,
+      source: row.source as 'human' | 'ai_prefill' | undefined,
+      scorerId: row.scorer_id as string | null | undefined,
       createdAt: (row.created_at as Date).toISOString(),
       updatedAt: (row.updated_at as Date).toISOString(),
     };

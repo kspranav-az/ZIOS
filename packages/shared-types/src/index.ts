@@ -662,6 +662,8 @@ export interface AsyncVideoReviewScore {
   score: number | null;
   remarks: string | null;
   reviewedBy: string | null;
+  source?: 'human' | 'ai_prefill';
+  scorerId?: string | null;
   createdAt: string;
   updatedAt: string;
 }

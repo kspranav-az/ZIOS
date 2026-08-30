@@ -23,6 +23,7 @@ describe('session state machine', () => {
       ['live', 'abandoned'],
       ['abandoned', 'invited'],
       ['abandoned', 'consented'],
+      ['completed', 'scoring'],
       ['scoring', 'reported'],
       ['reported', 'reviewed'],
     ];
