@@ -148,15 +148,29 @@ describe.runIf(INTEGRATION_AVAILABLE)('Async video interviews', () => {
     };
     expect(uploadBody.recordingUri).toContain('http');
     expect(uploadBody.checksum).toBeTruthy();
-    expect(uploadBody.transcript).toBeTruthy();
 
-    const jobRows = await test.db.query(
-      `SELECT status, result FROM transcription_job WHERE transcript_id = $1`,
-      [uploadBody.transcriptId],
-    );
+    // The upload response no longer includes the transcript; it is processed
+    // asynchronously by the background worker. Poll until the job completes.
+    let jobRows = { rows: [] as Array<{ status: string; result: string | null }> };
+    for (let i = 0; i < 20; i += 1) {
+      jobRows = await test.db.query(
+        `SELECT status, result FROM transcription_job WHERE transcript_id = $1`,
+        [uploadBody.transcriptId],
+      );
+      if (jobRows.rows[0]?.status === 'completed') break;
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
     expect(jobRows.rows).toHaveLength(1);
     expect(jobRows.rows[0]?.status).toBe('completed');
     expect(typeof jobRows.rows[0]?.result).toBe('string');
+
+    const transcriptRow = await test.db.query(
+      `SELECT answer_data -> 'videoAnswer' ->> 'transcript' AS transcript
+       FROM session_transcript
+       WHERE id = $1`,
+      [uploadBody.transcriptId],
+    );
+    expect(transcriptRow.rows[0]?.transcript).toBeTruthy();
 
     const reviewRes = await fetch(
       `${test.baseUrl}/async-video-interviews/${created.sessionId}/review`,

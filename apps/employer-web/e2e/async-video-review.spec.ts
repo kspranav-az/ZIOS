@@ -52,7 +52,7 @@ test.describe('async video review', () => {
       name: 'E2E Async Candidate',
       email: candidate,
     });
-    await seedAsyncVideoAnswers(created, recoveryToken);
+    await seedAsyncVideoAnswers(created, recoveryToken, { waitForTranscription: true });
 
     await signInAsAdminWithToken(page, adminToken);
     await page.goto(`/interviews/${created.sessionId}/async-review`);
