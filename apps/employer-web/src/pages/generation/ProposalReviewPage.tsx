@@ -90,30 +90,32 @@ export function ProposalReviewPage() {
   }
 
   function updateQuestion(index: number, patch: Partial<ProposedQuestion>, fieldName: string) {
-    if (!proposal) return;
-    const oldValue = proposal.questions[index];
-    if (!oldValue) return;
-    const updated = { ...oldValue, ...patch } as ProposedQuestion;
-    const newQuestions = [...proposal.questions];
-    newQuestions[index] = updated;
-    setProposalData((prev) =>
-      prev
-        ? {
-            ...prev,
-            proposal: {
-              ...prev.proposal,
-              questions: newQuestions,
-            },
-          }
-        : prev,
-    );
-    recordEdit({
-      field: fieldName,
-      questionIndex: index,
-      oldValue: (oldValue as unknown as Record<string, unknown>)[fieldName],
-      newValue: (patch as unknown as Record<string, unknown>)[fieldName],
-      at: new Date().toISOString(),
+    setProposalData((prev) => {
+      if (!prev) return prev;
+      const oldValue = prev.proposal.questions[index];
+      if (!oldValue) return prev;
+      const updated = { ...oldValue, ...patch } as ProposedQuestion;
+      const newQuestions = [...prev.proposal.questions];
+      newQuestions[index] = updated;
+      return {
+        ...prev,
+        proposal: {
+          ...prev.proposal,
+          questions: newQuestions,
+        },
+      };
     });
+    // Audit trail: compute the edit against the latest state via a snapshot read.
+    const current = proposalData?.proposal.questions[index];
+    if (current) {
+      recordEdit({
+        field: fieldName,
+        questionIndex: index,
+        oldValue: (current as unknown as Record<string, unknown>)[fieldName],
+        newValue: (patch as unknown as Record<string, unknown>)[fieldName],
+        at: new Date().toISOString(),
+      });
+    }
   }
 
   async function handleRegenerate(index: number) {

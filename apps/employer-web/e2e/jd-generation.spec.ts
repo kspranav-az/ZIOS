@@ -84,11 +84,28 @@ test.describe('JD generation', () => {
     await firstTopic.fill('Edited Topic');
 
     // 6. Confirm review and publish.
+    const publishPromise = page.waitForRequest((req) =>
+      req.url().includes(`/generation/${generationId}/publish`),
+    );
     await page.getByLabel(/I have reviewed this AI-generated proposal/i).check();
     await page.getByRole('button', { name: /Publish kit/i }).click();
+    const publishReq = await publishPromise;
+    const publishBody = (await publishReq.postDataJSON()) as {
+      proposal?: { questions?: Array<{ prompt: string; topic: string }> };
+    };
+    const firstQuestionBody = publishBody.proposal?.questions?.[0];
+    expect(firstQuestionBody?.prompt).toBe('Edited prompt for the first generated question.');
+    expect(firstQuestionBody?.topic).toBe('Edited Topic');
 
     // 7. Assert navigation to the new kit builder and that edits persisted.
     await expect(page).toHaveURL(/\/kits\/.+$/);
-    await expect(page.getByText('Edited prompt for the first generated question.')).toBeVisible();
+    const firstQuestion = page.locator('[data-question-id]').first();
+    await expect(firstQuestion).toBeVisible();
+    await expect(
+      firstQuestion.getByText('Edited prompt for the first generated question.'),
+    ).toBeVisible();
+    // Topic is stored in a collapsed input; verify its value by expanding the card.
+    await firstQuestion.getByRole('button', { name: /Expand question 1/i }).click();
+    await expect(firstQuestion.locator('input[id^="topic-"]').first()).toHaveValue('Edited Topic');
   });
 });
