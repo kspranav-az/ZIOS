@@ -61,6 +61,13 @@ export async function cleanupRoleQuestions(roleName: string): Promise<void> {
   await query('DELETE FROM role_based_questions WHERE role_name = $1', [roleName]);
 }
 
+export async function seedCredits(orgId: string, amount: number = 1000): Promise<void> {
+  await query(`UPDATE org SET credits_balance = credits_balance + $1 WHERE id = $2`, [
+    amount,
+    orgId,
+  ]);
+}
+
 export async function createAsyncVideoInterview(
   adminToken: string,
   roleId: number,

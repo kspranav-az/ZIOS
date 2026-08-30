@@ -12,7 +12,7 @@ const ZETHEETA_ORG_ID = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11';
 exports.up = async (pgm) => {
   pgm.sql(`
     INSERT INTO org (id, name, plan, credits_balance, created_at)
-    VALUES ('${ZETHEETA_ORG_ID}', 'Zetheta', 'enterprise', 0, now())
+    VALUES ('${ZETHEETA_ORG_ID}', 'Zetheta', 'enterprise', 10000, now())
     ON CONFLICT (id) DO NOTHING;
   `);
 };

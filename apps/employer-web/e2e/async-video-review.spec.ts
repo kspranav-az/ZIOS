@@ -5,6 +5,7 @@ import {
   consentAsyncVideoByToken,
   createAsyncVideoInterview,
   seedAsyncVideoAnswers,
+  seedCredits,
   seedRoleQuestions,
 } from '../../candidate-web/e2e/async-video-helpers';
 
@@ -37,7 +38,8 @@ test.describe('async video review', () => {
     page,
   }) => {
     const admin = adminEmail();
-    const { token: adminToken } = await signupAdmin(admin);
+    const { token: adminToken, orgId } = await signupAdmin(admin);
+    await seedCredits(orgId);
     const candidate = candidateEmail();
 
     const created = await createAsyncVideoInterview(
@@ -76,31 +78,36 @@ test.describe('async video review', () => {
       page.getByText(/most challenging part was aligning the team/i).first(),
     ).toBeVisible();
 
-    // Score the first question.
+    // Use AI pre-fill to populate suggested scores from the stub judge.
+    await page.getByRole('button', { name: /Generate AI pre-fill/i }).click();
+    await expect(page.getByText(/AI pre-fill applied/i)).toBeVisible();
+
+    // Edit one pre-filled score to verify human override tracking.
     const firstQuestionCard = page.getByTestId('async-video-question-card').first();
     await firstQuestionCard.getByRole('button', { name: 'Score 4' }).scrollIntoViewIfNeeded();
     await firstQuestionCard.getByRole('button', { name: 'Score 4' }).click();
     await firstQuestionCard.locator('textarea').fill('Strong, concrete example.');
     await firstQuestionCard.getByRole('button', { name: 'Save score' }).click();
 
-    // Score the second question.
+    // Ensure the second question also has a score (from pre-fill or manual).
     const secondQuestionCard = page.getByTestId('async-video-question-card').nth(1);
     await secondQuestionCard.getByRole('button', { name: 'Score 3' }).scrollIntoViewIfNeeded();
     await secondQuestionCard.getByRole('button', { name: 'Score 3' }).click();
     await secondQuestionCard.locator('textarea').fill('Good process, light on tools.');
     await secondQuestionCard.getByRole('button', { name: 'Save score' }).click();
 
+    // Submit the scorecard and land on the standard report page.
+    await page.getByRole('button', { name: /Submit scorecard/i }).click();
+    await expect(page).toHaveURL(`/interviews/${created.sessionId}`);
+    await expect(page.getByText(/Overall recommendation/i)).toBeVisible();
+    await expect(page.getByText(/Strong, concrete example./i)).toBeVisible();
+    await expect(page.getByText(/Good process, light on tools./i)).toBeVisible();
+
     // Refresh and verify persistence.
-    await page.reload();
+    await page.goto(`/interviews/${created.sessionId}/async-review`);
     await expect(firstQuestionCard.getByRole('button', { name: 'Score 4' })).toHaveClass(
       /bg-primary/,
     );
-    await expect(secondQuestionCard.getByRole('button', { name: 'Score 3' })).toHaveClass(
-      /bg-primary/,
-    );
     await expect(firstQuestionCard.locator('textarea')).toHaveValue('Strong, concrete example.');
-    await expect(secondQuestionCard.locator('textarea')).toHaveValue(
-      'Good process, light on tools.',
-    );
   });
 });

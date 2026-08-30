@@ -93,7 +93,7 @@ async function signupAdmin(email) {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ ids: [mail.id] }),
   });
-  return { token: body.session.token, code };
+  return { token: body.session.token, code, orgId: body.org.id };
 }
 
 async function seedRoleQuestions(roleId, roleName) {
@@ -138,8 +138,15 @@ async function main() {
   const roleName = `Async Validation Role ${tag}`;
 
   console.log('1. Creating admin...');
-  const { token: adminToken } = await signupAdmin(adminEmail);
+  const { token: adminToken, orgId } = await signupAdmin(adminEmail);
   console.log(`   admin: ${adminEmail}`);
+
+  console.log('1b. Seeding credits for admin org...');
+  await dbQuery(`UPDATE org SET credits_balance = credits_balance + $1 WHERE id = $2`, [
+    1000,
+    orgId,
+  ]);
+  console.log(`   credited 1000 to org ${orgId}`);
 
   console.log('2. Seeding role-based questions...');
   await seedRoleQuestions(roleId, roleName);
