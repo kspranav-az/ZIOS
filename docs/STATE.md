@@ -1,6 +1,6 @@
 # State — InterviewOS / Meridian MVP
 
-**Snapshot date:** 2026-08-30 · **HEAD:** `92dcaac` (`docs(state): update async-video transcription worker + DLQ status`) · **Tag:** `phase-09-complete`, `v0.1.0-mvp0-mock`
+**Snapshot date:** 2026-08-30 · **HEAD:** `7a0dc50` (`feat(queue): add Redis client provider for BullMQ worker`) · **Tag:** `phase-09-complete`, `v0.1.0-mvp0-mock`
 
 This file records the current implementation state, what is proven, what is not, and where the blockers are.
 
