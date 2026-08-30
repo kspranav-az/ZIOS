@@ -11,6 +11,6 @@ import { OrgService } from './org.service';
   imports: [UsersModule, NotificationsModule],
   controllers: [OrgController],
   providers: [OrgRepository, OrgService, InvitesRepository, InvitesService],
-  exports: [OrgService],
+  exports: [OrgService, OrgRepository],
 })
 export class OrgModule {}

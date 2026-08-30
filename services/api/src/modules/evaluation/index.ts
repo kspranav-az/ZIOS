@@ -4,5 +4,8 @@ export { JUDGE_PORT, type JudgePort, type JudgeResult } from './judge.port';
 export { JudgeEnsembleAdapter } from './judge-ensemble.adapter';
 export { StubJudgeAdapter } from './stub-judge.adapter';
 export { computeCommunicationMetrics } from './metrics';
+export { EvaluationRepository } from './evaluation.repository';
+export { EvaluationScoreRepository } from './score.repository';
+export { EvidenceSpanRepository } from './evidence-span.repository';
 export { buildScoringUnits, type ScoringUnit } from './segmenter';
 export { InterviewNotesRepository } from './notes.repository';

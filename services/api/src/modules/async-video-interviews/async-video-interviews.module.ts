@@ -1,7 +1,9 @@
 import { Module } from '@nestjs/common';
 import { CandidatesModule } from '@/modules/candidates';
 import { ConsentModule } from '@/modules/consent';
+import { CreditsModule } from '@/modules/credits';
 import { DatabaseModule } from '@/modules/database';
+import { EvaluationModule } from '@/modules/evaluation';
 import { InvitesModule } from '@/modules/invites';
 import {
   KitsModule,
@@ -25,6 +27,8 @@ import { TranscriptionDlqService } from './transcription-dlq.service';
     DatabaseModule,
     CandidatesModule,
     ConsentModule,
+    CreditsModule,
+    EvaluationModule,
     KitsModule,
     InvitesModule,
     SessionsModule,

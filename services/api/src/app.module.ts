@@ -9,6 +9,7 @@ import { GenerationModule } from '@/modules/generation';
 import { HealthModule } from '@/modules/health';
 import { InvitesModule } from '@/modules/invites';
 import { KitsModule } from '@/modules/kits';
+import { CreditsModule } from '@/modules/credits';
 import { OrgModule } from '@/modules/org';
 import { QuestionBankModule } from '@/modules/question-bank';
 import { IntegrityModule } from '@/modules/integrity';
@@ -38,6 +39,7 @@ import { AsyncVideoInterviewsModule } from '@/modules/async-video-interviews';
     DatabaseModule,
     UsersModule,
     OrgModule,
+    CreditsModule,
     AuthModule,
     HealthModule,
     QuestionBankModule,

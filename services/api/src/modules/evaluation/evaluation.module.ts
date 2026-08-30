@@ -32,6 +32,12 @@ import { JUDGE_PORT } from './judge.port';
     ShareLinkService,
     { provide: JUDGE_PORT, useClass: JudgeEnsembleAdapter },
   ],
-  exports: [EvaluationService],
+  exports: [
+    EvaluationService,
+    EvaluationRepository,
+    EvaluationScoreRepository,
+    EvidenceSpanRepository,
+    JUDGE_PORT,
+  ],
 })
 export class EvaluationModule {}

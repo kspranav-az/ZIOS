@@ -39,4 +39,28 @@ export class OrgRepository {
     const row = result.rows[0] as OrgRow | undefined;
     return row ? mapOrgRow(row) : null;
   }
+
+  /**
+   * Atomically adjusts credits_balance by delta and returns the new balance.
+   * Throws if the resulting balance would be negative.
+   */
+  async adjustCredits(
+    id: string,
+    delta: number,
+    q: Queryable = this.db,
+  ): Promise<{ id: string; creditsBalance: number }> {
+    const result = await q.query(
+      `UPDATE "org"
+       SET credits_balance = credits_balance + $2
+       WHERE id = $1
+         AND credits_balance + $2 >= 0
+       RETURNING id, credits_balance`,
+      [id, delta],
+    );
+    const row = result.rows[0] as { id: string; credits_balance: number } | undefined;
+    if (!row) {
+      throw new Error(`insufficient credits or org not found: ${id}`);
+    }
+    return { id: row.id, creditsBalance: row.credits_balance };
+  }
 }
