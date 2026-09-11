@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AnalysisModule } from '@/modules/analysis';
 import { CandidatesModule } from '@/modules/candidates';
 import { ConsentModule } from '@/modules/consent';
 import { CreditsModule } from '@/modules/credits';
@@ -25,6 +26,7 @@ import { TranscriptionDlqService } from './transcription-dlq.service';
 @Module({
   imports: [
     DatabaseModule,
+    AnalysisModule,
     CandidatesModule,
     ConsentModule,
     CreditsModule,

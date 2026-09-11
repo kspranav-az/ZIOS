@@ -3,12 +3,11 @@ import type {
   InterviewSession,
   VoiceFallbackBody,
   VoiceFallbackResponse,
-  VoiceTelemetryBody,
   VoiceTokenResponse,
 } from '@zios/shared-types';
 import { ApiException } from '@/common/errors';
 import { Public } from '@/common/decorators';
-import { VoiceService } from './voice.service';
+import { VoiceService, type VoiceTelemetryPayload } from './voice.service';
 
 function recoveryToken(header: string | undefined): string {
   if (!header) {
@@ -48,7 +47,7 @@ export class VoiceController {
   async telemetry(
     @Param('id') id: string,
     @Headers('x-recovery-token') recovery: string | undefined,
-    @Body() body: VoiceTelemetryBody,
+    @Body() body: VoiceTelemetryPayload,
   ): Promise<InterviewSession> {
     return this.service.recordTelemetry(id, recoveryToken(recovery), body);
   }

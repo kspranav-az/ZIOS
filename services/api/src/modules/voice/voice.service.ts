@@ -1,4 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { PinoLogger } from 'nestjs-pino';
 import type {
   InterviewSession,
   SessionTurnResponse,
@@ -10,12 +11,38 @@ import type {
 import { DatabaseService, type Queryable } from '@/modules/database';
 import { ApiException } from '@/common/errors';
 import { TokenService } from '@/common/tokens';
+import { AnalysisService, type AnalysisJobRecord } from '@/modules/analysis';
+import { ConsentService } from '@/modules/consent';
 import {
   INTERVIEWER_AI,
   type InterviewerAi,
   SessionsRepository,
   TranscriptRepository,
 } from '@/modules/sessions';
+
+/**
+ * Recording notification the orchestrator attaches to the final voice
+ * telemetry call after uploading the session recording to object storage
+ * (Phase 14). Kept local because @zios/shared-types' VoiceTelemetryBody only
+ * models the per-turn payload.
+ */
+export interface VoiceRecordingNotification {
+  objectName?: string;
+  storageRef?: string;
+  uri?: string;
+}
+
+export type VoiceTelemetryPayload = VoiceTelemetryBody & {
+  recording?: VoiceRecordingNotification;
+};
+
+/** Extracts the storage object name from a telemetry recording ref. */
+export function recordingObjectName(body: VoiceTelemetryPayload): string | null {
+  const recording = body.recording;
+  if (!recording) return null;
+  const objectName = recording.objectName ?? recording.storageRef;
+  return typeof objectName === 'string' && objectName.length > 0 ? objectName : null;
+}
 
 interface OrchestratorTokenPayload {
   sessionId: string;
@@ -38,9 +65,13 @@ export class VoiceService {
     private readonly db: DatabaseService,
     private readonly sessions: SessionsRepository,
     private readonly transcript: TranscriptRepository,
+    private readonly analysis: AnalysisService,
+    private readonly consent: ConsentService,
+    private readonly logger: PinoLogger,
     @Inject(INTERVIEWER_AI) private readonly conductor: InterviewerAi,
   ) {
     this.orchestratorBaseUrl = process.env.ORCHESTRATOR_URL ?? 'http://ai-orchestrator:8000';
+    this.logger.setContext(VoiceService.name);
   }
 
   async issueToken(sessionId: string, recoveryToken: string): Promise<VoiceTokenResponse> {
@@ -114,9 +145,9 @@ export class VoiceService {
   async recordTelemetry(
     sessionId: string,
     recoveryToken: string,
-    body: VoiceTelemetryBody,
+    body: VoiceTelemetryPayload,
   ): Promise<InterviewSession> {
-    return this.db.transaction(async (q) => {
+    const { session, analysisJob } = await this.db.transaction(async (q) => {
       const session = await this.loadAuthorizedSession(sessionId, recoveryToken, q);
       await this.sessions.updateStatus(session.id, session.status, q, {
         preflightReport: {
@@ -124,8 +155,59 @@ export class VoiceService {
           lastVoiceTelemetry: body.turn,
         },
       });
-      return (await this.sessions.findById(sessionId, q)) as InterviewSession;
+
+      // Phase 14: the orchestrator attaches the uploaded session recording to
+      // the final telemetry call; enqueue multimodal (audio) analysis for it.
+      // Failure-isolated: analysis enqueue must never break telemetry ingest.
+      let analysisJob: AnalysisJobRecord | null = null;
+      const objectName = recordingObjectName(body);
+      if (objectName) {
+        try {
+          const consentArtifact =
+            (await this.consent.findBySessionId(sessionId, q)) ??
+            (session.inviteId ? await this.consent.findByInviteId(session.inviteId, q) : null);
+          if (consentArtifact && !consentArtifact.withdrawnAt) {
+            analysisJob = await this.analysis.enqueueRecordingAnalysis(
+              {
+                sessionId,
+                inviteId: session.inviteId,
+                objectName,
+                mediaKind: 'audio',
+                includeTranscript: true,
+              },
+              q,
+            );
+          } else {
+            this.logger.warn(
+              { sessionId, objectName },
+              'voice recording received without a consent artifact; analysis not enqueued',
+            );
+          }
+        } catch (error) {
+          this.logger.warn(
+            { sessionId, objectName, err: error },
+            'failed to enqueue voice recording analysis',
+          );
+        }
+      }
+
+      const refreshed = (await this.sessions.findById(sessionId, q)) as InterviewSession;
+      return { session: refreshed, analysisJob };
     });
+
+    // Enqueue the BullMQ job only after the telemetry transaction commits.
+    if (analysisJob) {
+      try {
+        await this.analysis.enqueueAfterCommit(analysisJob);
+      } catch (error) {
+        this.logger.warn(
+          { sessionId, analysisJobId: analysisJob.id, err: error },
+          'failed to enqueue voice recording analysis job',
+        );
+      }
+    }
+
+    return session;
   }
 
   private async loadAuthorizedSession(

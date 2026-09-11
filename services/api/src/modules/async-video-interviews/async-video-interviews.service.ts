@@ -18,12 +18,16 @@ import { InvitesRepository } from '@/modules/invites';
 import { KitVersionsRepository } from '@/modules/kits';
 import { SessionsRepository, TranscriptRepository, transition } from '@/modules/sessions';
 import { CreditsService } from '@/modules/credits';
-import { EvaluationRepository } from '@/modules/evaluation';
-import { EvaluationScoreRepository } from '@/modules/evaluation/score.repository';
-import { EvidenceSpanRepository } from '@/modules/evaluation/evidence-span.repository';
-import { computeCommunicationMetrics } from '@/modules/evaluation/metrics';
-import { JUDGE_PORT, type JudgePort } from '@/modules/evaluation/judge.port';
+import {
+  EvaluationRepository,
+  EvaluationScoreRepository,
+  EvidenceSpanRepository,
+  computeCommunicationMetrics,
+  JUDGE_PORT,
+  type JudgePort,
+} from '@/modules/evaluation';
 import { StorageClient } from '@/modules/storage';
+import { AnalysisService, type AnalysisJobRecord } from '@/modules/analysis';
 import { AsyncVideoTranscriptionService } from './transcription.service';
 import { RoleKitResolverService } from './role-kit-resolver.service';
 import { TranscriptionQueue } from './transcription.queue';
@@ -46,7 +50,33 @@ export interface CreateAsyncVideoInterviewInput {
   expiresInDays?: number;
   maxDurationSec?: number;
   enableTranscription?: boolean;
+  enableAnalysis?: boolean;
   enableProctoring?: boolean;
+}
+
+export interface PostUploadPlan {
+  /** Enqueue a multimodal_feature_extraction analysis job (default on). */
+  analysis: boolean;
+  /** Ask the orchestrator to also produce a transcript (written back to the answer row). */
+  includeTranscript: boolean;
+  /** Use the legacy transcription_job path (only when analysis is disabled). */
+  legacyTranscription: boolean;
+}
+
+/**
+ * Post-upload processing plan for a video answer, derived from invite
+ * metadata. Analysis is the default (Phase 14); `enableAnalysis: false`
+ * keeps the legacy transcription-only path for older invite configurations.
+ */
+export function resolvePostUploadPlan(
+  metadata: Record<string, unknown> | undefined,
+): PostUploadPlan {
+  const enableAnalysis = metadata?.enableAnalysis !== false;
+  const enableTranscription = metadata?.enableTranscription === true;
+  if (enableAnalysis) {
+    return { analysis: true, includeTranscript: enableTranscription, legacyTranscription: false };
+  }
+  return { analysis: false, includeTranscript: false, legacyTranscription: enableTranscription };
 }
 
 export interface AsyncVideoInterviewCreated {
@@ -138,6 +168,7 @@ export class AsyncVideoInterviewsService {
     private readonly transcription: AsyncVideoTranscriptionService,
     private readonly roleKitResolver: RoleKitResolverService,
     private readonly transcriptionQueue: TranscriptionQueue,
+    private readonly analysis: AnalysisService,
     private readonly credits: CreditsService,
     @Inject(JUDGE_PORT) private readonly judge: JudgePort,
     private readonly reports: EvaluationRepository,
@@ -208,6 +239,7 @@ export class AsyncVideoInterviewsService {
             asyncVideo: true,
             maxDurationSec,
             enableTranscription: input.enableTranscription === true,
+            enableAnalysis: input.enableAnalysis !== false,
             enableProctoring: input.enableProctoring === true,
           },
         },
@@ -400,8 +432,22 @@ export class AsyncVideoInterviewsService {
       );
 
       let transcriptionEnqueued = false;
-      const enableTranscription = await this.isTranscriptionEnabled(session.inviteId, q);
-      if (enableTranscription) {
+      let analysisJob: AnalysisJobRecord | null = null;
+      const inviteMetadata = await this.loadInviteMetadata(session.inviteId, q);
+      const plan = resolvePostUploadPlan(inviteMetadata);
+      if (plan.analysis) {
+        analysisJob = await this.analysis.enqueueMultimodalAnalysis(
+          {
+            sessionId,
+            questionId,
+            inviteId: session.inviteId,
+            objectName,
+            mediaKind: 'video',
+            includeTranscript: plan.includeTranscript,
+          },
+          q,
+        );
+      } else if (plan.legacyTranscription) {
         const jobId = randomUUID();
         await q.query(
           `INSERT INTO transcription_job (id, transcript_id, object_name, status)
@@ -433,6 +479,7 @@ export class AsyncVideoInterviewsService {
         checksum,
         completed,
         transcriptionEnqueued,
+        analysisJob,
         objectName,
         sessionId,
         questionId,
@@ -442,7 +489,9 @@ export class AsyncVideoInterviewsService {
 
     // 2. Enqueue the background job only after the transaction has committed so
     //    the worker never races with an uncommitted answer row.
-    if (uploadResult.transcriptionEnqueued) {
+    if (uploadResult.analysisJob) {
+      await this.analysis.enqueueAfterCommit(uploadResult.analysisJob);
+    } else if (uploadResult.transcriptionEnqueued) {
       await this.transcriptionQueue.add({
         transcriptId: uploadResult.transcriptId,
         objectName: uploadResult.objectName,
@@ -871,11 +920,12 @@ export class AsyncVideoInterviewsService {
     return typeof value === 'number' && value > 0 ? value : DEFAULT_MAX_DURATION_SEC;
   }
 
-  private async isTranscriptionEnabled(inviteId: string, q: Queryable): Promise<boolean> {
+  private async loadInviteMetadata(
+    inviteId: string,
+    q: Queryable,
+  ): Promise<Record<string, unknown> | undefined> {
     const result = await q.query('SELECT metadata FROM invite WHERE id = $1', [inviteId]);
-    const metadata = (result.rows[0] as { metadata: Record<string, unknown> } | undefined)
-      ?.metadata;
-    return metadata?.enableTranscription === true;
+    return (result.rows[0] as { metadata: Record<string, unknown> } | undefined)?.metadata;
   }
 
   private async listScores(sessionId: string, q: Queryable): Promise<AsyncReviewScoreRow[]> {

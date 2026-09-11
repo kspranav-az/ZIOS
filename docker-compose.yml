@@ -146,6 +146,9 @@ services:
       PREVIEW_TOKEN_SECRET: ${PREVIEW_TOKEN_SECRET:-interviewos-local-preview-secret}
       # Phase 07: voice orchestrator endpoint
       ORCHESTRATOR_URL: http://ai-orchestrator:8000
+      # Phase 14: multimodal analysis pipeline (BullMQ queue + HTTP timeout)
+      ANALYSIS_QUEUE_NAME: ${ANALYSIS_QUEUE_NAME:-analysis}
+      ANALYSIS_HTTP_TIMEOUT_MS: ${ANALYSIS_HTTP_TIMEOUT_MS:-600000}
       # Phase 07/09: external WebRTC signalling URL returned to browsers
       LIVEKIT_URL: ${LIVEKIT_URL:-ws://localhost:7880}
       # Object storage (MinIO) — used by video answers, media, reports
