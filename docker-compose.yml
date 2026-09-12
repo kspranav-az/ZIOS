@@ -245,6 +245,16 @@ services:
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
       MINIO_BUCKET_MEDIA: ${MINIO_BUCKET_MEDIA}
       MINIO_SECURE: 'false'
+      # Phase 14: multimodal analysis pipeline (STT selection + tuning knobs)
+      STT_ADAPTER: ${STT_ADAPTER:-mock}
+      GCP_PROJECT_ID: ${GCP_PROJECT_ID:-}
+      GCP_LOCATION: ${GCP_LOCATION:-global}
+      GCP_STT_CONFIG: ${GCP_STT_CONFIG:-}
+      VIDEO_ANALYSIS_FPS: ${VIDEO_ANALYSIS_FPS:-5}
+      VIDEO_ANALYSIS_WIDTH: ${VIDEO_ANALYSIS_WIDTH:-854}
+      VAD_THRESHOLD: ${VAD_THRESHOLD:-0.5}
+      ANALYSIS_WINDOW_SEC: ${ANALYSIS_WINDOW_SEC:-10}
+      FILLER_WORDS: ${FILLER_WORDS:-um,uh,erm,like,you know,actually,basically,sort of}
     ports:
       - '${ORCHESTRATOR_PORT}:8000'
     healthcheck:
