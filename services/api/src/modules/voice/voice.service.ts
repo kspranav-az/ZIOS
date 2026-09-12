@@ -11,7 +11,11 @@ import type {
 import { DatabaseService, type Queryable } from '@/modules/database';
 import { ApiException } from '@/common/errors';
 import { TokenService } from '@/common/tokens';
-import { AnalysisService, type AnalysisJobRecord } from '@/modules/analysis';
+import {
+  AnalysisService,
+  type AnalysisJobRecord,
+  type AnalysisMediaKind,
+} from '@/modules/analysis';
 import { ConsentService } from '@/modules/consent';
 import {
   INTERVIEWER_AI,
@@ -30,10 +34,14 @@ export interface VoiceRecordingNotification {
   objectName?: string;
   storageRef?: string;
   uri?: string;
+  /** Python orchestrator field naming ('video' for video-mode WebM captures). */
+  media_kind?: string;
 }
 
 export type VoiceTelemetryPayload = VoiceTelemetryBody & {
   recording?: VoiceRecordingNotification;
+  /** Top-level media kind sent alongside the recording notification. */
+  media_kind?: string;
 };
 
 /** Extracts the storage object name from a telemetry recording ref. */
@@ -42,6 +50,22 @@ export function recordingObjectName(body: VoiceTelemetryPayload): string | null 
   if (!recording) return null;
   const objectName = recording.objectName ?? recording.storageRef;
   return typeof objectName === 'string' && objectName.length > 0 ? objectName : null;
+}
+
+/**
+ * Resolves the analysis media kind for a recording notification: video when
+ * the payload says so or the object is a WebM container, audio otherwise.
+ */
+export function recordingMediaKind(body: VoiceTelemetryPayload): AnalysisMediaKind {
+  const objectName = recordingObjectName(body);
+  if (
+    body.media_kind === 'video' ||
+    body.recording?.media_kind === 'video' ||
+    objectName?.endsWith('.webm')
+  ) {
+    return 'video';
+  }
+  return 'audio';
 }
 
 interface OrchestratorTokenPayload {
@@ -75,12 +99,15 @@ export class VoiceService {
   }
 
   async issueToken(sessionId: string, recoveryToken: string): Promise<VoiceTokenResponse> {
-    await this.db.transaction(async (q) => {
+    const session = await this.db.transaction(async (q) => {
       const row = await this.sessions.findById(sessionId, q);
       if (!row || row.recoveryTokenHash !== TokenService.hash(recoveryToken)) {
         throw new ApiException(401, 'RECOVERY_TOKEN_INVALID', 'recovery token is invalid');
       }
-      if (row.mode !== 'voice') {
+      // Video-mode interviews reuse this endpoint (the candidate web
+      // VideoInterviewPage shares the voice token + orchestrator WS flow);
+      // the mode is forwarded so the orchestrator can run video capture.
+      if (row.mode !== 'voice' && row.mode !== 'video') {
         throw new ApiException(409, 'SESSION_MODE_INVALID', 'session is not a voice interview');
       }
       return row;
@@ -89,7 +116,7 @@ export class VoiceService {
     const response = await fetch(`${this.orchestratorBaseUrl}/voice/sessions/${sessionId}/token`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ recoveryToken }),
+      body: JSON.stringify({ recoveryToken, mode: session.mode }),
     });
     if (!response.ok) {
       throw new ApiException(502, 'ORCHESTRATOR_ERROR', 'orchestrator failed to issue voice token');
@@ -157,7 +184,8 @@ export class VoiceService {
       });
 
       // Phase 14: the orchestrator attaches the uploaded session recording to
-      // the final telemetry call; enqueue multimodal (audio) analysis for it.
+      // the final telemetry call; enqueue multimodal analysis for it (audio
+      // for voice WAVs, video for video-mode WebM captures).
       // Failure-isolated: analysis enqueue must never break telemetry ingest.
       let analysisJob: AnalysisJobRecord | null = null;
       const objectName = recordingObjectName(body);
@@ -172,7 +200,7 @@ export class VoiceService {
                 sessionId,
                 inviteId: session.inviteId,
                 objectName,
-                mediaKind: 'audio',
+                mediaKind: recordingMediaKind(body),
                 includeTranscript: true,
               },
               q,

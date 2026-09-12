@@ -51,6 +51,7 @@ class VoiceSessionService:
         tts: TtsPort,
         conductor: ConductorClient,
         language: str = "en",
+        mode: str = "voice",
     ) -> None:
         self.state = VoiceSessionState(session_id=session_id, room_name=room_name)
         self.recovery_token = recovery_token
@@ -58,6 +59,9 @@ class VoiceSessionService:
         self.tts = tts
         self.conductor = conductor
         self.language = language
+        # Interview mode reported by the API ("voice" | "video"); video-mode
+        # sessions additionally run a LiveKit track capture (Phase 14).
+        self.mode = mode
         self._shutting_down = False
 
     async def _classify_intent(self, turn_index: int, transcript: str) -> TurnIntent:

@@ -14,6 +14,7 @@ from livekit.api import AccessToken, VideoGrants
 
 from app.conductor_client import ConductorClient
 from app.storage import StorageClient
+from app.video.capture import VideoCaptureSession, capture_enabled
 from app.voice.mock_stt import MockSttAdapter
 from app.voice.mock_tts import MockTtsAdapter
 from app.voice.service import VoiceSessionService
@@ -37,6 +38,9 @@ def _room_name(session_id: str) -> str:
 async def issue_voice_token(session_id: str, body: dict[str, Any]) -> dict[str, Any]:
     """Issue a LiveKit token and return orchestrator connection info."""
     recovery_token = body.get("recoveryToken", "")
+    # Interview mode reported by the API ("voice" | "video"); video-mode
+    # sessions additionally run a LiveKit track capture (Phase 14).
+    mode = body.get("mode", "voice")
     room_name = _room_name(session_id)
     token = (
         AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET)
@@ -63,6 +67,7 @@ async def issue_voice_token(session_id: str, body: dict[str, Any]) -> dict[str, 
             stt=MockSttAdapter(),
             tts=MockTtsAdapter(),
             conductor=ConductorClient(),
+            mode=mode,
         )
     return {
         "sessionId": session_id,
@@ -98,6 +103,28 @@ async def voice_stream(websocket: WebSocket, session_id: str) -> None:
 
     audio_queue: asyncio.Queue[bytes | None] = asyncio.Queue()
     audio_buffer = bytearray()
+
+    # Video-mode sessions additionally capture the candidate's LiveKit tracks
+    # (Phase 14). Capture is fail-safe: any error is logged and the interview
+    # continues with the audio-only recording path.
+    capture: VideoCaptureSession | None = None
+    if service.mode == "video" and capture_enabled():
+        capture = VideoCaptureSession(
+            session_id=session_id,
+            room_name=service.state.room_name,
+            livekit_url=LIVEKIT_URL,
+            api_key=LIVEKIT_API_KEY,
+            api_secret=LIVEKIT_API_SECRET,
+        )
+        try:
+            await capture.start()
+        except Exception as exc:
+            logger.warning(
+                "video_capture_start_failed",
+                session_id=session_id,
+                error=str(exc),
+            )
+            capture = None
 
     async def _receive() -> None:
         try:
@@ -151,20 +178,63 @@ async def voice_stream(websocket: WebSocket, session_id: str) -> None:
             await receive_task
         except asyncio.CancelledError:
             pass
-        # Persist the local audio buffer to S3-compatible storage (X8: captured
-        # only after consent; the API validated consent before issuing the token).
-        if audio_buffer:
-            try:
-                storage = StorageClient()
-                ref = storage.upload_recording(session_id, bytes(audio_buffer))
-                await service.conductor.telemetry(
+        await _persist_recording(service, audio_buffer, capture)
+
+
+async def _persist_recording(
+    service: VoiceSessionService,
+    audio_buffer: bytearray,
+    capture: VideoCaptureSession | None,
+) -> None:
+    """Upload the session recording and notify the API (X8: captured only
+    after consent; the API validated consent before issuing the token).
+
+    Video-mode captures produce a WebM (media_kind "video"); when capture
+    yields no usable media — or for plain voice sessions — the buffered
+    WS audio is uploaded as WAV (media_kind "audio"), preserving the
+    pre-existing behavior.
+    """
+    session_id = service.state.session_id
+    ref: dict[str, Any] | None = None
+    media_kind = "audio"
+    if capture is not None:
+        try:
+            webm = await capture.stop()
+            if webm:
+                ref = StorageClient().upload_recording(
                     session_id,
-                    service.recovery_token,
-                    {"recording": ref},
+                    webm,
+                    content_type="video/webm",
+                    extension=".webm",
                 )
-            except Exception as exc:
-                logger.warning(
-                    "recording_upload_failed",
-                    session_id=session_id,
-                    error=str(exc),
-                )
+                media_kind = "video"
+        except Exception as exc:
+            logger.warning(
+                "video_capture_upload_failed",
+                session_id=session_id,
+                error=str(exc),
+            )
+    if ref is None and audio_buffer:
+        try:
+            ref = StorageClient().upload_recording(session_id, bytes(audio_buffer))
+        except Exception as exc:
+            logger.warning(
+                "recording_upload_failed",
+                session_id=session_id,
+                error=str(exc),
+            )
+    if ref is None:
+        return
+    try:
+        await service.conductor.recording_notification(
+            session_id,
+            service.recovery_token,
+            ref,
+            media_kind=media_kind,
+        )
+    except Exception as exc:
+        logger.warning(
+            "recording_notification_failed",
+            session_id=session_id,
+            error=str(exc),
+        )
