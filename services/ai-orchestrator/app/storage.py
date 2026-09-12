@@ -68,3 +68,31 @@ class StorageClient:
             "checksum": {"algorithm": "sha256", "value": checksum},
             "sizeBytes": len(audio_bytes),
         }
+
+    def upload_analysis_artifact(
+        self,
+        session_id: str,
+        question_id: str | None,
+        name: str,
+        json_bytes: bytes,
+    ) -> dict[str, Any]:
+        """Persist one analysis artifact under the analysis/ prefix."""
+        self.ensure_bucket()
+        checksum = hashlib.sha256(json_bytes).hexdigest()
+        object_name = f"analysis/{session_id}/{question_id or 'session'}/{name}.json"
+        client = self._client_instance()
+        from io import BytesIO
+
+        client.put_object(
+            self.bucket,
+            object_name,
+            data=BytesIO(json_bytes),
+            length=len(json_bytes),
+            content_type="application/json",
+            metadata={"x-amz-meta-sha256": checksum},
+        )
+        return {
+            "objectName": object_name,
+            "checksum": {"algorithm": "sha256", "value": checksum},
+            "sizeBytes": len(json_bytes),
+        }

@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 
+from app.analysis.router import router as analysis_router
 from app.logging import CorrelationIdMiddleware, configure_logging
 from app.telemetry import init_tracing
 from app.video.router import router as video_router
@@ -12,6 +13,7 @@ app = FastAPI(title="ai-orchestrator")
 app.add_middleware(CorrelationIdMiddleware)
 app.include_router(voice_router)
 app.include_router(video_router)
+app.include_router(analysis_router)
 
 
 @app.get("/healthz")
