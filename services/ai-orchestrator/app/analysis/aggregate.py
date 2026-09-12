@@ -261,7 +261,7 @@ def aggregate_hands(
         features.gesture_frequency = valid_measurement(len(bursts) / duration)
         if bursts:
             # Burst durations in seconds via the median inter-sample spacing.
-            spacings = [b[1] - a[1] for a, b in pairwise(movements)]
+            spacings = [b[0] - a[0] for a, b in pairwise(movements)]
             spacing = statistics.median(spacings) if spacings else 0.0
             lengths = [(end - start + 1) * spacing for start, end in bursts]
             features.gesture_duration = valid_measurement(statistics.fmean(lengths))

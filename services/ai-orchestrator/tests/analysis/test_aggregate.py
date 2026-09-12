@@ -121,6 +121,7 @@ def test_hands_aggregation() -> None:
     assert features.hand_movement.valid
     assert features.gesture_frequency.valid
     assert features.gesture_duration.valid
+    assert features.gesture_duration.value >= 0.0
 
 
 def test_speech_aggregation_full() -> None:

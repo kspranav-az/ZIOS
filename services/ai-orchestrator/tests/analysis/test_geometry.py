@@ -86,6 +86,7 @@ def test_head_pose_centered_face_near_zero() -> None:
     pose = geometry.head_pose_from_landmarks(lm, width, height)
     assert pose is not None
     assert abs(pose.yaw) < 15.0
+    assert abs(pose.pitch) < 15.0
     assert abs(pose.roll) < 15.0
 
 

@@ -170,7 +170,13 @@ def head_pose_from_landmarks(
     if not ok:
         return None
     rotation_mat, _ = cv2.Rodrigues(rotation_vec)
-    return _euler_from_rotation(np.asarray(rotation_mat, dtype=np.float64))
+    # The generic face model is y-up while image coordinates are y-down, so a
+    # frontal face solves to a 180° flip about the x-axis. Express the pose
+    # relative to that frontal orientation so yaw/pitch/roll center on 0.
+    frontal: npt.NDArray[np.float64] = np.array(
+        [[1.0, 0.0, 0.0], [0.0, -1.0, 0.0], [0.0, 0.0, -1.0]], dtype=np.float64
+    )
+    return _euler_from_rotation(frontal @ np.asarray(rotation_mat, dtype=np.float64))
 
 
 def _euler_from_rotation(rotation: npt.NDArray[np.float64]) -> HeadPose:
