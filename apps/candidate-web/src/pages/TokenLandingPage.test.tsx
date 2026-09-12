@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { InterviewProvider } from '../InterviewContext';
+import { InterviewProvider, recoveryTokenKey, SESSION_ID_KEY } from '../InterviewContext';
 import { TokenLandingPage } from './TokenLandingPage';
 
 function createRouter(initialEntries: string[]) {
@@ -62,6 +62,7 @@ describe('TokenLandingPage routing decisions', () => {
   afterEach(() => {
     vi.unstubAllEnvs();
     vi.restoreAllMocks();
+    sessionStorage.clear();
   });
 
   it('navigates to /consent for a fresh invite', async () => {
@@ -157,6 +158,10 @@ describe('TokenLandingPage routing decisions', () => {
   });
 
   it('navigates to /interview when a live session exists', async () => {
+    // Rejoining requires the recovery token issued at consent (see 7c2b651):
+    // seed sessionStorage as if this device completed consent for session-1.
+    sessionStorage.setItem(SESSION_ID_KEY, 'session-1');
+    sessionStorage.setItem(recoveryTokenKey('session-1'), 'recovery-token-1');
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({
