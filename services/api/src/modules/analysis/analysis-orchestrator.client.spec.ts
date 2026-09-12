@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createServer, type Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { afterEach, describe, expect, it } from 'vitest';
 import {
   AnalysisOrchestratorClient,
   AnalysisOrchestratorError,
@@ -35,98 +37,145 @@ function successBody(request: AnalysisRequest) {
   };
 }
 
+type Handler = (req: { method?: string; url?: string; body: string }) => {
+  status: number;
+  body: string;
+  delayMs?: number;
+};
+
+/**
+ * The client uses node:http directly (not global fetch) so long analysis
+ * requests are not killed by undici's 300s headersTimeout; tests therefore
+ * run against a real loopback server.
+ */
+async function withServer(
+  handler: Handler,
+  run: (baseUrl: string) => Promise<void>,
+  captured?: { requests: { method?: string; url?: string; body: string }[] },
+): Promise<void> {
+  const server: Server = createServer((req, res) => {
+    let raw = '';
+    req.on('data', (chunk) => {
+      raw += chunk;
+    });
+    req.on('end', () => {
+      captured?.requests.push({ method: req.method, url: req.url, body: raw });
+      const out = handler({ method: req.method, url: req.url, body: raw });
+      const respond = () => {
+        // The client may have already destroyed the socket (timeout test).
+        res.on('error', () => {});
+        res.writeHead(out.status, { 'content-type': 'application/json' });
+        res.end(out.body);
+      };
+      if (out.delayMs) {
+        setTimeout(respond, out.delayMs);
+      } else {
+        respond();
+      }
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const { port } = server.address() as AddressInfo;
+  try {
+    await run(`http://127.0.0.1:${port}`);
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+}
+
 describe('AnalysisOrchestratorClient', () => {
   afterEach(() => {
-    vi.unstubAllGlobals();
     delete process.env.ORCHESTRATOR_URL;
     delete process.env.ANALYSIS_HTTP_TIMEOUT_MS;
   });
 
   it('parses the contract 200 payload', async () => {
-    process.env.ORCHESTRATOR_URL = 'http://orchestrator.test';
     const request = sampleRequest();
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify(successBody(request)), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      }),
+    const captured: { requests: { method?: string; url?: string; body: string }[] } = {
+      requests: [],
+    };
+    await withServer(
+      () => ({ status: 200, body: JSON.stringify(successBody(request)) }),
+      async (baseUrl) => {
+        process.env.ORCHESTRATOR_URL = baseUrl;
+        const client = new AnalysisOrchestratorClient();
+        const response = await client.analyze(request);
+        expect(response.schema_version).toBe('1.0.0');
+        expect(response.transcript_text).toBe('a full transcript');
+        expect(response.features).toEqual({ speech: { wpm: { value: 132, valid: true } } });
+      },
+      captured,
     );
-    vi.stubGlobal('fetch', fetchMock);
-
-    const client = new AnalysisOrchestratorClient();
-    const response = await client.analyze(request);
-
-    expect(fetchMock).toHaveBeenCalledOnce();
-    const [url, init] = fetchMock.mock.calls[0]!;
-    expect(url).toBe('http://orchestrator.test/analysis/video');
-    expect((init as RequestInit).method).toBe('POST');
-    expect(JSON.parse((init as RequestInit).body as string)).toEqual(request);
-    expect(response.schema_version).toBe('1.0.0');
-    expect(response.transcript_text).toBe('a full transcript');
-    expect(response.features).toEqual({ speech: { wpm: { value: 132, valid: true } } });
+    expect(captured.requests).toHaveLength(1);
+    expect(captured.requests[0]?.method).toBe('POST');
+    expect(captured.requests[0]?.url).toBe('/analysis/video');
+    expect(JSON.parse(captured.requests[0]?.body ?? '')).toEqual(request);
   });
 
   it('maps a 4xx/5xx with an error body to a typed error with parsed codes', async () => {
-    process.env.ORCHESTRATOR_URL = 'http://orchestrator.test';
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({ error_code: 'MEDIA_CORRUPT', error_message: 'bad media' }), {
-          status: 422,
-        }),
-      ),
+    await withServer(
+      () => ({
+        status: 422,
+        body: JSON.stringify({ error_code: 'MEDIA_CORRUPT', error_message: 'bad media' }),
+      }),
+      async (baseUrl) => {
+        process.env.ORCHESTRATOR_URL = baseUrl;
+        const client = new AnalysisOrchestratorClient();
+        const error = await client.analyze(sampleRequest()).catch((e: unknown) => e);
+        expect(error).toBeInstanceOf(AnalysisOrchestratorError);
+        const typed = error as AnalysisOrchestratorError;
+        expect(typed.status).toBe(422);
+        expect(typed.errorCode).toBe('MEDIA_CORRUPT');
+        expect(typed.errorMessage).toBe('bad media');
+      },
     );
-
-    const client = new AnalysisOrchestratorClient();
-    const error = await client.analyze(sampleRequest()).catch((e: unknown) => e);
-
-    expect(error).toBeInstanceOf(AnalysisOrchestratorError);
-    const typed = error as AnalysisOrchestratorError;
-    expect(typed.status).toBe(422);
-    expect(typed.errorCode).toBe('MEDIA_CORRUPT');
-    expect(typed.errorMessage).toBe('bad media');
   });
 
   it('falls back to HTTP_<status> when the error body is not JSON', async () => {
-    process.env.ORCHESTRATOR_URL = 'http://orchestrator.test';
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('bad gateway', { status: 502 })));
-
-    const client = new AnalysisOrchestratorClient();
-    const error = await client.analyze(sampleRequest()).catch((e: unknown) => e);
-
-    expect(error).toBeInstanceOf(AnalysisOrchestratorError);
-    const typed = error as AnalysisOrchestratorError;
-    expect(typed.status).toBe(502);
-    expect(typed.errorCode).toBe('HTTP_502');
-    expect(typed.errorMessage).toBe('bad gateway');
+    await withServer(
+      () => ({ status: 502, body: 'bad gateway' }),
+      async (baseUrl) => {
+        process.env.ORCHESTRATOR_URL = baseUrl;
+        const client = new AnalysisOrchestratorClient();
+        const error = await client.analyze(sampleRequest()).catch((e: unknown) => e);
+        expect(error).toBeInstanceOf(AnalysisOrchestratorError);
+        const typed = error as AnalysisOrchestratorError;
+        expect(typed.status).toBe(502);
+        expect(typed.errorCode).toBe('HTTP_502');
+        expect(typed.errorMessage).toBe('bad gateway');
+      },
+    );
   });
 
-  it('maps a timeout abort to ORCHESTRATOR_TIMEOUT', async () => {
-    process.env.ORCHESTRATOR_URL = 'http://orchestrator.test';
-    process.env.ANALYSIS_HTTP_TIMEOUT_MS = '50';
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockRejectedValue(new DOMException('signal timed out', 'TimeoutError')),
+  it('maps a slow response past ANALYSIS_HTTP_TIMEOUT_MS to ORCHESTRATOR_TIMEOUT', async () => {
+    await withServer(
+      () => ({ status: 200, body: '{}', delayMs: 500 }),
+      async (baseUrl) => {
+        process.env.ORCHESTRATOR_URL = baseUrl;
+        process.env.ANALYSIS_HTTP_TIMEOUT_MS = '100';
+        const client = new AnalysisOrchestratorClient();
+        const error = await client.analyze(sampleRequest()).catch((e: unknown) => e);
+        expect(error).toBeInstanceOf(AnalysisOrchestratorError);
+        const typed = error as AnalysisOrchestratorError;
+        expect(typed.status).toBeNull();
+        expect(typed.errorCode).toBe('ORCHESTRATOR_TIMEOUT');
+      },
     );
-
-    const client = new AnalysisOrchestratorClient();
-    const error = await client.analyze(sampleRequest()).catch((e: unknown) => e);
-
-    expect(error).toBeInstanceOf(AnalysisOrchestratorError);
-    const typed = error as AnalysisOrchestratorError;
-    expect(typed.status).toBeNull();
-    expect(typed.errorCode).toBe('ORCHESTRATOR_TIMEOUT');
   });
 
   it('maps a connection failure to ORCHESTRATOR_UNREACHABLE', async () => {
-    process.env.ORCHESTRATOR_URL = 'http://orchestrator.test';
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('connect ECONNREFUSED')));
+    // Bind and immediately close a server to obtain a port that refuses.
+    const server = createServer();
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const { port } = server.address() as AddressInfo;
+    await new Promise<void>((resolve) => server.close(() => resolve()));
 
+    process.env.ORCHESTRATOR_URL = `http://127.0.0.1:${port}`;
     const client = new AnalysisOrchestratorClient();
     const error = await client.analyze(sampleRequest()).catch((e: unknown) => e);
-
     expect(error).toBeInstanceOf(AnalysisOrchestratorError);
     const typed = error as AnalysisOrchestratorError;
+    expect(typed.status).toBeNull();
     expect(typed.errorCode).toBe('ORCHESTRATOR_UNREACHABLE');
   });
 });

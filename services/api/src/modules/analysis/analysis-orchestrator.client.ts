@@ -1,3 +1,5 @@
+import http from 'node:http';
+import https from 'node:https';
 import { Injectable } from '@nestjs/common';
 
 /**
@@ -77,48 +79,89 @@ export class AnalysisOrchestratorClient {
   }
 
   async analyze(request: AnalysisRequest): Promise<AnalysisResponse> {
-    let response: Response;
-    try {
-      response = await fetch(`${this.orchestratorBaseUrl()}/analysis/video`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(request),
-        signal: AbortSignal.timeout(this.timeoutMs()),
-      });
-    } catch (error) {
-      if (error instanceof Error && error.name === 'TimeoutError') {
-        throw new AnalysisOrchestratorError(
-          null,
-          'ORCHESTRATOR_TIMEOUT',
-          `orchestrator analysis timed out after ${this.timeoutMs()}ms`,
-        );
-      }
-      const message = error instanceof Error ? error.message : String(error);
-      throw new AnalysisOrchestratorError(
-        null,
-        'ORCHESTRATOR_UNREACHABLE',
-        `orchestrator analysis request failed: ${message}`,
-      );
-    }
+    const { status, body } = await this.postJson(
+      `${this.orchestratorBaseUrl()}/analysis/video`,
+      request,
+    );
 
-    if (!response.ok) {
-      const text = await response.text();
-      let errorCode = `HTTP_${response.status}`;
-      let errorMessage = text || `orchestrator analysis failed with status ${response.status}`;
+    if (status < 200 || status >= 300) {
+      let errorCode = `HTTP_${status}`;
+      let errorMessage = body || `orchestrator analysis failed with status ${status}`;
       try {
-        const body = JSON.parse(text) as { error_code?: string; error_message?: string };
-        if (typeof body.error_code === 'string' && body.error_code) {
-          errorCode = body.error_code;
+        const parsed = JSON.parse(body) as { error_code?: string; error_message?: string };
+        if (typeof parsed.error_code === 'string' && parsed.error_code) {
+          errorCode = parsed.error_code;
         }
-        if (typeof body.error_message === 'string' && body.error_message) {
-          errorMessage = body.error_message;
+        if (typeof parsed.error_message === 'string' && parsed.error_message) {
+          errorMessage = parsed.error_message;
         }
       } catch {
         // Non-JSON error body: keep the raw text as the message.
       }
-      throw new AnalysisOrchestratorError(response.status, errorCode, errorMessage);
+      throw new AnalysisOrchestratorError(status, errorCode, errorMessage);
     }
 
-    return (await response.json()) as AnalysisResponse;
+    return JSON.parse(body) as AnalysisResponse;
+  }
+
+  /**
+   * POST JSON via node:http/https rather than global fetch: undici's default
+   * headersTimeout (300s) silently aborts long-running analysis requests well
+   * before ANALYSIS_HTTP_TIMEOUT_MS, which legitimately runs to many minutes
+   * for long videos on CPU-only hardware.
+   */
+  private postJson(
+    url: string,
+    payload: AnalysisRequest,
+  ): Promise<{ status: number; body: string }> {
+    const timeoutMs = this.timeoutMs();
+    return new Promise((resolve, reject) => {
+      const target = new URL(url);
+      const transport = target.protocol === 'https:' ? https : http;
+      const body = JSON.stringify(payload);
+      const req = transport.request(
+        {
+          hostname: target.hostname,
+          port: target.port,
+          path: target.pathname,
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(body),
+          },
+        },
+        (res) => {
+          const chunks: Buffer[] = [];
+          res.on('data', (chunk: Buffer) => chunks.push(chunk));
+          res.on('end', () =>
+            resolve({ status: res.statusCode ?? 0, body: Buffer.concat(chunks).toString('utf8') }),
+          );
+          res.on('error', reject);
+        },
+      );
+      req.setTimeout(timeoutMs, () => {
+        req.destroy(
+          new AnalysisOrchestratorError(
+            null,
+            'ORCHESTRATOR_TIMEOUT',
+            `orchestrator analysis timed out after ${timeoutMs}ms`,
+          ),
+        );
+      });
+      req.on('error', (error) => {
+        if (error instanceof AnalysisOrchestratorError) {
+          reject(error);
+          return;
+        }
+        reject(
+          new AnalysisOrchestratorError(
+            null,
+            'ORCHESTRATOR_UNREACHABLE',
+            `orchestrator analysis request failed: ${error.message}`,
+          ),
+        );
+      });
+      req.end(body);
+    });
   }
 }
