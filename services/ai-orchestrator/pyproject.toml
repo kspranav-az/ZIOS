@@ -13,6 +13,14 @@ dependencies = [
     "websockets>=14.0",
     "minio>=7.2.20",
     "python-multipart>=0.0.20",
+    "pydantic>=2.13.4",
+    "opencv-python-headless>=4.10,<5",
+    "mediapipe==0.10.21",
+    "numpy>=1.26,<2",
+    "librosa>=0.11,<1",
+    "soundfile>=0.14.0",
+    "onnxruntime>=1.30.0",
+    "google-cloud-speech>=2.40.0",
 ]
 
 [dependency-groups]
@@ -35,6 +43,21 @@ select = ["E", "F", "I", "UP", "B", "ASYNC", "RUF"]
 python_version = "3.12"
 strict = true
 packages = ["app"]
+
+[[tool.mypy.overrides]]
+module = [
+    "cv2",
+    "cv2.*",
+    "mediapipe",
+    "mediapipe.*",
+    "librosa",
+    "librosa.*",
+    "soundfile",
+    "soundfile.*",
+    "onnxruntime",
+    "onnxruntime.*",
+]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
