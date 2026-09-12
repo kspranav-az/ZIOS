@@ -72,7 +72,12 @@ export async function createAsyncVideoInterview(
   adminToken: string,
   roleId: number,
   candidate: { name: string; email: string },
-  opts: { enableTranscription?: boolean; maxDurationSec?: number; expiresInDays?: number } = {},
+  opts: {
+    enableTranscription?: boolean;
+    enableAnalysis?: boolean;
+    maxDurationSec?: number;
+    expiresInDays?: number;
+  } = {},
 ): Promise<AsyncVideoInterviewCreated> {
   const response = await postJson(
     '/async-video-interviews',
@@ -80,6 +85,7 @@ export async function createAsyncVideoInterview(
       roleId,
       candidate,
       enableTranscription: opts.enableTranscription ?? true,
+      enableAnalysis: opts.enableAnalysis ?? true,
       maxDurationSec: opts.maxDurationSec ?? 180,
       expiresInDays: opts.expiresInDays ?? 180,
     },

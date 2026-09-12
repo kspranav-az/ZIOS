@@ -46,7 +46,10 @@ test.describe('async video review', () => {
       adminToken,
       roleId,
       { name: 'E2E Async Candidate', email: candidate },
-      { enableTranscription: true },
+      // Pin the legacy transcription path: this suite waits on
+      // transcription_job rows and stubs the features endpoint, so no real
+      // (minutes-long, emulated) analysis job should run.
+      { enableTranscription: true, enableAnalysis: false },
     );
 
     // Candidate consents and records both answers.
