@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Button, Card, Icon } from '@zios/ui';
+import { QuestionAnalysisFeatures } from '../../components/analysis-features-panel';
 import { useToast } from '../../components/Toast';
 import { userMessageForError } from '../../lib/errors';
 import {
@@ -332,6 +333,10 @@ export function AsyncVideoReviewPage() {
                   <p className="text-label-bold text-on-surface-variant">Transcript</p>
                   <p className="mt-1 text-body-md text-on-surface">{transcript}</p>
                 </div>
+              )}
+
+              {answer && (
+                <QuestionAnalysisFeatures sessionId={sessionId} questionId={question.id} />
               )}
 
               <div className="bg-surface-container-low rounded-xl p-4 space-y-4">
