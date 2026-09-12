@@ -227,6 +227,8 @@ services:
     # FastAPI AI orchestration worker service — Phase 00 skeleton + Phase 07 voice
     build:
       context: services/ai-orchestrator
+    # mediapipe ships no linux/aarch64 wheel — build/run emulated on Apple Silicon
+    platform: linux/amd64
     container_name: zios-ai-orchestrator
     depends_on:
       postgres:
