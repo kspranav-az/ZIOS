@@ -1,6 +1,6 @@
 # State — InterviewOS / Meridian MVP
 
-**Snapshot date:** 2026-09-12 (PM) · **HEAD:** `c94f773` on `ai-analysis` (13 commits ahead of `phase-09b-complete`; Phase 09b itself awaits squash-merge to `main`) · **Tags:** `phase-00-complete` … `phase-09b-complete`, `v0.1.0-mvp0-mock`
+**Snapshot date:** 2026-09-12 (EOD) · **HEAD:** `ai-analysis` branch tip (19 commits ahead of `phase-09b-complete`; Phases 09b + 14 await squash-merge to `main`) · **Tags:** `phase-00-complete` … `phase-09b-complete`, `phase-14-complete`, `v0.1.0-mvp0-mock`
 
 This file records the current implementation state, what is proven, what is not, and where the blockers are.
 
@@ -8,17 +8,17 @@ This file records the current implementation state, what is proven, what is not,
 
 ## 1. Build status
 
-| Check                      | Result                                                                                  | Command                                        |
-| -------------------------- | --------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| API unit + integration     | ✅ 271 passed / 48 files                                                                | `pnpm --filter @zios/api test`                 |
-| Orchestrator pytest        | ✅ 104 passed / 2 skipped                                                               | `cd services/ai-orchestrator && uv run pytest` |
-| Orchestrator ruff + mypy   | ✅ Clean (mypy strict)                                                                  | `uv run ruff check app tests && uv run mypy`   |
-| Employer unit              | ✅ 92 passed                                                                            | `pnpm --filter employer-web test`              |
-| Employer typecheck + lint  | ✅ Clean (1 pre-existing warning in CockpitPage)                                        | `pnpm --filter employer-web typecheck/lint`    |
-| Candidate typecheck + lint | ✅ Clean (last run at Phase 09b)                                                        | `pnpm --filter candidate-web typecheck/lint`   |
-| Employer E2E               | ⚠️ 12 passed at Phase 09b; Phase-14 run blocked (port 5173 held by a foreign container) | `pnpm --filter employer-web e2e`               |
-| Candidate E2E              | ⚠️ 5 passed at Phase 09b; Phase-14 re-run pending                                       | `pnpm --filter candidate-web e2e`              |
-| Docker Compose             | ✅ All healthy (orchestrator pinned `linux/amd64`)                                      | `docker compose up -d --build`                 |
+| Check                      | Result                                             | Command                                        |
+| -------------------------- | -------------------------------------------------- | ---------------------------------------------- |
+| API unit + integration     | ✅ 271 passed / 48 files                           | `pnpm --filter @zios/api test`                 |
+| Orchestrator pytest        | ✅ 104 passed / 2 skipped                          | `cd services/ai-orchestrator && uv run pytest` |
+| Orchestrator ruff + mypy   | ✅ Clean (mypy strict)                             | `uv run ruff check app tests && uv run mypy`   |
+| Employer unit              | ✅ 92 passed                                       | `pnpm --filter employer-web test`              |
+| Employer typecheck + lint  | ✅ Clean (1 pre-existing warning in CockpitPage)   | `pnpm --filter employer-web typecheck/lint`    |
+| Candidate typecheck + lint | ✅ Clean                                           | `pnpm --filter candidate-web typecheck/lint`   |
+| Employer E2E               | ✅ 12 passed                                       | `pnpm --filter employer-web e2e`               |
+| Candidate E2E              | ✅ 5 passed                                        | `pnpm --filter candidate-web e2e`              |
+| Docker Compose             | ✅ All healthy (orchestrator pinned `linux/amd64`) | `docker compose up -d --build`                 |
 
 ---
 
@@ -46,7 +46,7 @@ This file records the current implementation state, what is proven, what is not,
 
 ### Post-M1: Phase 14 — Multimodal feature extraction (in progress, branch `ai-analysis`)
 
-Post-M1 extension (not in the frozen PRD §3.4): objective multimodal feature extraction for one-way recorded modes. Plan: `phases/phase-14-multimodal-analysis.md`. **Implementation complete; validation interrupted mid-run (see §5).**
+Post-M1 extension (not in the frozen PRD §3.4): objective multimodal feature extraction for one-way recorded modes. Plan: `phases/phase-14-multimodal-analysis.md`. **Complete and tagged `phase-14-complete` (2026-09-12); validated end-to-end on the bundled 150 s interview clip.**
 
 - Generalized `analysis_job` lifecycle (kinds `transcription` / `multimodal_feature_extraction`) + `analysis_job_dlq`; BullMQ `analysis` queue; consent-gated (`CONSENT_MISSING` fails without processing); legacy `transcription_job` path untouched behind `enableAnalysis: false`.
 - Orchestrator `app/analysis/`: streaming ffmpeg preprocessing (16 kHz mono PCM; 5 FPS / ~854 px sequential frames), MediaPipe face/pose/hands (gaze as `camera_gaze_ratio`, head pose via solvePnP, facial activity, posture, gesture frequency, blur/quality), Silero VAD via onnxruntime, librosa pitch/energy (speech regions only), WPM/fillers/repetitions (heuristics flagged), temporal alignment + 3-level aggregation, pydantic schema (`value/valid/reason` — no fake zeros), artifacts in MinIO `analysis/{sessionId}/{questionId|session}/*.json`, typed errors (2xx/4xx/5xx, never 200-with-fake).
@@ -78,13 +78,14 @@ Everything below is **fixture-driven mock** today. Feature code is complete; rea
 
 ## 4. Test evidence by phase
 
-### Phase 14 — Multimodal analysis (branch `ai-analysis`, validation incomplete)
+### Phase 14 — Multimodal analysis (branch `ai-analysis`, ✅ validated)
 
 - Orchestrator `services/ai-orchestrator/tests/analysis/` (7 files): gaze/head-pose/posture/hand geometry, VAD merging, pause/WPM/filler/disfluency detection, pitch/energy aggregation, alignment, 3-level aggregation, config, error taxonomy; contract suite passes for both `MockSttAdapter` and faked `GoogleCloudSttAdapter`; pipeline integration (generated WebM → `/analysis/video` → 200 schema-valid; 404 missing object; 422 corrupt media; 502 STT failure; 400 consent not verified). Total 104 passed / 2 skipped (opt-in live voice E2E).
 - `services/ai-orchestrator/tests/test_video_capture.py` (16 tests): webm encoder (ffprobe-verified vp8+opus, downscale, downmix), audio-only fallback, telemetry `media_kind` routing, recorder token grants.
 - API `src/modules/analysis/*.spec.ts` + `src/testing/integration/analysis.integration.spec.ts`: lifecycle transitions, orchestrator client typed errors + `ORCHESTRATOR_TIMEOUT`, consent gating, happy path with transcript write-back, 502×3 → DLQ with typed errors, tenant 404. API total 271 passed / 48 files.
-- Employer: `analysis-features-panel.test.tsx` (13 tests) + e2e stub in `async-video-review.spec.ts` (panel renders `146 wpm`, heuristic badge, invalid-reason text).
-- Live validation against `test_video/interview_video_clip_test.mp4` (150 s interview clip): download + audio extraction + MediaPipe CPU init verified in orchestrator logs; one full job completed; failure paths exercised for real (`ANALYSIS_FAILED`, `CONSENT_MISSING`, 12 DLQ rows). **Final end-to-end feature-plausibility inspection was interrupted — see §5.**
+- Employer: `analysis-features-panel.test.tsx` (13 tests) + e2e stub in `async-video-review.spec.ts`; employer-web e2e 12/12, candidate-web e2e 5/5.
+- **Live validation PASSED** on `test_video/interview_video_clip_test.mp4` (150 s interview clip, `scripts/seed-multimodal-analysis-validation.js`, session `bb67e8e7`): face_visible 0.91, camera_gaze_ratio 0.971, yaw/pitch/roll −6.7°/6.9°/0.05°, posture upright 1.0 (posture_valid 0.72), hands_visible 0.30, speaking 135.9 s / 14 pauses, pitch 235.8 Hz, blur 0, 16 windows, interaction correctly `valid:false single_speaker_recording`. Validation found and fixed 4 real bugs: head-pitch 180° offset, negative gesture_duration, integration-test workers stealing live queue jobs (root cause of orphaned `pending` jobs), stale candidate routing test.
+- Failure drills for real: `ORCHESTRATOR_UNREACHABLE` → 3 retries → DLQ → re-drive (`scripts/redrive-analysis-job.js`) → completed; `CONSENT_MISSING` fails without calling the orchestrator; `STT_ADAPTER=gcp` without credentials fails loudly; bogus adapter value errors at boot.
 - Scripts: `scripts/seed-multimodal-analysis-validation.js` (seed → upload clip → poll → print features), `scripts/redrive-analysis-job.js` (re-enqueue stuck jobs).
 
 ### Async video interviews (post-Phase 09 addition)
@@ -149,21 +150,20 @@ Everything below is **fixture-driven mock** today. Feature code is complete; rea
 
 ## 5. Known gaps / blockers
 
-| Gap                                            | Why it matters                                                                                                                                                             | Next action                                                                                                                            |
-| ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| Phase 14 validation interrupted                | Final checkbox tick + feature-plausibility inspection not finished; 2 `analysis_job` rows stuck `pending` from an API restart mid-processing (BullMQ active lock orphaned) | Resume validation: re-drive stuck jobs (`scripts/redrive-analysis-job.js`), inspect features, tick checkboxes, tag `phase-14-complete` |
-| No DLQ redrive endpoint                        | Stuck/dead analysis + transcription jobs need manual re-enqueue                                                                                                            | Add admin redrive endpoint (both DLQ tables)                                                                                           |
-| Phase 09b + ai-analysis branches not merged    | `phase-09b/*` (6 commits) and `ai-analysis` (13 commits) ahead of `main`                                                                                                   | Squash-merge after Phase 14 exit gate                                                                                                  |
-| Employer E2E blocked by port conflict          | Host 5173 held by a foreign project's container                                                                                                                            | Use compose port override (`EMPLOYER_WEB_PORT`) or free 5173                                                                           |
-| Orchestrator is `linux/amd64`-only             | mediapipe 1.0.1 crashes on macOS/arm64 and ships no linux/aarch64 wheel → pinned 0.10.21, emulated amd64 on ARM hosts (slow: 150 s clip takes minutes)                     | Revisit when mediapipe ships aarch64; CI on x86 is native                                                                              |
-| `.env` DATABASE_URL stale (5432 vs 55432)      | Host-run tests/scripts fail against compose Postgres on 55432                                                                                                              | Reconcile `.env` with compose port override                                                                                            |
-| Phase 10 not started                           | No integration API, webhooks, or credit wallet UI                                                                                                                          | Decide scope and start `phase-10/*`                                                                                                    |
-| Phase 11 not started                           | No pilot hardening, load test, or notifications                                                                                                                            | Start after Phase 10                                                                                                                   |
-| No real LLM/STT/TTS validation                 | X2, X6, X7, WER cannot be measured                                                                                                                                         | Wire real adapters when credentials arrive (Gemini + GCP STT adapters ready)                                                           |
-| No real Google sign-in                         | FR-E1-1 not fully validated                                                                                                                                                | Add real Google OAuth app                                                                                                              |
-| No WhatsApp/SMS                                | E11 partial                                                                                                                                                                | File template approvals (already noted as Week-1 exception)                                                                            |
-| No production infra                            | Cannot deploy outside Docker Compose                                                                                                                                       | Define k8s/managed infra post-M1                                                                                                       |
-| Human-facilitated video stability under stress | LiveKit rooms work locally; multi-participant + TURN not validated                                                                                                         | Re-test after Cloud TURN + run load scenario                                                                                           |
+| Gap                                            | Why it matters                                                                                                                                    | Next action                                                                                                 |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Live LiveKit capture not yet proven            | Video-mode track capture + voice-recording analysis are unit/integration-tested only; no real browser LiveKit session has run through analysis    | First real voice/AI-video session: verify `recordings/*.webm` lands in MinIO and its analysis job completes |
+| No DLQ redrive endpoint                        | Stuck/dead analysis + transcription jobs need manual re-enqueue (`scripts/redrive-analysis-job.js` exists for analysis)                           | Add admin redrive endpoint (both DLQ tables)                                                                |
+| Phase 09b + ai-analysis branches not merged    | `phase-09b/*` and `ai-analysis` (Phase 14, tagged) are ahead of `main`                                                                            | Squash-merge to `main` when ready                                                                           |
+| Orchestrator is `linux/amd64`-only             | mediapipe 1.0.1 crashes on macOS/arm64 and ships no linux/aarch64 wheel → pinned 0.10.21, emulated amd64 on ARM hosts (slow: 150 s clip ≈ 30 min) | Revisit when mediapipe ships aarch64; CI on x86 is native                                                   |
+| `.env` DATABASE_URL stale (5432 vs 55432)      | Host-run tests/scripts fail against compose Postgres on 55432                                                                                     | Reconcile `.env` with compose port override                                                                 |
+| Phase 10 not started                           | No integration API, webhooks, or credit wallet UI                                                                                                 | Decide scope and start `phase-10/*`                                                                         |
+| Phase 11 not started                           | No pilot hardening, load test, or notifications                                                                                                   | Start after Phase 10                                                                                        |
+| No real LLM/STT/TTS validation                 | X2, X6, X7, WER cannot be measured                                                                                                                | Wire real adapters when credentials arrive (Gemini + GCP STT adapters ready)                                |
+| No real Google sign-in                         | FR-E1-1 not fully validated                                                                                                                       | Add real Google OAuth app                                                                                   |
+| No WhatsApp/SMS                                | E11 partial                                                                                                                                       | File template approvals (already noted as Week-1 exception)                                                 |
+| No production infra                            | Cannot deploy outside Docker Compose                                                                                                              | Define k8s/managed infra post-M1                                                                            |
+| Human-facilitated video stability under stress | LiveKit rooms work locally; multi-participant + TURN not validated                                                                                | Re-test after Cloud TURN + run load scenario                                                                |
 
 ---
 
@@ -188,16 +188,16 @@ Run `pnpm migrate` to verify no pending migrations.
 
 ## 7. Git hygiene
 
-- **Branches:** All `phase-NN/*` branches preserved. `phase-09b/async-video-hardening` (6 commits, tagged `phase-09b-complete`) and `ai-analysis` (13 commits on top of it — Phase 14) are both ahead of `main` and unmerged.
+- **Branches:** All `phase-NN/*` branches preserved. `phase-09b/async-video-hardening` (tagged `phase-09b-complete`) and `ai-analysis` (Phase 14, tagged `phase-14-complete`) are both ahead of `main` and unmerged.
 - **Main:** Linear history of phase squash commits plus async-video fixes; tags `phase-00-complete` … `phase-09-complete` and `v0.1.0-mvp0-mock`.
-- **Working tree:** `ai-analysis` has uncommitted validation scripts (`scripts/seed-multimodal-analysis-validation.js`, `scripts/redrive-analysis-job.js`) and this docs update at snapshot time.
+- **Working tree:** Clean on `ai-analysis` at snapshot time.
 
 ---
 
 ## 8. Immediate next steps
 
-1. **Resume Phase 14 validation:** re-drive the 2 stuck `analysis_job`s, inspect feature plausibility on the test clip, run full suites + E2E (port override), tick `phases/phase-14-multimodal-analysis.md` checkboxes, tag `phase-14-complete`.
-2. **Merge backlog:** squash-merge `phase-09b/async-video-hardening` then `ai-analysis` to `main` after their gates pass.
+1. **Merge backlog:** squash-merge `phase-09b/async-video-hardening` then `ai-analysis` (Phase 14, tagged) to `main`.
+2. **Live capture proof:** run one real voice/AI-video browser session; verify `recordings/*.webm` in MinIO + analysis completion (closes the last known Phase-14 gap).
 3. **Phase 10 kickoff:** Create `phase-10/*` branch for integration API, webhooks, and credit wallet UI.
 4. **Provider procurement:** Select and obtain credentials for LLM, STT, TTS, Google OAuth, WhatsApp, and payments.
 5. **Key handover re-run:** Re-execute credential-gated phase validations with real providers.
