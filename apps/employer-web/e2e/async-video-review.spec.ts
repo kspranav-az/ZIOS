@@ -56,6 +56,43 @@ test.describe('async video review', () => {
     });
     await seedAsyncVideoAnswers(created, recoveryToken, { waitForTranscription: true });
 
+    // Stub the Phase 14 features endpoint (no real analysis job runs in e2e).
+    // The panel must render the stubbed measurements per question.
+    await page.route('**/analysis/sessions/*/questions/*/features', async (route) => {
+      const url = route.request().url();
+      const questionId = url.split('/questions/')[1]?.split('/')[0] ?? '';
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          sessionId: created.sessionId,
+          questionId,
+          analysisJobId: 'e2e-analysis-job',
+          schemaVersion: '1.0.0',
+          features: {
+            schema_version: '1.0.0',
+            session_id: created.sessionId,
+            question_id: questionId,
+            media_kind: 'video',
+            visual: { camera_gaze_ratio: { value: 0.87, valid: true } },
+            body: {},
+            hands: {},
+            speech: {
+              wpm_mean: { value: 146, valid: true },
+              filler_count: { value: 7, valid: true, heuristic: true },
+            },
+            voice: { pitch_mean: { value: 118, valid: true } },
+            interaction: {
+              talk_ratio: { value: null, valid: false, reason: 'single_speaker_recording' },
+            },
+            quality: {},
+          },
+          media: null,
+          completedAt: null,
+        }),
+      });
+    });
+
     await signInAsAdminWithToken(page, adminToken);
     await page.goto(`/interviews/${created.sessionId}/async-review`);
 
@@ -77,6 +114,15 @@ test.describe('async video review', () => {
     await expect(
       page.getByText(/most challenging part was aligning the team/i).first(),
     ).toBeVisible();
+
+    // The analysis features panel renders the stubbed measurements.
+    const firstFeaturesPanel = page.getByTestId('analysis-features').first();
+    await expect(firstFeaturesPanel.getByText('Analysis measurements')).toBeVisible();
+    await firstFeaturesPanel.getByRole('button', { name: 'Speech' }).click();
+    await expect(firstFeaturesPanel.getByText('146 wpm')).toBeVisible();
+    await expect(firstFeaturesPanel.getByText('heuristic')).toBeVisible();
+    await firstFeaturesPanel.getByRole('button', { name: 'Interaction' }).click();
+    await expect(firstFeaturesPanel.getByText('n/a — Single speaker recording')).toBeVisible();
 
     // Use AI pre-fill to populate suggested scores from the stub judge.
     await page.getByRole('button', { name: /Generate AI pre-fill/i }).click();
