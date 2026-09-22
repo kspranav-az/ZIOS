@@ -42,4 +42,14 @@ export class SessionService {
   async revoke(sessionId: string): Promise<void> {
     await this.sessions.revoke(sessionId);
   }
+
+  /**
+   * Read-only presence check (no sliding touch). Used by CandidateAuthGuard
+   * to distinguish employer tokens (403 audience violation) from garbage
+   * (401) on candidate routes.
+   */
+  async isActiveToken(rawToken: string): Promise<boolean> {
+    const session = await this.sessions.findActiveWithUser(hashToken(rawToken));
+    return session !== null && session.sessionExpiresAt.getTime() > Date.now();
+  }
 }

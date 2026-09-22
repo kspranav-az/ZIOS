@@ -30,6 +30,7 @@ import { SessionService } from './session.service';
     { provide: APP_GUARD, useClass: AuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
   ],
+  exports: [OtpService, SessionService],
 })
 export class AuthModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {

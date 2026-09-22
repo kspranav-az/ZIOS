@@ -4,7 +4,7 @@ import { ApiException, assertValidEmail } from '@/common/errors';
 import { DatabaseService } from '@/modules/database';
 import { EMAIL_SENDER, type EmailSender } from '@/modules/notifications';
 import { OTP_MAX_ATTEMPTS, OTP_RESEND_COOLDOWN_SECONDS, OTP_TTL_SECONDS } from './auth.constants';
-import { OtpRepository } from './otp.repository';
+import { OtpRepository, type OtpAudience } from './otp.repository';
 
 function hashCode(salt: string, code: string): string {
   return createHash('sha256').update(`${salt}:${code}`).digest('hex');
@@ -29,12 +29,12 @@ export class OtpService {
     @Inject(EMAIL_SENDER) private readonly email: EmailSender,
   ) {}
 
-  /** Issues and emails a new code; superseding any active one. */
-  async issue(rawEmail: unknown): Promise<void> {
+  /** Issues and emails a new code; superseding any active one for the audience. */
+  async issue(rawEmail: unknown, audience: OtpAudience = 'user'): Promise<void> {
     assertValidEmail(rawEmail);
     const email = rawEmail.trim();
 
-    const latest = await this.otps.findLatest(email);
+    const latest = await this.otps.findLatest(email, audience);
     // A consumed code is no longer active; the user can request a fresh one
     // immediately (e.g. after a seed-script login or a successful verify).
     if (latest && latest.consumed_at === null) {
@@ -52,10 +52,11 @@ export class OtpService {
     const code = randomInt(0, 1_000_000).toString().padStart(6, '0');
     const salt = randomBytes(16).toString('hex');
     const row = await this.db.transaction(async (client) => {
-      await this.otps.consumeAllForEmail(email, client);
+      await this.otps.consumeAllForEmail(email, client, audience);
       return this.otps.insert(
         {
           email,
+          audience,
           codeHash: hashCode(salt, code),
           salt,
           expiresAt: new Date(Date.now() + OTP_TTL_SECONDS * 1000),
@@ -65,11 +66,12 @@ export class OtpService {
     });
 
     try {
+      const product = audience === 'candidate' ? 'Ascend' : 'InterviewOS';
       await this.email.send({
         to: email,
-        subject: 'Your InterviewOS sign-in code',
+        subject: `Your ${product} sign-in code`,
         text: [
-          `Your InterviewOS sign-in code is ${code}.`,
+          `Your ${product} sign-in code is ${code}.`,
           '',
           `It expires in ${OTP_TTL_SECONDS / 60} minutes and can be used once.`,
           'If you did not request it, you can ignore this email.',
@@ -86,15 +88,15 @@ export class OtpService {
     }
   }
 
-  /** Verifies a code; throws ApiException on every failure path. */
-  async verify(rawEmail: unknown, rawCode: unknown): Promise<void> {
+  /** Verifies a code for an audience; throws ApiException on every failure path. */
+  async verify(rawEmail: unknown, rawCode: unknown, audience: OtpAudience = 'user'): Promise<void> {
     assertValidEmail(rawEmail);
     if (typeof rawCode !== 'string' || !/^\d{6}$/.test(rawCode)) {
       throw new ApiException(400, 'VALIDATION_ERROR', 'a 6-digit code is required');
     }
     const email = rawEmail.trim();
 
-    const latest = await this.otps.findLatest(email);
+    const latest = await this.otps.findLatest(email, audience);
     if (!latest || latest.consumed_at !== null) {
       throw new ApiException(401, 'INVALID_OTP', 'invalid or expired sign-in code');
     }

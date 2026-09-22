@@ -1,0 +1,10 @@
+{
+  "name": "Ascend — AI Mock Interviews",
+  "short_name": "Ascend",
+  "description": "Practice interviews against AI interviewers, with evidence-linked coaching.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0b1220",
+  "theme_color": "#0b1220",
+  "icons": []
+}

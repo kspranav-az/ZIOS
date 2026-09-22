@@ -82,6 +82,47 @@ export interface MeResponse {
   org: Org;
 }
 
+// ---- Ascend candidate app (Phase 12, D7/D8) ----
+
+export interface CandidateAccount {
+  id: string;
+  email: string;
+  phone: string | null;
+  name: string;
+  targetRole: string | null;
+  onboarding: Record<string, unknown>;
+  marketingOptIn: boolean;
+  createdAt: string;
+}
+
+export type CandOtpRequestBody = OtpRequestBody;
+export type CandOtpRequestResponse = OtpRequestResponse;
+export type CandOtpVerifyBody = OtpVerifyBody;
+
+export interface CandidateSessionInfo {
+  /** Opaque bearer token (sessionStorage on the client — no cookie). */
+  token: string;
+  expiresAt: string;
+}
+
+export interface CandidateAuthResponse {
+  session: CandidateSessionInfo;
+  /** True when this login created the candidate account (welcome grant issued). */
+  isNewUser: boolean;
+  account: CandidateAccount;
+}
+
+export interface CandidateMeResponse {
+  account: CandidateAccount;
+}
+
+export interface CandidateMePatchBody {
+  name?: string;
+  targetRole?: string;
+  onboarding?: Record<string, unknown>;
+  marketingOptIn?: boolean;
+}
+
 export interface OrgInvite {
   id: string;
   orgId: string;

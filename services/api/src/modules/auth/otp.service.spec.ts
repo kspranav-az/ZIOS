@@ -14,6 +14,7 @@ function otpRow(overrides: Partial<OtpRow> = {}): OtpRow {
   return {
     id: 'otp-1',
     email: 'user@example.com',
+    audience: 'user',
     code_hash: hashOf('salt-1', '123456'),
     salt: 'salt-1',
     attempts: 0,
@@ -60,7 +61,7 @@ describe('OtpService.issue', () => {
 
     await service.issue('user@example.com');
 
-    expect(otps.consumeAllForEmail).toHaveBeenCalledWith('user@example.com', expect.anything());
+    expect(otps.consumeAllForEmail).toHaveBeenCalledWith('user@example.com', expect.anything(), 'user');
     const inserted = otps.insert.mock.calls[0]?.[0] as { codeHash: string; salt: string };
     expect(inserted.salt).toMatch(/^[0-9a-f]{32}$/);
     const mail = email.send.mock.calls[0]?.[0] as { to: string; text: string };
