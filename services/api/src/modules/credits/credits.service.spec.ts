@@ -1,101 +1,129 @@
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import { ApiException } from '@/common/errors';
-import type { OrgRepository } from '@/modules/org';
+import type { DatabaseService } from '@/modules/database';
 import { CreditsService } from './credits.service';
 
-function fakeQueryable() {
-  return {
-    query: vi.fn(),
-  };
+const accountId = randomUUID();
+const orgId = randomUUID();
+
+function fakeQueryable(opts?: { balance?: number; holderType?: 'org' | 'candidate' }) {
+  const balance = opts?.balance ?? 997;
+  const holderType = opts?.holderType ?? 'org';
+  const query = vi.fn().mockImplementation((sql: string) => {
+    if (sql.includes('UPDATE credit_account')) {
+      return Promise.resolve({ rows: [{ balance }], rowCount: 1 });
+    }
+    if (sql.includes('SELECT holder_type, holder_id')) {
+      return Promise.resolve({ rows: [{ holder_type: holderType, holder_id: orgId }], rowCount: 1 });
+    }
+    if (sql.includes('INSERT INTO credit_ledger')) {
+      return Promise.resolve({ rows: [{ id: randomUUID() }], rowCount: 1 });
+    }
+    if (sql.includes('SELECT id, holder_type, holder_id')) {
+      return Promise.resolve({
+        rows: [
+          {
+            id: accountId,
+            holder_type: holderType,
+            holder_id: orgId,
+            balance,
+            low_balance_threshold: 5,
+            created_at: new Date(),
+          },
+        ],
+        rowCount: 1,
+      });
+    }
+    return Promise.resolve({ rows: [], rowCount: 0 });
+  });
+  return { query };
 }
 
-function buildService(
-  adjustCreditsImpl?: (
-    id: string,
-    delta: number,
-  ) => Promise<{ id: string; creditsBalance: number }>,
-) {
-  const orgs = {
-    adjustCredits: vi.fn().mockImplementation(
-      adjustCreditsImpl ??
-        (async (_id: string, delta: number) => ({
-          id: randomUUID(),
-          creditsBalance: 1000 + delta,
-        })),
-    ),
-    findById: vi.fn().mockResolvedValue({ id: randomUUID(), creditsBalance: 1000 }),
-  } as unknown as OrgRepository;
-
-  const service = new CreditsService(orgs);
-  return { service, orgs };
+function buildService() {
+  const db = { query: vi.fn() } as unknown as DatabaseService;
+  const service = new CreditsService(db);
+  return { service, db };
 }
 
 describe('CreditsService', () => {
-  const orgId = randomUUID();
+  it('debits the account and writes a ledger row', async () => {
+    const q = fakeQueryable({ balance: 997 });
+    const { service } = buildService();
 
-  it('debits credits and writes a ledger row', async () => {
-    const q = fakeQueryable();
-    const { service, orgs } = buildService();
-    (q.query as ReturnType<typeof vi.fn>).mockResolvedValue({
-      rows: [{ id: randomUUID() }],
-    });
-
-    const result = await service.debit(orgId, 3, 'async_video_created', q, {
+    const result = await service.debit(accountId, 3, 'async_video_created', q, {
       sessionRef: randomUUID(),
       metadata: { roleId: 42 },
     });
 
-    expect(orgs.adjustCredits).toHaveBeenCalledWith(orgId, -3, q);
     expect(result.balanceAfter).toBe(997);
     expect(result.entryId).toBeTruthy();
-    const ledgerCall = (q.query as ReturnType<typeof vi.fn>).mock.calls[0]!;
-    expect(ledgerCall[1]).toEqual(expect.arrayContaining([orgId, -3, 997, 'async_video_created']));
+    const ledgerCall = q.query.mock.calls.find(
+      (call: unknown[]) => typeof call[0] === 'string' && (call[0] as string).includes('INSERT INTO credit_ledger'),
+    )!;
+    expect(ledgerCall![1]).toEqual(
+      expect.arrayContaining([accountId, orgId, -3, 997, 'async_video_created']),
+    );
   });
 
-  it('credits credits and writes a ledger row', async () => {
-    const q = fakeQueryable();
-    const { service, orgs } = buildService();
-    (q.query as ReturnType<typeof vi.fn>).mockResolvedValue({
-      rows: [{ id: randomUUID() }],
-    });
+  it('credits the account and writes a ledger row', async () => {
+    const q = fakeQueryable({ balance: 1003 });
+    const { service } = buildService();
 
-    const result = await service.credit(orgId, 3, 'async_video_refund', q, {
+    const result = await service.credit(accountId, 3, 'async_video_refund', q, {
       sessionRef: randomUUID(),
     });
 
-    expect(orgs.adjustCredits).toHaveBeenCalledWith(orgId, 3, q);
     expect(result.balanceAfter).toBe(1003);
-    const ledgerCall = (q.query as ReturnType<typeof vi.fn>).mock.calls[0]!;
-    expect(ledgerCall[1]).toEqual(expect.arrayContaining([orgId, 3, 1003, 'async_video_refund']));
+    const ledgerCall = q.query.mock.calls.find(
+      (call: unknown[]) => typeof call[0] === 'string' && (call[0] as string).includes('INSERT INTO credit_ledger'),
+    )!;
+    expect(ledgerCall![1]).toEqual(
+      expect.arrayContaining([accountId, orgId, 3, 1003, 'async_video_refund']),
+    );
+  });
+
+  it('writes org_id = NULL on ledger rows for candidate holders', async () => {
+    const q = fakeQueryable({ holderType: 'candidate' });
+    const { service } = buildService();
+
+    await service.debit(accountId, 1, 'practice_start', q);
+
+    const ledgerCall = q.query.mock.calls.find(
+      (call: unknown[]) => typeof call[0] === 'string' && (call[0] as string).includes('INSERT INTO credit_ledger'),
+    )!;
+    expect(ledgerCall![1]![1]).toBeNull();
   });
 
   it('throws ApiException when debit amount is not positive', async () => {
     const q = fakeQueryable();
     const { service } = buildService();
 
-    await expect(service.debit(orgId, 0, 'async_video_created', q)).rejects.toThrow(ApiException);
-    await expect(service.debit(orgId, -1, 'async_video_created', q)).rejects.toThrow(ApiException);
+    await expect(service.debit(accountId, 0, 'async_video_created', q)).rejects.toThrow(ApiException);
+    await expect(service.debit(accountId, -1, 'async_video_created', q)).rejects.toThrow(ApiException);
   });
 
   it('throws ApiException when credit amount is not positive', async () => {
     const q = fakeQueryable();
     const { service } = buildService();
 
-    await expect(service.credit(orgId, 0, 'refund', q)).rejects.toThrow(ApiException);
-    await expect(service.credit(orgId, -1, 'refund', q)).rejects.toThrow(ApiException);
+    await expect(service.credit(accountId, 0, 'refund', q)).rejects.toThrow(ApiException);
+    await expect(service.credit(accountId, -1, 'refund', q)).rejects.toThrow(ApiException);
   });
 
-  it('throws ApiException(402) when org has insufficient credits', async () => {
+  it('throws ApiException(402) when the account has insufficient credits', async () => {
     const q = fakeQueryable();
-    const { service, orgs } = buildService();
-    (orgs.adjustCredits as ReturnType<typeof vi.fn>).mockRejectedValue(
-      new Error('insufficient credits'),
-    );
+    q.query.mockImplementation((sql: string) => {
+      if (sql.includes('UPDATE credit_account')) {
+        return Promise.resolve({ rows: [], rowCount: 0 });
+      }
+      return Promise.resolve({ rows: [], rowCount: 0 });
+    });
+    const { service } = buildService();
 
-    await expect(service.debit(orgId, 3, 'async_video_created', q)).rejects.toThrow(ApiException);
     try {
-      await service.debit(orgId, 3, 'async_video_created', q);
+      await service.debit(accountId, 3, 'async_video_created', q);
+      expect.unreachable('debit should have thrown');
     } catch (err) {
       expect(err).toBeInstanceOf(ApiException);
       const response = (err as ApiException).getResponse() as {
@@ -108,10 +136,34 @@ describe('CreditsService', () => {
   });
 
   it('returns the current balance', async () => {
-    const q = fakeQueryable();
+    const q = fakeQueryable({ balance: 1000 });
     const { service } = buildService();
 
-    const balance = await service.getBalance(orgId, q);
+    const balance = await service.getBalance(accountId, q);
     expect(balance).toBe(1000);
+  });
+
+  it('ensureAccount inserts once and resolves idempotently', async () => {
+    const q = {
+      query: vi.fn().mockImplementation((sql: string) => {
+        if (sql.includes('ON CONFLICT')) {
+          // First call inserts; second call conflicts and returns nothing.
+          return Promise.resolve({ rows: [], rowCount: 0 });
+        }
+        return Promise.resolve({ rows: [{ id: accountId }], rowCount: 1 });
+      }),
+    };
+    const { service } = buildService();
+
+    const first = await service.ensureAccount('candidate', orgId, q);
+    const second = await service.ensureAccount('candidate', orgId, q);
+    expect(first).toBe(accountId);
+    expect(second).toBe(accountId);
+    const conflictCalls = q.query.mock.calls.filter(
+      (call: unknown[]) =>
+        typeof (call as unknown[])[0] === 'string' &&
+        ((call as unknown[])[0] as string).includes('ON CONFLICT'),
+    );
+    expect(conflictCalls).toHaveLength(2);
   });
 });

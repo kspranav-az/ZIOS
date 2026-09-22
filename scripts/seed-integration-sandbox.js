@@ -156,7 +156,11 @@ async function main() {
     process.env.DATABASE_URL ?? 'postgresql://interviewos:interviewos_dev@localhost:55432/interviewos';
   process.env.DATABASE_URL = dbUrl;
   await withClient(async (client) => {
-    await client.query('UPDATE org SET credits_balance = 500 WHERE id = $1', [orgId]);
+    await client.query(
+      `UPDATE credit_account SET balance = 500 WHERE holder_type = 'org' AND holder_id = $1`,
+      [orgId],
+    );
+    await client.query(`UPDATE org SET credits_balance = 500 WHERE id = $1`, [orgId]);
   });
 
   const sample = JSON.stringify(

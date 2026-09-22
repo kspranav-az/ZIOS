@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { CreditsModule } from '@/modules/credits';
 import { NotificationsModule } from '@/modules/notifications';
 import { UsersModule } from '@/modules/users';
 import { InvitesRepository } from './invites.repository';
@@ -8,7 +9,7 @@ import { OrgRepository } from './org.repository';
 import { OrgService } from './org.service';
 
 @Module({
-  imports: [UsersModule, NotificationsModule],
+  imports: [UsersModule, NotificationsModule, CreditsModule],
   controllers: [OrgController],
   providers: [OrgRepository, OrgService, InvitesRepository, InvitesService],
   exports: [OrgService, OrgRepository],

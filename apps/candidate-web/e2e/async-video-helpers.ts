@@ -62,10 +62,14 @@ export async function cleanupRoleQuestions(roleName: string): Promise<void> {
 }
 
 export async function seedCredits(orgId: string, amount: number = 1000): Promise<void> {
-  await query(`UPDATE org SET credits_balance = credits_balance + $1 WHERE id = $2`, [
-    amount,
-    orgId,
-  ]);
+  await query(
+    `UPDATE credit_account SET balance = balance + $1 WHERE holder_type = 'org' AND holder_id = $2`,
+    [amount, orgId],
+  );
+  await query(
+    `UPDATE org SET credits_balance = credits_balance + $1 WHERE id = $2`,
+    [amount, orgId],
+  );
 }
 
 export async function createAsyncVideoInterview(

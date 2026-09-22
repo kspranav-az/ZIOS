@@ -142,10 +142,14 @@ async function main() {
   console.log(`   admin: ${adminEmail}`);
 
   console.log('1b. Seeding credits for admin org...');
-  await dbQuery(`UPDATE org SET credits_balance = credits_balance + $1 WHERE id = $2`, [
-    1000,
-    orgId,
-  ]);
+  await dbQuery(
+    `UPDATE credit_account SET balance = balance + $1 WHERE holder_type = 'org' AND holder_id = $2`,
+    [1000, orgId],
+  );
+  await dbQuery(
+    `UPDATE org SET credits_balance = credits_balance + $1 WHERE id = $2`,
+    [1000, orgId],
+  );
   console.log(`   credited 1000 to org ${orgId}`);
 
   console.log('2. Seeding role-based questions...');
