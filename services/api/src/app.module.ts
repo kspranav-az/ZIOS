@@ -10,6 +10,7 @@ import { HealthModule } from '@/modules/health';
 import { InvitesModule } from '@/modules/invites';
 import { KitsModule } from '@/modules/kits';
 import { CandidateAccountsModule } from '@/modules/candidate-accounts';
+import { PracticeModule } from '@/modules/practice';
 import { CreditsModule } from '@/modules/credits';
 import { OrgModule } from '@/modules/org';
 import { QuestionBankModule } from '@/modules/question-bank';
@@ -61,6 +62,7 @@ import { WebhooksModule } from '@/modules/webhooks';
     IntegrationApiModule,
     WebhooksModule,
     CandidateAccountsModule,
+    PracticeModule,
   ],
 })
 export class AppModule {}
