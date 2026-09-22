@@ -21,6 +21,7 @@ const invitingOrg: Org = {
   name: 'Acme',
   plan: 'pilot',
   creditsBalance: 0,
+  lowBalanceThreshold: 5,
   createdAt: new Date().toISOString(),
 };
 

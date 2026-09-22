@@ -7,6 +7,7 @@ interface OrgRow {
   name: string;
   plan: string;
   credits_balance: number;
+  low_balance_threshold: number;
   created_at: Date;
 }
 
@@ -16,11 +17,12 @@ export function mapOrgRow(row: OrgRow): Org {
     name: row.name,
     plan: row.plan,
     creditsBalance: row.credits_balance,
+    lowBalanceThreshold: row.low_balance_threshold,
     createdAt: row.created_at.toISOString(),
   };
 }
 
-const COLUMNS = 'id, name, plan, credits_balance, created_at';
+const COLUMNS = 'id, name, plan, credits_balance, low_balance_threshold, created_at';
 
 @Injectable()
 export class OrgRepository {
@@ -62,5 +64,17 @@ export class OrgRepository {
       throw new Error(`insufficient credits or org not found: ${id}`);
     }
     return { id: row.id, creditsBalance: row.credits_balance };
+  }
+
+  /**
+   * Sets the low-balance alert threshold (FR-E14-3). NOTE: "org" has no
+   * updated_at column — never add one to this statement.
+   */
+  async setLowBalanceThreshold(id: string, threshold: number): Promise<boolean> {
+    const result = await this.db.query(
+      `UPDATE "org" SET low_balance_threshold = $2 WHERE id = $1 RETURNING id`,
+      [id, threshold],
+    );
+    return (result.rowCount ?? 0) > 0;
   }
 }

@@ -88,6 +88,10 @@ services:
     # Catches all outbound email in dev/test (invites, OTPs, reminders)
     image: axllent/mailpit:latest
     container_name: zios-mailpit
+    environment:
+      # Default cap is 500 messages with oldest-prune; the integration
+      # suites + live stack outpace that and waitForEmail loses emails.
+      MP_MAX_MESSAGES: '5000'
     ports:
       - '${MAILPIT_SMTP_PORT}:1025'
       - '${MAILPIT_UI_PORT}:8025'

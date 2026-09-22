@@ -17,6 +17,7 @@ import {
   type AnalysisMediaKind,
 } from '@/modules/analysis';
 import { ConsentService } from '@/modules/consent';
+import { CreditsService, priceForSession } from '@/modules/credits';
 import {
   INTERVIEWER_AI,
   type InterviewerAi,
@@ -91,6 +92,7 @@ export class VoiceService {
     private readonly transcript: TranscriptRepository,
     private readonly analysis: AnalysisService,
     private readonly consent: ConsentService,
+    private readonly credits: CreditsService,
     private readonly logger: PinoLogger,
     @Inject(INTERVIEWER_AI) private readonly conductor: InterviewerAi,
   ) {
@@ -113,12 +115,19 @@ export class VoiceService {
       return row;
     });
 
-    const response = await fetch(`${this.orchestratorBaseUrl}/voice/sessions/${sessionId}/token`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ recoveryToken, mode: session.mode }),
-    });
+    let response: Response;
+    try {
+      response = await fetch(`${this.orchestratorBaseUrl}/voice/sessions/${sessionId}/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recoveryToken, mode: session.mode }),
+      });
+    } catch {
+      await this.refundSystemFailure(sessionId);
+      throw new ApiException(502, 'ORCHESTRATOR_ERROR', 'orchestrator unreachable');
+    }
     if (!response.ok) {
+      await this.refundSystemFailure(sessionId);
       throw new ApiException(502, 'ORCHESTRATOR_ERROR', 'orchestrator failed to issue voice token');
     }
     const payload = (await response.json()) as OrchestratorTokenPayload;
@@ -133,6 +142,40 @@ export class VoiceService {
       livekit: payload.livekit,
       orchestrator: payload.orchestrator,
     };
+  }
+
+  /**
+   * The session was charged at start (preflight -> live). If the orchestrator
+   * cannot issue the media token right after, the interview cannot proceed —
+   * a genuine system fault, so refund the start debit. Guarded by the ledger
+   * (session_ref + reason) so retries never double-refund (FR-E14-2).
+   */
+  private async refundSystemFailure(sessionId: string): Promise<void> {
+    try {
+      const orgRow = await this.db.query(
+        `SELECT i.org_id AS id, s.mode, s.conductor FROM interview_session s
+         JOIN invite i ON i.id = s.invite_id WHERE s.id = $1`,
+        [sessionId],
+      );
+      const row = orgRow.rows[0] as
+        | { id: string; mode: 'voice' | 'video'; conductor: 'ai' | 'human' }
+        | undefined;
+      if (!row) return;
+      if (await this.credits.hasRefundForSession(row.id, sessionId, 'system_failure_refund')) {
+        return;
+      }
+      await this.db.transaction(async (q) => {
+        await this.credits.credit(
+          row.id,
+          priceForSession(row.mode, row.conductor),
+          'system_failure_refund',
+          q,
+          { sessionRef: sessionId, metadata: { cause: 'orchestrator_token_unavailable' } },
+        );
+      });
+    } catch {
+      // Refund is best-effort: never mask the original 502.
+    }
   }
 
   async fallbackToText(
