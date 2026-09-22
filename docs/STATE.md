@@ -109,6 +109,14 @@ Everything below is **fixture-driven mock** today. Feature code is complete; rea
 - `services/api/src/testing/integration/dlq-redrive.integration.spec.ts` (3 tests, per-boot UUID queue isolation for both queues, local `node:http` orchestrator stub): analysis job 502×3 → DLQ → admin redrive → completes, DLQ row removed; transcription DLQ likewise; 404 for unknown ids, 403 `FORBIDDEN_ROLE` for interviewers.
 - Endpoints: `POST /analysis/dlq/:jobId/redrive` (analysis job id) and `POST /async-video-interviews/dlq/:transcriptId/redrive` (transcript id), both `@Roles('admin')` + org-scoped, reset-and-re-enqueue in one transaction, BullMQ added after commit. Replaces `scripts/redrive-analysis-job.js`.
 
+### Phase 10 (in progress) — Branch 1: API keys (FR-E13-1)
+
+- New `api_key` table (sha256 hash only, `zios_test_/zios_live_` format, shown once at create/rotate; scopes + per-key rate limit; migration `1790086311907_api-key`).
+- `services/api/src/modules/integration-api/`: `ApiKeysService` (create/rotate/revoke/list, org-scoped), `ApiKeyGuard` (Bearer → hash → active lookup → `@Scopes` check → Redis fixed-window rate limit → 429 + Retry-After), `KeysController` at `/integration-api/keys` (session-authed; mutations `@Roles('admin')`).
+- Tests: unit (service + guard, `api-keys.service.spec.ts` / `api-key-auth.guard.spec.ts`), integration `api-keys.integration.spec.ts` (full HTTP lifecycle, 401/403 matrix, cross-org 404, raw key never persisted); employer-web `api-keys-page.test.tsx` (4 tests).
+- employer-web: **API Keys page** at `/settings/api-keys` (shell nav "API Keys"): list (prefix/kind/scopes/limits/status), create test|live, rotate/revoke (admin only), one-time reveal modal with copy.
+- API suite 287 passed / 2 skipped; employer-web 96 passed.
+
 ### Phase 09 — Human-facilitated
 
 - `services/api/src/testing/integration/phase09.integration.spec.ts` (8 tests): scheduling, .ics, slot window, cockpit coverage, end-call notes, reschedule request/confirm, scorecard prefill/submit, no-AI-scoring proof, dashboard surfacing.

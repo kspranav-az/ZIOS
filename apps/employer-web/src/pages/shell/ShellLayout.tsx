@@ -10,6 +10,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'candidates', label: 'Candidates', icon: 'group', to: '/candidates' },
   { id: 'interviews', label: 'Interviews', icon: 'video_chat', to: '/interviews' },
   { id: 'analytics', label: 'Analytics', icon: 'analytics', to: '/analytics' },
+  { id: 'api-keys', label: 'API Keys', icon: 'key', to: '/settings/api-keys' },
 ];
 
 const ROLE_LABELS = {

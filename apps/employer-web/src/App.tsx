@@ -9,6 +9,7 @@ import { ShellLayout } from './pages/shell/ShellLayout';
 import { DashboardPage } from './pages/shell/DashboardPage';
 import { CandidatesPage } from './pages/shell/CandidatesPage';
 import { AnalyticsPage } from './pages/shell/AnalyticsPage';
+import { ApiKeysPage } from './pages/shell/ApiKeysPage';
 import { InterviewsListPage } from './pages/reports/InterviewsListPage';
 import { InterviewDetailPage } from './pages/reports/InterviewDetailPage';
 import { ShareReportPage } from './pages/reports/ShareReportPage';
@@ -105,6 +106,7 @@ const router = createBrowserRouter([
           { path: 'interviews/:sessionId/scorecard', element: <ScorecardPage /> },
           { path: 'interviews/:sessionId/async-review', element: <AsyncVideoReviewPage /> },
           { path: 'analytics', element: <AnalyticsPage /> },
+          { path: 'settings/api-keys', element: <ApiKeysPage /> },
         ],
       },
       { path: '/share/:token', element: <ShareReportPage /> },
