@@ -1,4 +1,5 @@
 export { GenerationModule } from './generation.module';
+export { GenerationService } from './generation.service';
 export { LlmGenerationAdapter } from './llm-generation.adapter';
 export { LLM_GATEWAY_PORT, type LlmGatewayPort } from './llm-gateway.port';
 export { StubLlmAdapter } from './stub-llm.adapter';

@@ -38,7 +38,7 @@ This file records the current implementation state, what is proven, what is not,
 | E10  | Evaluation & report       | ✅             | Transcript, rubric scores + evidence, communication metrics, integrity panel, override, PDF, share link                                                                                                                                                                 |
 | E11  | Notifications             | ⚠️ Partial     | Email via Mailpit only; WhatsApp/SMS deferred to Phase 11                                                                                                                                                                                                               |
 | E12  | Dashboard (pipeline-lite) | ✅             | Interview list, statuses, kit stats, filters; async-video rows now route to review page instead of report                                                                                                                                                               |
-| E13  | Integration API           | 🚧 In progress | Branch 0 ✅ DLQ redrive endpoints (`POST /analysis/dlq/:jobId/redrive`, `POST /async-video-interviews/dlq/:transcriptId/redrive`, Admin-gated, org-scoped); next: API keys → `/v1/interviews` → webhooks → credits wallet; see `phases/phase-10-implementation-plan.md` |
+| E13  | Integration API           | 🚧 In progress | Branch 0 ✅ DLQ redrive endpoints; Branch 1 ✅ API keys (guard, scopes, rate limit, UI); Branch 2 ✅ `/v1/interviews` (idempotent create, status, scorecard, sandbox seed); next: webhooks → credits wallet; see `phases/phase-10-implementation-plan.md` |
 | E14  | Billing-lite              | ⚠️ Partial     | Credit ledger + 3-credit debit on async-video create + refund-before-first-answer wired and tested (Phase 09b); wallet UI and real payments remain Phase 10                                                                                                             |
 | E15  | Async video interviews    | ✅             | Formal M1 mode as of PRD update; role-based creation, per-question recording, transcription, review, AI pre-fill + human scorecard, report, credit debit; see `phases/phase-09b-async-video-hardening.md`                                                               |
 
@@ -103,6 +103,14 @@ Everything below is **fixture-driven mock** today. Feature code is complete; rea
 - `services/api/src/testing/unit/credits.service.spec.ts`: ledger append-only invariants, debit/refund balance math, insufficient-credits mapping (note: `org` has no `updated_at`; adjustCredits must not reference it or debit fails as 402).
 - `apps/employer-web/e2e/async-video-review.spec.ts` extended: pre-fill → edit → submit → report render.
 - `phases/phase-09b-async-video-hardening.md`: all verification and validation checkboxes ticked; tagged `phase-09b-complete`.
+
+### Phase 10 (in progress) — Branch 2: /v1 interviews (FR-E13-2/3)
+
+- New `external_interview` table (org-scoped, idempotent unique `(org_id, external_ref, kit_version_id)`, FKs CASCADE; migration `1790097664987_external-interview`).
+- `services/api/src/modules/integration-api/`: `ExternalInterviewRepository` (insert-idempotent ON CONFLICT DO NOTHING), `V1InterviewsService`, `InterviewsController` at `/v1/interviews` (`@Public()` + `ApiKeyGuard`, scopes `interviews:write`/`interviews:read`). Create via `kit_id` or `jd_text` (JD analysis → proposal → publish with settings overrides); text/voice/video/human modes, `async_video` → 422 `MODE_NOT_SUPPORTED`; kit mode mismatch → 422 `MODE_MISMATCH`; idempotent replay returns same `interview_id` with `invite_link: null` + `idempotent_replay: true` (raw token unrecoverable by design).
+- API-key requests run as the org's first app_user inside `TenantContext.run` (withTenant fails closed otherwise); `GenerationService.publishProposal` / `KitsService.createFromProposal` gained an optional `settingsOverrides` param.
+- `scripts/seed-integration-sandbox.js`: end-to-end sandbox seed (OTP signup via Mailpit → published kit → test API key → 500 credits) printing the partner curl loop; verified against a live host-run API.
+- Tests: `v1-interviews.integration.spec.ts` (6 tests): kit_id + jd_text create, idempotent retry, 401/403/cross-org-404 authz matrix, MODE_MISMATCH/async_video rejection, full journey to scorecard v1 (real text interview via candidate API + pollForReport). API suite 293 passed / 2 skipped.
 
 ### Phase 10 (in progress) — Branch 0: DLQ redrive
 

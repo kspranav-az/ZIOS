@@ -5,6 +5,7 @@ import type {
   GenerationProposal,
   JdGeneration,
   JdProfile,
+  KitSettings,
   KitVersionSummary,
   ProposalEdit,
   ProposedQuestion,
@@ -185,6 +186,7 @@ export class GenerationService {
     generationId: string,
     finalProposal?: GenerationProposal,
     edits?: ProposalEdit[],
+    settingsOverrides?: Partial<KitSettings>,
   ): Promise<{ generation: JdGeneration; version: KitVersionSummary }> {
     const generation = await this.repository.findById(user.orgId, generationId);
     if (!generation) {
@@ -213,6 +215,7 @@ export class GenerationService {
       generation.roleProfile,
       generation.id,
       generationMetadata,
+      settingsOverrides,
     );
 
     const updated = await this.repository.update(user.orgId, generationId, {
