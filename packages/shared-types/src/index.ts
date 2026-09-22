@@ -123,6 +123,76 @@ export interface CandidateMePatchBody {
   marketingOptIn?: boolean;
 }
 
+// ---- Ascend practice engine (Phase 12, D5/D6) ----
+
+export type PracticeMode = 'text' | 'voice';
+export type PracticeSource = 'library' | 'jd';
+
+export interface PracticeLibraryPack {
+  id: string;
+  title: string;
+  description: string;
+  /** Full question set including rubric lines — seeded JSON, no LLM involved. */
+  questions: KitQuestion[];
+}
+
+export interface PracticeSession {
+  id: string;
+  accountId: string;
+  mode: PracticeMode;
+  source: PracticeSource;
+  title: string;
+  status: string;
+  consentId: string | null;
+  createdAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+}
+
+export interface PracticeCreateBody {
+  /** Library pack id (from GET /cand/practice/library). */
+  packId: string;
+  mode: PracticeMode;
+}
+
+export interface PracticeConsentBody {
+  recordingAllowed: boolean;
+  modelOptIn?: boolean;
+}
+
+export interface PracticeConsentText {
+  version: string;
+  text: string;
+}
+
+export interface PracticeCreateResponse {
+  session: PracticeSession;
+  recoveryToken: string;
+}
+
+export interface PracticeConsentResponse {
+  session: PracticeSession;
+}
+
+export interface PracticePreflightResponse {
+  session: PracticeSession;
+  turn: SessionTurnResponse;
+}
+
+export interface PracticeTurnBody {
+  answer?: string;
+}
+
+export interface PracticeTurnResponse {
+  session: PracticeSession;
+  turn: SessionTurnResponse;
+}
+
+export interface PracticeSessionDetailResponse {
+  session: PracticeSession;
+  transcript: SessionTranscript[];
+}
+
 export interface OrgInvite {
   id: string;
   orgId: string;
