@@ -9,6 +9,7 @@ import { GenerationModule } from '@/modules/generation';
 import { HealthModule } from '@/modules/health';
 import { InvitesModule } from '@/modules/invites';
 import { KitsModule } from '@/modules/kits';
+import { CandidateAccountsModule } from '@/modules/candidate-accounts';
 import { CreditsModule } from '@/modules/credits';
 import { OrgModule } from '@/modules/org';
 import { QuestionBankModule } from '@/modules/question-bank';
@@ -59,6 +60,7 @@ import { WebhooksModule } from '@/modules/webhooks';
     AsyncVideoInterviewsModule,
     IntegrationApiModule,
     WebhooksModule,
+    CandidateAccountsModule,
   ],
 })
 export class AppModule {}
