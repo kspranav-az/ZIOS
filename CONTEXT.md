@@ -1,6 +1,6 @@
 # CONTEXT.md — ZIOS Working Context
 
-**Last updated:** 2026-09-22 · **Branch:** `ai-analysis` (tip `494ef02`, tagged `phase-14-complete`) · **Unmerged into `main`:** `phase-09b/async-video-hardening` + `ai-analysis`
+**Last updated:** 2026-09-22 · **Branch:** `main` (tip `3666889`; `phase-09b/async-video-hardening` + `ai-analysis` merged 2026-09-22 via `--no-ff` merge commits `4ff5d5b` + `3666889`, history preserved per owner) · **Remote:** `origin` = `git@github.com:kspranav-az/ZIOS.git` (SSH; all branches + tags pushed)
 
 This file is the session-to-session handover: where the project is, how it runs, what's proven, what's pending, and the operational gotchas. Authoritative deep-dives live in `docs/` (`PRD`, `ARCHITECTURE.md`, `STATE.md`, `FEATURES.md`, `DEMO.md`) and `phases/`.
 
@@ -63,6 +63,7 @@ MediaPipe pinned **0.10.21** (1.0.1 SIGABRTs on macOS/arm64, no linux/aarch64 wh
 - Foreign containers (promptwars-_, psychometric-ar-game-_) hold host ports **5432** and **5173** → zios Postgres is on **55432**, employer-web on **5273** (compose port overrides, `afed318`). Root `.env` DATABASE_URL still says 5432 — stale for host-run tests; use the 55432 URL inline.
 - psychometric-ar-game-frontend was stopped once to free 5173 for E2E; restart that project's stack when needed.
 - First OTP for a brand-new email can be rejected → hit **Resend** (known quirk).
+- Husky `commit-msg` hook shells out to `pnpm`, which is not on PATH in agent/headless shells → commits fail with code 127 there; use `--no-verify` or ensure pnpm is on PATH.
 - hapkonic.com Cloudflare tunnel exists for LAN/remote access (livekit.hapkonic.com etc.) from earlier human-mode validation.
 
 ## 8. GCP deployment analysis (done, no code written)
@@ -73,17 +74,15 @@ Recommended: single **x86** `e2-standard-4` VM running compose unchanged; `VIDEO
 
 - Live LiveKit capture proof pending (unit/integration only — owner signed off; verify on next real voice/video session: `recordings/*.webm` in MinIO + analysis completes).
 - No DLQ redrive endpoint (both tables).
-- Phases 09b + 14 unmerged to `main`.
 - Real-provider validation pending (Gemini/GCP STT adapters ready; STT/TTS quality metrics unmeasurable on mocks).
 - Phase 10/11 not started; no WhatsApp/SMS; no real Google OAuth; no production infra.
 
 ## 10. Immediate next steps (docs/STATE.md §8)
 
-1. Squash-merge `phase-09b/*` then `ai-analysis` → `main`.
-2. Live-capture proof on a real voice/AI-video session.
-3. Phase 10 kickoff: `phase-10/*` — integration API (API keys, create-interview, webhooks) + credit wallet UI.
-4. Provider procurement (LLM, STT, TTS, Google OAuth, WhatsApp, payments).
-5. Pilot prep: ≥3 pilot employers (PRD X9).
+1. Live-capture proof on a real voice/AI-video session.
+2. Phase 10 kickoff: `phase-10/*` — integration API (API keys, create-interview, webhooks) + credit wallet UI.
+3. Provider procurement (LLM, STT, TTS, Google OAuth, WhatsApp, payments).
+4. Pilot prep: ≥3 pilot employers (PRD X9).
 
 ## 11. Working style notes (how this repo has been run)
 

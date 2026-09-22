@@ -1,6 +1,6 @@
 # State — InterviewOS / Meridian MVP
 
-**Snapshot date:** 2026-09-12 (EOD) · **HEAD:** `ai-analysis` branch tip (19 commits ahead of `phase-09b-complete`; Phases 09b + 14 await squash-merge to `main`) · **Tags:** `phase-00-complete` … `phase-09b-complete`, `phase-14-complete`, `v0.1.0-mvp0-mock`
+**Snapshot date:** 2026-09-22 · **HEAD:** `main` @ `3666889` (Phases 09b + 14 merged 2026-09-22 via `--no-ff` merge commits `4ff5d5b` + `3666889`; commit history preserved per owner) · **Remote:** `origin` = `git@github.com:kspranav-az/ZIOS.git` (all branches + tags pushed) · **Tags:** `phase-00-complete` … `phase-09b-complete`, `phase-14-complete`, `v0.1.0-mvp0-mock`
 
 This file records the current implementation state, what is proven, what is not, and where the blockers are.
 
@@ -44,7 +44,7 @@ This file records the current implementation state, what is proven, what is not,
 
 > Async video was originally added as a validation-layer shortcut. It is now **E15 in the PRD §3.4 IN list** with formal acceptance criteria and a scope trade (FR-E10-5 candidate comparison view deferred to M2).
 
-### Post-M1: Phase 14 — Multimodal feature extraction (in progress, branch `ai-analysis`)
+### Post-M1: Phase 14 — Multimodal feature extraction (✅ complete, merged to `main`)
 
 Post-M1 extension (not in the frozen PRD §3.4): objective multimodal feature extraction for one-way recorded modes. Plan: `phases/phase-14-multimodal-analysis.md`. **Complete and tagged `phase-14-complete` (2026-09-12); validated end-to-end on the bundled 150 s interview clip.**
 
@@ -154,7 +154,6 @@ Everything below is **fixture-driven mock** today. Feature code is complete; rea
 | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
 | Live LiveKit capture not yet proven            | Video-mode track capture + voice-recording analysis are unit/integration-tested only; no real browser LiveKit session has run through analysis    | First real voice/AI-video session: verify `recordings/*.webm` lands in MinIO and its analysis job completes |
 | No DLQ redrive endpoint                        | Stuck/dead analysis + transcription jobs need manual re-enqueue (`scripts/redrive-analysis-job.js` exists for analysis)                           | Add admin redrive endpoint (both DLQ tables)                                                                |
-| Phase 09b + ai-analysis branches not merged    | `phase-09b/*` and `ai-analysis` (Phase 14, tagged) are ahead of `main`                                                                            | Squash-merge to `main` when ready                                                                           |
 | Orchestrator is `linux/amd64`-only             | mediapipe 1.0.1 crashes on macOS/arm64 and ships no linux/aarch64 wheel → pinned 0.10.21, emulated amd64 on ARM hosts (slow: 150 s clip ≈ 30 min) | Revisit when mediapipe ships aarch64; CI on x86 is native                                                   |
 | `.env` DATABASE_URL stale (5432 vs 55432)      | Host-run tests/scripts fail against compose Postgres on 55432                                                                                     | Reconcile `.env` with compose port override                                                                 |
 | Phase 10 not started                           | No integration API, webhooks, or credit wallet UI                                                                                                 | Decide scope and start `phase-10/*`                                                                         |
@@ -188,17 +187,16 @@ Run `pnpm migrate` to verify no pending migrations.
 
 ## 7. Git hygiene
 
-- **Branches:** All `phase-NN/*` branches preserved. `phase-09b/async-video-hardening` (tagged `phase-09b-complete`) and `ai-analysis` (Phase 14, tagged `phase-14-complete`) are both ahead of `main` and unmerged.
-- **Main:** Linear history of phase squash commits plus async-video fixes; tags `phase-00-complete` … `phase-09-complete` and `v0.1.0-mvp0-mock`.
-- **Working tree:** Clean on `ai-analysis` at snapshot time.
+- **Branches:** All `phase-NN/*` branches preserved and pushed to GitHub. `phase-09b/async-video-hardening` (tagged `phase-09b-complete`) and `ai-analysis` (Phase 14, tagged `phase-14-complete`) were merged into `main` on 2026-09-22 with `--no-ff` merge commits (`4ff5d5b`, `3666889`) — full commit history preserved per owner request (not squash-merged).
+- **Main:** Phase history plus merge commits for Phases 09b and 14; tags `phase-00-complete` … `phase-09-complete`, `phase-09b-complete`, `phase-14-complete`, and `v0.1.0-mvp0-mock`. Remote `origin` = `git@github.com:kspranav-az/ZIOS.git` (SSH; HTTPS lacked credentials on this machine).
+- **Working tree:** Clean on `main` at snapshot time.
 
 ---
 
 ## 8. Immediate next steps
 
-1. **Merge backlog:** squash-merge `phase-09b/async-video-hardening` then `ai-analysis` (Phase 14, tagged) to `main`.
-2. **Live capture proof:** run one real voice/AI-video browser session; verify `recordings/*.webm` in MinIO + analysis completion (closes the last known Phase-14 gap).
-3. **Phase 10 kickoff:** Create `phase-10/*` branch for integration API, webhooks, and credit wallet UI.
-4. **Provider procurement:** Select and obtain credentials for LLM, STT, TTS, Google OAuth, WhatsApp, and payments.
-5. **Key handover re-run:** Re-execute credential-gated phase validations with real providers.
-6. **Pilot preparation:** Identify ≥ 3 pilot employers per PRD exit criterion X9.
+1. **Live capture proof:** run one real voice/AI-video browser session; verify `recordings/*.webm` in MinIO + analysis completion (closes the last known Phase-14 gap).
+2. **Phase 10 kickoff:** Create `phase-10/*` branch for integration API, webhooks, and credit wallet UI.
+3. **Provider procurement:** Select and obtain credentials for LLM, STT, TTS, Google OAuth, WhatsApp, and payments.
+4. **Key handover re-run:** Re-execute credential-gated phase validations with real providers.
+5. **Pilot preparation:** Identify ≥ 3 pilot employers per PRD exit criterion X9.
