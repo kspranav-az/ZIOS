@@ -66,6 +66,34 @@ MediaPipe pinned **0.10.21** (1.0.1 SIGABRTs on macOS/arm64, no linux/aarch64 wh
 - Toolchain on this machine: `nvm` (Node LTS jod v22.22.2, satisfies `>=22`); pnpm 11.1.1 via corepack, shim symlinked to `~/.local/bin/pnpm` so husky/commitlint works in any shell (verified 2026-09-22).
 - hapkonic.com Cloudflare tunnel exists for LAN/remote access (livekit.hapkonic.com etc.) from earlier human-mode validation.
 
+### 7.1 Native orchestrator dev loop (recommended on this ARM Mac)
+
+The orchestrator container is `linux/amd64`-emulated here — a 150 s clip takes ~30 min. Native is ~realtime–2× and already proven: full 104-test suite passes in ~24 s via the project venv (MediaPipe 0.10.21 ships macOS/arm64 wheels; the missing wheel is linux/aarch64 only). Use **native for iteration, Docker as the pre-merge parity gate** (CI runs x86 compose; AGENTS.md §5/§6 still applies).
+
+Infra stays in compose — only the orchestrator _process_ runs natively:
+
+```bash
+docker compose up -d            # infra: postgres(55432), redis, minio(9000/9001), livekit(7880), mailpit
+docker compose stop ai-orchestrator   # free host port 8000
+cd services/ai-orchestrator
+
+# run the service natively, pointed at compose infra:
+MINIO_ENDPOINT=localhost:9000 \
+API_BASE_URL=http://localhost:3000 \
+LIVEKIT_URL=ws://localhost:7880 \
+STT_ADAPTER=${STT_ADAPTER:-mock} GCP_PROJECT_ID=${GCP_PROJECT_ID:-} \
+uv run uvicorn app.main:app --reload --port 8000
+
+# or just run the tests natively:
+uv run pytest            # 104 passed / 2 skipped in ~25 s
+```
+
+Notes:
+
+- MediaPipe/Silero models: Docker bakes them into `/opt/mediapipe-models`; natively `ensure_models` falls back to a per-user cache (downloaded once, same pins/sha256).
+- ADC (GCP STT) is auto-discovered from `~/.config/gcloud` natively; in Docker it would need an explicit volume mount.
+- Before merging anything, re-run the compose stack path (`docker compose up -d --build`) and its tests — native↔container diffs (model cache location, ffmpeg build) are exactly what the parity gate is for.
+
 ## 8. GCP deployment analysis (done, no code written)
 
 Recommended: single **x86** `e2-standard-4` VM running compose unchanged; `VIDEO_ANALYSIS_FPS=3` to start; add coturn (TURN) for LiveKit; avoid ARM VMs (MediaPipe); scale later by isolating/replicating the orchestrator VM; GPU and Cloud Run/GKE deferred; managed vision APIs rejected (privacy + cost + provider-independence).
