@@ -13,7 +13,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { AppUser } from '@zios/shared-types';
-import { CurrentUser, Public } from '@/common/decorators';
+import { CurrentUser, Public, Roles } from '@/common/decorators';
 import { ApiException } from '@/common/errors';
 import {
   AsyncVideoInterviewsService,
@@ -95,6 +95,20 @@ export class AsyncVideoInterviewsController {
     @Param('sessionId') sessionId: string,
   ): Promise<ReturnType<AsyncVideoInterviewsService['refundCredits']>> {
     return this.service.refundCredits(user.orgId, sessionId);
+  }
+
+  /**
+   * Admin-only redrive of a DLQ'd transcription job: resets it to pending and
+   * re-enqueues it on the transcription queue.
+   */
+  @Post('dlq/:transcriptId/redrive')
+  @HttpCode(200)
+  @Roles('admin')
+  async redriveTranscriptionDlq(
+    @CurrentUser() user: AppUser,
+    @Param('transcriptId') transcriptId: string,
+  ): Promise<ReturnType<AsyncVideoInterviewsService['redriveTranscription']>> {
+    return this.service.redriveTranscription(user.orgId, transcriptId);
   }
 
   /* ---- public candidate-facing ---- */

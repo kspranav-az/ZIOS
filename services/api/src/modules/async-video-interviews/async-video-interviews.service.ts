@@ -30,6 +30,7 @@ import { StorageClient } from '@/modules/storage';
 import { AnalysisService, type AnalysisJobRecord } from '@/modules/analysis';
 import { AsyncVideoTranscriptionService } from './transcription.service';
 import { RoleKitResolverService } from './role-kit-resolver.service';
+import { TranscriptionDlqService } from './transcription-dlq.service';
 import { TranscriptionQueue } from './transcription.queue';
 
 const ZETHEETA_ORG_ID = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11';
@@ -168,6 +169,7 @@ export class AsyncVideoInterviewsService {
     private readonly transcription: AsyncVideoTranscriptionService,
     private readonly roleKitResolver: RoleKitResolverService,
     private readonly transcriptionQueue: TranscriptionQueue,
+    private readonly transcriptionDlq: TranscriptionDlqService,
     private readonly analysis: AnalysisService,
     private readonly credits: CreditsService,
     @Inject(JUDGE_PORT) private readonly judge: JudgePort,
@@ -528,6 +530,49 @@ export class AsyncVideoInterviewsService {
       const scores = await this.listScores(sessionId, q);
       return { session, candidate, invite, questions: snapshot.questions, answers, scores };
     });
+  }
+
+  /**
+   * Admin redrive of a DLQ'd transcription job: resets the job to pending and
+   * re-enqueues it on the transcription queue. Org-scoped like the review
+   * endpoints; the BullMQ job is added only after the reset transaction
+   * commits.
+   */
+  async redriveTranscription(
+    orgId: string,
+    transcriptId: string,
+  ): Promise<{ transcriptId: string; sessionId: string; requeued: true }> {
+    const plan = await this.db.transaction(async (q) => {
+      const dlq = await this.transcriptionDlq.findByTranscriptId(transcriptId, q);
+      if (!dlq) {
+        throw new ApiException(404, 'DLQ_JOB_NOT_FOUND', 'no DLQ row for this transcript');
+      }
+      const session = await this.sessions.findById(dlq.sessionId, q);
+      if (!session) {
+        throw new ApiException(404, 'SESSION_NOT_FOUND', 'session not found');
+      }
+      const invite = await this.invites.findById(orgId, session.inviteId, q);
+      if (!invite) {
+        throw new ApiException(404, 'INVITE_NOT_FOUND', 'invite not found');
+      }
+      const redriven = await this.transcriptionDlq.redriveFromDlq(transcriptId, q);
+      return {
+        transcriptId,
+        sessionId: redriven.sessionId,
+        inviteId: session.inviteId,
+        objectName: redriven.objectName,
+        questionId: redriven.questionId,
+        requeued: true as const,
+      };
+    });
+    await this.transcriptionQueue.add({
+      transcriptId: plan.transcriptId,
+      objectName: plan.objectName,
+      sessionId: plan.sessionId,
+      questionId: plan.questionId,
+      inviteId: plan.inviteId,
+    });
+    return { transcriptId: plan.transcriptId, sessionId: plan.sessionId, requeued: true };
   }
 
   async submitScore(
