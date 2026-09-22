@@ -21,6 +21,11 @@ import { EvaluationService } from '@/modules/evaluation';
 import { ApiException } from '@/common/errors';
 import { DatabaseService, type Queryable } from '@/modules/database';
 import { KitVersionsRepository } from '@/modules/kits';
+import {
+  WebhookFanoutService,
+  WebhooksQueue,
+  type WebhookDelivery,
+} from '@/modules/webhooks';
 import { eventForTransition, transition } from './state-machine';
 import { EventsRepository } from './events.repository';
 import { INTERVIEWER_AI, type InterviewerAi } from './interviewer-ai.port';
@@ -97,6 +102,8 @@ export class SessionsService {
     private readonly candidates: CandidatesRepository,
     private readonly evaluation: EvaluationService,
     private readonly kitVersions: KitVersionsRepository,
+    private readonly webhookFanout: WebhookFanoutService,
+    private readonly webhookQueue: WebhooksQueue,
     @Inject(INTERVIEWER_AI) private readonly conductor: InterviewerAi,
   ) {}
 
@@ -137,6 +144,13 @@ export class SessionsService {
     await this.events.insert({ sessionId, type, payload }, q);
   }
 
+  /** BullMQ enqueue strictly after the interview transaction has committed. */
+  private async enqueueWebhookDeliveries(deliveries: WebhookDelivery[] | undefined): Promise<void> {
+    for (const delivery of deliveries ?? []) {
+      await this.webhookQueue.add(delivery.id);
+    }
+  }
+
   private async advanceSessionStatus(
     q: Queryable,
     session: InterviewSession,
@@ -156,7 +170,7 @@ export class SessionsService {
     q: Queryable,
     session: InterviewSession,
     snapshot: KitSnapshot,
-  ): Promise<{ session: InterviewSession; turn: SessionTurnResponse }> {
+  ): Promise<{ session: InterviewSession; turn: SessionTurnResponse; webhookDeliveries: WebhookDelivery[] }> {
     const transcript = await this.transcript.listBySession(session.id, q);
     const turn = await this.conductor.nextTurn({ session, snapshot, transcript });
 
@@ -168,7 +182,19 @@ export class SessionsService {
       await q.query("UPDATE invite SET status = 'completed', updated_at = now() WHERE id = $1", [
         session.inviteId,
       ]);
-      return { session: completed, turn };
+      // Durable webhook rows in-transaction (FR-E13-4); BullMQ jobs are
+      // enqueued by the caller only after commit.
+      const completedEvent = await this.events.findLatestBySession(session.id, q);
+      const webhookDeliveries = completedEvent
+        ? await this.webhookFanout.fanout(q, {
+            sessionEventId: completedEvent.id,
+            sessionId: session.id,
+            inviteId: session.inviteId,
+            event: 'interview.completed',
+            occurredAt: new Date(completedEvent.occurredAt),
+          })
+        : [];
+      return { session: completed, turn, webhookDeliveries };
     }
 
     // Ask the next question/followup by appending a transcript row.
@@ -182,7 +208,7 @@ export class SessionsService {
       },
       q,
     );
-    return { session, turn };
+    return { session, turn, webhookDeliveries: [] };
   }
 
   /* ---- consent / session creation ---- */
@@ -308,7 +334,7 @@ export class SessionsService {
       if (session.status === 'live') {
         if (session.conductor === 'human') {
           const turn: SessionTurnResponse = { type: 'question', text: '', questionId: null };
-          return { session, turn };
+          return { session, turn, webhookDeliveries: [] };
         }
         return this.buildNextTurn(q, session, snapshot);
       }
@@ -339,13 +365,14 @@ export class SessionsService {
           text: lastRow.questionPrompt,
           questionId: lastRow.questionId,
         };
-        return { session, turn };
+        return { session, turn, webhookDeliveries: [] };
       }
 
       return this.buildNextTurn(q, session, snapshot);
     });
 
     if (result.session.status === 'completed') {
+      await this.enqueueWebhookDeliveries(result.webhookDeliveries);
       await this.evaluation.evaluateSession(result.session.id);
     }
     return result;
@@ -362,7 +389,7 @@ export class SessionsService {
           const snapshot = await this.loadSnapshot(session.kitVersionId, q);
           const transcript = await this.transcript.listBySession(session.id, q);
           const turn = await this.conductor.nextTurn({ session, snapshot, transcript });
-          return { session, turn };
+          return { session, turn, webhookDeliveries: [] };
         }
         throw new ApiException(409, 'SESSION_STATE_INVALID', `session is ${session.status}`);
       }
@@ -383,7 +410,7 @@ export class SessionsService {
             text: lastRow.questionPrompt,
             questionId: lastRow.questionId,
           };
-          return { session, turn };
+          return { session, turn, webhookDeliveries: [] };
         }
         const question = snapshot.questions.find((q) => q.id === lastRow.questionId);
         if (question) {
@@ -413,6 +440,7 @@ export class SessionsService {
     });
 
     if (result.session.status === 'completed') {
+      await this.enqueueWebhookDeliveries(result.webhookDeliveries);
       await this.evaluation.evaluateSession(result.session.id);
     }
     return result;

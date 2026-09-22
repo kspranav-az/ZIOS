@@ -12,6 +12,11 @@ import type {
 import { DatabaseService, type Queryable } from '@/modules/database';
 import { LlmGateway } from '@/modules/llm-gateway';
 import { ApiException } from '@/common/errors';
+import {
+  WebhookFanoutService,
+  WebhooksQueue,
+  type WebhookDelivery,
+} from '@/modules/webhooks';
 import { computeCommunicationMetrics } from './metrics';
 import { EvaluationRepository } from './evaluation.repository';
 import { EvaluationScoreRepository } from './score.repository';
@@ -41,6 +46,8 @@ export class EvaluationService {
     private readonly notesRepo: InterviewNotesRepository,
     @Inject(JUDGE_PORT) private readonly judge: JudgePort,
     private readonly llmGateway: LlmGateway,
+    private readonly webhookFanout: WebhookFanoutService,
+    private readonly webhookQueue: WebhooksQueue,
   ) {}
 
   /**
@@ -142,6 +149,7 @@ export class EvaluationService {
         .join(',');
 
       const stageWrite = Date.now();
+      let webhookDeliveries: WebhookDelivery[] = [];
       await this.db.transaction(async (q) => {
         // Write evidence spans first so scores can reference them.
         const spanIdByEvidence = new Map<string, string>();
@@ -194,8 +202,16 @@ export class EvaluationService {
           },
           q,
         );
+
+        // Journal report.ready and write durable webhook rows in-transaction
+        // (FR-E13-4); BullMQ jobs are enqueued after this tx commits.
+        webhookDeliveries = await this.journalReportReady(q, session, report.id);
       });
       stages.push({ name: 'persist', status: 'ok', ms: Date.now() - stageWrite });
+
+      for (const delivery of webhookDeliveries) {
+        await this.webhookQueue.add(delivery.id);
+      }
 
       const totalMs = Date.now() - startedAt;
       await this.pipelineLogs.updateCompleted(log.id, stages, totalMs, this.db);
@@ -381,6 +397,7 @@ export class EvaluationService {
         : 0;
     const overallRecommendation = Math.max(1, Math.min(5, Math.round(overallRaw)));
 
+    let webhookDeliveries: WebhookDelivery[] = [];
     await this.db.transaction(async (q) => {
       await this.scores.deleteByReportId(report.id, q);
       await this.evidenceSpans.deleteByReportId(report.id, q);
@@ -439,16 +456,54 @@ export class EvaluationService {
         },
         q,
       );
+
+      webhookDeliveries = await this.journalReportReady(
+        q,
+        { id: sessionId, inviteId: report.inviteId },
+        report.id,
+      );
     });
 
+    for (const delivery of webhookDeliveries) {
+      await this.webhookQueue.add(delivery.id);
+    }
+
     return this.findDetail(orgId, sessionId);
+  }
+
+  /**
+   * Journal a `report.ready` session_event and write durable webhook rows for
+   * it, all inside the caller's transaction. Returns the new deliveries; the
+   * caller enqueues BullMQ jobs only after commit.
+   */
+  private async journalReportReady(
+    q: Queryable,
+    session: { id: string; inviteId: string | null },
+    reportId: string,
+  ): Promise<WebhookDelivery[]> {
+    if (!session.inviteId) {
+      return [];
+    }
+    const result = await q.query(
+      `INSERT INTO session_event (session_id, type, payload)
+       VALUES ($1, 'report.ready', $2::jsonb)
+       RETURNING id, occurred_at`,
+      [session.id, JSON.stringify({ report_id: reportId })],
+    );
+    const row = result.rows[0] as { id: string; occurred_at: Date };
+    return this.webhookFanout.fanout(q, {
+      sessionEventId: row.id,
+      sessionId: session.id,
+      inviteId: session.inviteId,
+      event: 'report.ready',
+      occurredAt: row.occurred_at,
+    });
   }
 
   private async findOrCreateHumanReport(
     orgId: string,
     sessionId: string,
-  ): Promise<EvaluationReport> {
-    const sessionContext = await this.loadSessionContext(sessionId);
+  ): Promise<EvaluationReport> {    const sessionContext = await this.loadSessionContext(sessionId);
     if (sessionContext.orgId !== orgId) {
       throw new ApiException(404, 'REPORT_NOT_FOUND', 'report not found');
     }

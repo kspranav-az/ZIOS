@@ -10,6 +10,7 @@ import { DashboardPage } from './pages/shell/DashboardPage';
 import { CandidatesPage } from './pages/shell/CandidatesPage';
 import { AnalyticsPage } from './pages/shell/AnalyticsPage';
 import { ApiKeysPage } from './pages/shell/ApiKeysPage';
+import { WebhooksPage } from './pages/shell/WebhooksPage';
 import { InterviewsListPage } from './pages/reports/InterviewsListPage';
 import { InterviewDetailPage } from './pages/reports/InterviewDetailPage';
 import { ShareReportPage } from './pages/reports/ShareReportPage';
@@ -107,6 +108,7 @@ const router = createBrowserRouter([
           { path: 'interviews/:sessionId/async-review', element: <AsyncVideoReviewPage /> },
           { path: 'analytics', element: <AnalyticsPage /> },
           { path: 'settings/api-keys', element: <ApiKeysPage /> },
+          { path: 'settings/webhooks', element: <WebhooksPage /> },
         ],
       },
       { path: '/share/:token', element: <ShareReportPage /> },

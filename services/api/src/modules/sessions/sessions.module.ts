@@ -5,6 +5,7 @@ import { DatabaseModule } from '@/modules/database';
 import { EvaluationModule } from '@/modules/evaluation';
 import { KitsModule } from '@/modules/kits';
 import { LlmGatewayModule } from '@/modules/llm-gateway';
+import { WebhooksModule } from '@/modules/webhooks';
 import { EventsRepository } from './events.repository';
 import { INTERVIEWER_AI } from './interviewer-ai.port';
 import { LlmConductorAdapter } from './llm-conductor.adapter';
@@ -21,6 +22,7 @@ import { TranscriptRepository } from './transcript.repository';
     EvaluationModule,
     KitsModule,
     LlmGatewayModule,
+    WebhooksModule,
   ],
   controllers: [SessionsController],
   providers: [

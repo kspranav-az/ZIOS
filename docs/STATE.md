@@ -38,7 +38,7 @@ This file records the current implementation state, what is proven, what is not,
 | E10  | Evaluation & report       | ✅             | Transcript, rubric scores + evidence, communication metrics, integrity panel, override, PDF, share link                                                                                                                                                                 |
 | E11  | Notifications             | ⚠️ Partial     | Email via Mailpit only; WhatsApp/SMS deferred to Phase 11                                                                                                                                                                                                               |
 | E12  | Dashboard (pipeline-lite) | ✅             | Interview list, statuses, kit stats, filters; async-video rows now route to review page instead of report                                                                                                                                                               |
-| E13  | Integration API           | 🚧 In progress | Branch 0 ✅ DLQ redrive endpoints; Branch 1 ✅ API keys (guard, scopes, rate limit, UI); Branch 2 ✅ `/v1/interviews` (idempotent create, status, scorecard, sandbox seed); next: webhooks → credits wallet; see `phases/phase-10-implementation-plan.md` |
+| E13  | Integration API           | 🚧 In progress | Branch 0 ✅ DLQ redrive endpoints; Branch 1 ✅ API keys (guard, scopes, rate limit, UI); Branch 2 ✅ `/v1/interviews` (idempotent create, status, scorecard, sandbox seed); Branch 3 ✅ webhooks (signed, journaled, retried, replay, UI); next: credits wallet; see `phases/phase-10-implementation-plan.md` |
 | E14  | Billing-lite              | ⚠️ Partial     | Credit ledger + 3-credit debit on async-video create + refund-before-first-answer wired and tested (Phase 09b); wallet UI and real payments remain Phase 10                                                                                                             |
 | E15  | Async video interviews    | ✅             | Formal M1 mode as of PRD update; role-based creation, per-question recording, transcription, review, AI pre-fill + human scorecard, report, credit debit; see `phases/phase-09b-async-video-hardening.md`                                                               |
 
@@ -103,6 +103,14 @@ Everything below is **fixture-driven mock** today. Feature code is complete; rea
 - `services/api/src/testing/unit/credits.service.spec.ts`: ledger append-only invariants, debit/refund balance math, insufficient-credits mapping (note: `org` has no `updated_at`; adjustCredits must not reference it or debit fails as 402).
 - `apps/employer-web/e2e/async-video-review.spec.ts` extended: pre-fill → edit → submit → report render.
 - `phases/phase-09b-async-video-hardening.md`: all verification and validation checkboxes ticked; tagged `phase-09b-complete`.
+
+### Phase 10 (in progress) — Branch 3: Webhooks (FR-E13-4)
+
+- New `webhook_endpoint` (url, shown-once secret, events ⊆ {interview.completed, report.ready}, active) + `webhook_delivery` (durable journal; unique `(endpoint_id, session_event_id)` = dedupe; status pending/delivered/failed, attempts, next_attempt_at; migration `1790100800000_webhooks`).
+- `services/api/src/modules/webhooks/`: `WebhooksRepository`, `WebhookFanoutService` (writes delivery rows in-transaction; BullMQ jobs enqueued only after commit), `WebhooksProcessor` (HMAC `X-Zios-Signature: t=…,v1=…` + `X-Zios-Event`, 10s timeout via `WEBHOOK_TIMEOUT_MS`, backoff 1m/5m/30m/2h/12h via `WEBHOOK_BACKOFF_MS`, 5 attempts → failed, journaled + replayable), `WebhooksController` (`/webhooks/endpoints` CRUD + `/webhooks/deliveries?status=` list + admin `POST /webhooks/deliveries/:id/replay`).
+- Fanout call sites: sessions wrapup (interview.completed) and evaluation report finalization (AI judge + human scorecard both journal a `report.ready` session_event and fanout on it).
+- Integration spec `webhooks.integration.spec.ts` (5 tests, hermetic `node:http` sink, per-boot UUID queue isolation): signed happy path for both events (signature re-verified in-test, envelope contract asserted), 500→backoff→recover, hang→timeout attempt→recover, 5-attempt exhaustion→admin replay, dedupe on re-emit. Unit: `webhook-signing.spec.ts` (roundtrip/tamper/backoff schedule). API suite 303 passed / 2 skipped.
+- employer-web: **Webhooks page** at `/settings/webhooks` (shell nav): endpoint list + create (secret reveal modal) + deactivate, delivery log with status filter + replay (admin only); `webhooks-page.test.tsx` (4 tests). employer-web 100 passed.
 
 ### Phase 10 (in progress) — Branch 2: /v1 interviews (FR-E13-2/3)
 

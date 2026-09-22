@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { DatabaseModule } from '@/modules/database';
 import { LlmGatewayModule } from '@/modules/llm-gateway';
+import { WebhooksModule } from '@/modules/webhooks';
 import { EvaluationController } from './evaluation.controller';
 import { DashboardController } from './dashboard.controller';
 import { EvaluationService } from './evaluation.service';
@@ -17,7 +18,7 @@ import { InterviewNotesRepository } from './notes.repository';
 import { JUDGE_PORT } from './judge.port';
 
 @Module({
-  imports: [DatabaseModule, LlmGatewayModule],
+  imports: [DatabaseModule, LlmGatewayModule, WebhooksModule],
   controllers: [EvaluationController, DashboardController],
   providers: [
     EvaluationRepository,

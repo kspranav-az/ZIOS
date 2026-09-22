@@ -46,4 +46,13 @@ export class EventsRepository {
     );
     return (result.rows as EventRow[]).map(mapRow);
   }
+
+  async findLatestBySession(sessionId: string, q: Queryable = this.db): Promise<SessionEvent | null> {
+    const result = await q.query(
+      `SELECT ${COLUMNS} FROM session_event WHERE session_id = $1 ORDER BY occurred_at DESC LIMIT 1`,
+      [sessionId],
+    );
+    const row = result.rows[0] as EventRow | undefined;
+    return row ? mapRow(row) : null;
+  }
 }
