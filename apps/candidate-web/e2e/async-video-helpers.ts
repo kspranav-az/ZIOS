@@ -61,6 +61,13 @@ export async function cleanupRoleQuestions(roleName: string): Promise<void> {
   await query('DELETE FROM role_based_questions WHERE role_name = $1', [roleName]);
 }
 
+export async function seedCredits(orgId: string, amount: number = 1000): Promise<void> {
+  await query(`UPDATE org SET credits_balance = credits_balance + $1 WHERE id = $2`, [
+    amount,
+    orgId,
+  ]);
+}
+
 export async function createAsyncVideoInterview(
   adminToken: string,
   roleId: number,
@@ -166,11 +173,39 @@ export async function getAsyncVideoQuestions(
   };
 }
 
+export async function waitForTranscript(
+  transcriptId: string,
+  options: { timeoutMs?: number; intervalMs?: number } = {},
+): Promise<string | null> {
+  const { timeoutMs = 10_000, intervalMs = 250 } = options;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const rows = (await query(
+      'SELECT result, status FROM transcription_job WHERE transcript_id = $1',
+      [transcriptId],
+    )) as Array<{ result: string; status: string }>;
+    if (rows.length > 0 && rows[0]?.status === 'completed') {
+      return rows[0].result;
+    }
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+  throw new Error(`transcript for ${transcriptId} did not complete within ${timeoutMs}ms`);
+}
+
 export async function seedAsyncVideoAnswers(
   created: AsyncVideoInterviewCreated,
   recoveryToken: string,
-): Promise<void> {
+  opts: { waitForTranscription?: boolean } = {},
+): Promise<{ transcriptByQuestionId: Map<string, string> }> {
+  const transcriptByQuestionId = new Map<string, string>();
   for (const question of created.questions) {
-    await uploadVideoAnswer(created.sessionId, question.id, recoveryToken);
+    const upload = await uploadVideoAnswer(created.sessionId, question.id, recoveryToken);
+    if (opts.waitForTranscription) {
+      const transcript = await waitForTranscript(upload.transcriptId);
+      if (transcript) {
+        transcriptByQuestionId.set(question.id, transcript);
+      }
+    }
   }
+  return { transcriptByQuestionId };
 }

@@ -4,6 +4,7 @@ import {
   cleanupRoleQuestions,
   createAsyncVideoInterview,
   seedAsyncVideoAnswers,
+  seedCredits,
   seedRoleQuestions,
 } from './async-video-helpers';
 
@@ -21,7 +22,8 @@ test.describe('async video candidate journey', () => {
 
   test('candidate consents, sees the recorder UI, and cannot skip questions', async ({ page }) => {
     const admin = adminEmail();
-    const { token: adminToken } = await signupAdmin(admin);
+    const { token: adminToken, orgId } = await signupAdmin(admin);
+    await seedCredits(orgId);
     const candidate = candidateEmail();
 
     const created = await createAsyncVideoInterview(

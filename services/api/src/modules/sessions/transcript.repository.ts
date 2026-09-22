@@ -79,6 +79,13 @@ export class TranscriptRepository {
       : null;
   }
 
+  async findById(id: string, q: Queryable = this.db): Promise<SessionTranscript | null> {
+    const result = await q.query(`SELECT ${COLUMNS} FROM session_transcript WHERE id = $1`, [id]);
+    return (result.rows[0] as TranscriptRow | undefined)
+      ? mapRow(result.rows[0] as TranscriptRow)
+      : null;
+  }
+
   async listBySession(sessionId: string, q: Queryable = this.db): Promise<SessionTranscript[]> {
     const result = await q.query(
       `SELECT ${COLUMNS} FROM session_transcript WHERE session_id = $1 ORDER BY position ASC, created_at ASC`,

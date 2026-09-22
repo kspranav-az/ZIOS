@@ -39,7 +39,7 @@ const LEGAL_TRANSITIONS: Partial<Record<SessionState, Partial<Record<SessionStat
   consented: { preflight: true },
   preflight: { live: true },
   live: { completed: true, abandoned: true },
-  completed: {},
+  completed: { scoring: true },
   abandoned: { invited: true, consented: true },
   scoring: { reported: true },
   reported: { reviewed: true },

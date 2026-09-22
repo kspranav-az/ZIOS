@@ -11,13 +11,15 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.21.0",
     "@nestjs/common": "^11.0.12",
     "@nestjs/core": "^11.0.12",
     "@nestjs/platform-express": "^11.0.12",
     "@nestjs/schedule": "^5.0.1",
     "@zios/shared-types": "workspace:*",
-    "@google/generative-ai": "^0.21.0",
+    "bullmq": "^6.3.1",
     "cookie-parser": "^1.4.7",
+    "ioredis": "^6.0.0",
     "minio": "^8.0.7",
     "nestjs-pino": "^4.4.0",
     "nodemailer": "^6.9.16",

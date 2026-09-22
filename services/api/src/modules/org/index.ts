@@ -2,3 +2,4 @@
 // import from '@/modules/org' (this file) — never from sibling files.
 export { OrgModule } from './org.module';
 export { OrgService } from './org.service';
+export { OrgRepository } from './org.repository';

@@ -59,7 +59,7 @@ export function extractOtp(text: string): string {
   return match[1];
 }
 
-export async function signupAdmin(email: string): Promise<{ token: string }> {
+export async function signupAdmin(email: string): Promise<{ token: string; orgId: string }> {
   const request = await postJson('/auth/otp/request', { email });
   if (!request.ok) {
     throw new Error(`admin otp request failed: ${request.status} ${await request.text()}`);
@@ -70,8 +70,8 @@ export async function signupAdmin(email: string): Promise<{ token: string }> {
   if (!verify.ok) {
     throw new Error(`admin otp verify failed: ${verify.status} ${await verify.text()}`);
   }
-  const body = (await verify.json()) as { session: { token: string } };
-  return { token: body.session.token };
+  const body = (await verify.json()) as { session: { token: string }; org: { id: string } };
+  return { token: body.session.token, orgId: body.org.id };
 }
 
 export async function createPublishedKit(

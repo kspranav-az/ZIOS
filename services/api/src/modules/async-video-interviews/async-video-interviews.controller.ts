@@ -69,6 +69,34 @@ export class AsyncVideoInterviewsController {
     return this.service.submitScore(user.orgId, sessionId, questionId, user, body);
   }
 
+  @Post(':sessionId/scorecard/prefill')
+  @HttpCode(200)
+  async prefillScorecard(
+    @CurrentUser() user: AppUser,
+    @Param('sessionId') sessionId: string,
+  ): Promise<ReturnType<AsyncVideoInterviewsService['prefillScorecard']>> {
+    return this.service.prefillScorecard(user.orgId, sessionId, user);
+  }
+
+  @Post(':sessionId/scorecard/submit')
+  @HttpCode(200)
+  async submitScorecard(
+    @CurrentUser() user: AppUser,
+    @Param('sessionId') sessionId: string,
+    @Body() body: { prefillAccepted?: boolean; editCount?: number },
+  ): Promise<ReturnType<AsyncVideoInterviewsService['submitScorecard']>> {
+    return this.service.submitScorecard(user.orgId, sessionId, user, body);
+  }
+
+  @Post(':sessionId/refund')
+  @HttpCode(200)
+  async refundCredits(
+    @CurrentUser() user: AppUser,
+    @Param('sessionId') sessionId: string,
+  ): Promise<ReturnType<AsyncVideoInterviewsService['refundCredits']>> {
+    return this.service.refundCredits(user.orgId, sessionId);
+  }
+
   /* ---- public candidate-facing ---- */
 
   @Public()

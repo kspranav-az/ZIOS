@@ -25,6 +25,7 @@ export interface AsyncVideoReviewScore {
   score: number | null;
   remarks: string | null;
   reviewedBy: string | null;
+  source?: 'human' | 'ai_prefill';
   createdAt: string;
   updatedAt: string;
 }
@@ -54,6 +55,37 @@ export async function submitAsyncVideoScore(
 ): Promise<AsyncVideoReviewScore> {
   return apiFetch<AsyncVideoReviewScore>(
     `/async-video-interviews/${encodeURIComponent(sessionId)}/questions/${encodeURIComponent(questionId)}/score`,
+    { method: 'POST', json: input },
+  );
+}
+
+export async function prefillAsyncVideoScorecard(
+  sessionId: string,
+): Promise<AsyncVideoReviewDetail> {
+  return apiFetch<AsyncVideoReviewDetail>(
+    `/async-video-interviews/${encodeURIComponent(sessionId)}/scorecard/prefill`,
+    { method: 'POST' },
+  );
+}
+
+export interface SubmitAsyncVideoScorecardInput {
+  prefillAccepted?: boolean;
+  editCount?: number;
+}
+
+export interface AsyncVideoScorecardResult {
+  id: string;
+  sessionId: string;
+  status: string;
+  overallRecommendation: number | null;
+}
+
+export async function submitAsyncVideoScorecard(
+  sessionId: string,
+  input: SubmitAsyncVideoScorecardInput,
+): Promise<AsyncVideoScorecardResult> {
+  return apiFetch<AsyncVideoScorecardResult>(
+    `/async-video-interviews/${encodeURIComponent(sessionId)}/scorecard/submit`,
     { method: 'POST', json: input },
   );
 }

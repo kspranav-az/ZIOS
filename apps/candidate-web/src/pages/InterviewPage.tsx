@@ -33,6 +33,7 @@ export function InterviewPage() {
   const [initializing, setInitializing] = useState(true);
   const [recoveredFromStorage, setRecoveredFromStorage] = useState(false);
   const draftLoaded = useRef(false);
+  const skipPersistRef = useRef(false);
 
   const [recoveredSessionId, setRecoveredSessionId] = useState<string | null>(null);
   const [recoveredRecoveryToken, setRecoveredRecoveryToken] = useState<string | null>(null);
@@ -83,7 +84,11 @@ export function InterviewPage() {
     }
     if (questionType === 'open_ended' && !draftLoaded.current) {
       draftLoaded.current = true;
-      setAnswer(loadAnswerDraft(sessionId));
+      const draft = loadAnswerDraft(sessionId);
+      if (draft) {
+        skipPersistRef.current = true;
+      }
+      setAnswer(draft);
     }
     recoverState().finally(() => setInitializing(false));
   }, [sessionId, recoveryToken, recoverState, questionType]);
@@ -91,6 +96,10 @@ export function InterviewPage() {
   // Persist draft as the candidate types (text questions only).
   useEffect(() => {
     if (sessionId && draftLoaded.current && questionType === 'open_ended') {
+      if (skipPersistRef.current) {
+        skipPersistRef.current = false;
+        return;
+      }
       storeAnswerDraft(sessionId, answer);
     }
   }, [answer, sessionId, questionType]);
