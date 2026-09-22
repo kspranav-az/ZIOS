@@ -1,6 +1,6 @@
 # CONTEXT.md — ZIOS Working Context
 
-**Last updated:** 2026-09-22 · **Branch:** `main` (tip `3666889`; `phase-09b/async-video-hardening` + `ai-analysis` merged 2026-09-22 via `--no-ff` merge commits `4ff5d5b` + `3666889`, history preserved per owner) · **Remote:** `origin` = `git@github.com:kspranav-az/ZIOS.git` (SSH; all branches + tags pushed)
+**Last updated:** 2026-09-22 · **Branch:** `main` (Phase 10 complete — branches `dlq-redrive`, `api-keys-v1`, `interviews-endpoints`, `webhooks`, `credits-wallet`, `final-validation` all merged via `--no-ff` merge commits, history preserved per owner; tagged `phase-10-complete`) · **Remote:** `origin` = `git@github.com:kspranav-az/ZIOS.git` (SSH; all branches + tags pushed)
 
 This file is the session-to-session handover: where the project is, how it runs, what's proven, what's pending, and the operational gotchas. Authoritative deep-dives live in `docs/` (`PRD`, `ARCHITECTURE.md`, `STATE.md`, `FEATURES.md`, `DEMO.md`) and `phases/`.
 
@@ -31,24 +31,28 @@ ZIOS — an AI interview platform (ZeTheta). Monorepo (pnpm workspaces):
 
 ## 3. Feature status (all phases tagged complete)
 
-- **Phases 00–09 + 09b + 14 complete.** Phase 10 (integration API + billing), 11 (notifications/hardening/pilot), 12/13 (M2/M3) not started.
+- **Phases 00–09 + 09b + 14 complete.** Phase 10 (integration API + billing-lite) complete 2026-09-22, tagged `phase-10-complete` (partner loop validated over live HTTP; runbook `docs/partner-integration-runbook.md`; owner review of runbook pending). Phase 11 (notifications/hardening/pilot), 12/13 (M2/M3) not started.
 - **5 interview modes:** text (AI), voice (AI, LiveKit + text fallback), video (AI + proctoring baseline), human-facilitated (LiveKit cockpit, coverage tracking, scorecard), async video role-based (E15: create-by-role API, per-question recording → MinIO → transcription → review → AI pre-fill → human scorecard → report in live-mode schema; 3-credit debit, refund only before first answer).
 - **Employer platform:** OTP auth (Mailpit), orgs + Admin/Interviewer roles, kit builder with immutable versions, JD→kit generation, question bank + `role_based_questions` (synced from external Neon DB — separate table, biweekly-ish upstream changes), invites (single/CSV, token links, OTP, reschedule, .ics), dashboard.
 - **Evaluation:** evidence-linked reports, judge ensemble (2 parallel judges + adjudication), communication metrics, integrity panel, human overrides, PDF, share links.
+- **Phase 10 — Integration API & credits wallet (E13/E14):** API keys (`zios_test_/zios_live_`, sha256-only, scopes, per-key rate limit, shown once); `/v1/interviews` idempotent create (unique `(org, external_ref, kit_version)`, replay returns same id + `idempotent_replay`, **201 on both first and replay**), status, scorecard v1 (`schema_version: "v1"`, shared evaluation read path); webhooks HMAC-signed (`X-Zios-Signature: t=…,v1=…`), journaled in `webhook_delivery` (dedupe via unique `(endpoint_id, session_event_id)`), backoff 1m/5m/30m/2h/12h ×5, admin replay; DLQ redrive endpoints (analysis + transcription, admin). Credits: pricing map kinds `{text:1, voice:2, video:3, human:1, async_video:3}` (`pricing.ts` — pricing kinds ≠ `InterviewMode`; human conductor prices flat); debit in the same tx as the live transition (downstream fault rolls back the charge = atomic refund); orchestrator voice-token failure refunds with `hasRefundForSession` dedupe; 100-credit `welcome_grant` at signup (keeps tests solvent); blocked-at-zero blocks new starts only (in-flight always finishes); low-balance email ≤1/24h per org (redis `lowbal:{orgId}` watermark, swallowed failures); wallet API + employer-web Wallet page; `scripts/grant-credits.js`. Partner-facing runbook + P95 SQL in `docs/partner-integration-runbook.md`.
 - **Credits:** `credit_ledger` append-only; balance on `org.credits_balance`; insufficient → 402. ⚠️ `org` has **no `updated_at`** column — referencing it in credit queries silently breaks debit (learned the hard way).
 - **Phase 14 — multimodal analysis (post-M1 extension):** generalized `analysis_job(kind, payload, status)` + `analysis_job_dlq`; BullMQ `analysis` queue; orchestrator `app/analysis/` — streaming ffmpeg preprocess (16kHz mono PCM; 5FPS/854px sequential frames), MediaPipe face/pose/hands (camera_gaze_ratio, solvePnP head pose, posture, gesture frequency, blur/quality), Silero VAD via onnxruntime (no torch), librosa pitch/energy over speech only, WPM/fillers/disfluency heuristics, temporal alignment + 3-level aggregation, pydantic schema (`Measurement{value,valid,reason,heuristic}` — no fake zeros), artifacts in MinIO `analysis/{sessionId}/{questionId|session}/*.json`, typed errors (2xx/4xx/5xx, never 200-with-fake). `STT_ADAPTER=mock|gcp` factory + `GoogleCloudSttAdapter` (Speech v2, word timestamps); mock is the default everywhere. Video-mode capture: hidden LiveKit recorder participant → webm → MinIO → telemetry → analysis. Employer review page has an objective-only features panel.
 
-## 4. Test state (all green at `phase-14-complete`)
+## 4. Test state (all green at `phase-10-complete`, 2026-09-22)
 
-- API: 271 passed / 48 files (`pnpm --filter @zios/api test`; needs `DATABASE_URL=postgresql://interviewos:interviewos_dev@localhost:55432/interviewos` inline — see §7)
+- API: 316 passed / 2 skipped, 57 files + 1 skipped (`pnpm --filter @zios/api test`; needs `DATABASE_URL=postgresql://interviewos:interviewos_dev@localhost:55432/interviewos` inline — see §7); lint + typecheck clean
 - Orchestrator: 104 passed / 2 skipped, ruff + mypy strict clean (`uv run pytest` etc. in `services/ai-orchestrator`)
-- employer-web: 92 unit, 12/12 E2E · candidate-web: 13 unit, 5/5 E2E
-- Live validation: 150s clip (`test_video/interview_video_clip_test.mp4`) through full pipeline — plausible features (face 0.91, gaze 0.97, 135.9s speech / 14 pauses, pitch 235.8Hz)
-- Validation scripts: `scripts/seed-{human,async-video,voice,video-proctoring,structured-answers,multimodal-analysis}-validation.js`, `scripts/redrive-analysis-job.js`, `scripts/sync-role-based-questions.js`
+- employer-web: 102 unit (tsc + lint clean) · candidate-web: 13 unit (tsc + lint clean) — E2E not re-run after Phase 10 (compose API image predates it; rebuild images before the next E2E pass)
+- Live validation: 150s clip (`test_video/interview_video_clip_test.mp4`) through full pipeline — plausible features (face 0.91, gaze 0.97, 135.9s speech / 14 pauses, pitch 235.8Hz); GCP STT validated live 2026-09-22 (Speech v2, 373 words / 150 s clip, word timestamps)
+- Partner loop (FR-E13-5): full validation-layer cycle driven over live HTTP only (create → idempotent replay → candidate interview → completed → scorecard v1; wallet debited exactly 1 text credit) — evidence in `phases/phase-10-integration-api-billing.md` §Validation
+- Validation scripts: `scripts/seed-{human,async-video,voice,video-proctoring,structured-answers,multimodal-analysis,integration-sandbox}-validation.js`, `scripts/grant-credits.js`, `scripts/sync-role-based-questions.js`
 
 ## 5. Key architecture decisions
 
-- Job pattern: durable DB row in-transaction + BullMQ enqueue after commit; in-process workers; retries ×3 → DLQ. No redrive endpoint yet (script exists).
+- Job pattern: durable DB row in-transaction + BullMQ enqueue after commit; in-process workers; retries ×3 → DLQ; admin redrive endpoints for both DLQ tables (Phase 10).
+- Integration API: `/v1` sits behind `ApiKeyGuard` (org resolved from key, request runs as org's first app_user in `TenantContext.run` — fails closed); idempotency by DB unique constraint `(org_id, external_ref, kit_version_id)`, NOT by client keys; webhook fanout writes `webhook_delivery` rows in the same tx as the domain event, enqueues after commit.
+- **react-router v7 + vitest jsdom gotcha:** data routers build `new Request(url, {signal})` on every navigation; undici rejects jsdom-realm AbortSignals → `navigate()` rejects silently and tests never change location. Fixed in `apps/candidate-web/src/test/setup.ts` by wrapping global `Request` to drop foreign signals. (Node 24 removed `AbortController`/`AbortSignal` from `node:stream/web`, so the usual global-swap fix no longer works.)
 - LLM: only in NestJS gateway (`LlmProvider`: Mock always, Gemini when `LLM_MODE=gemini` + key; versioned prompt registry `services/api/prompts/<task>/vX.Y.Z.json`; mock fixture table throws on unknown task — new tasks need fixture + prompt + contract test). Python orchestrator has **no LLM port** — by design.
 - Orchestrator contract: `POST /analysis/video` (JSON, pydantic) — see ARCHITECTURE.md §4; API client uses `node:http` with `ANALYSIS_HTTP_TIMEOUT_MS` (default 10 min) because undici's 300s default killed long videos.
 - Integration tests must isolate queue names (`bootApp` uses per-boot UUID queues) — otherwise test workers steal live jobs (root-caused the orphaned-`pending` incident).
@@ -101,16 +105,16 @@ Recommended: single **x86** `e2-standard-4` VM running compose unchanged; `VIDEO
 ## 9. Known gaps (full table in docs/STATE.md §5)
 
 - Live LiveKit capture proof pending (unit/integration only — owner signed off; verify on next real voice/video session: `recordings/*.webm` in MinIO + analysis completes).
-- No DLQ redrive endpoint (both tables).
-- Real-provider validation pending (Gemini/GCP STT adapters ready; STT/TTS quality metrics unmeasurable on mocks).
-- Phase 10/11 not started; no WhatsApp/SMS; no real Google OAuth; no production infra.
+- Real-provider validation pending (Gemini/GCP STT adapters ready; GCP STT validated live 2026-09-22; Gemini LLM adapter ready — wire keys when they arrive; TTS quality metrics unmeasurable on mocks).
+- Phase 11 not started (pilot hardening, notifications, Razorpay behind flag, load test → `v0.2.0-pilot`); owner review of `docs/partner-integration-runbook.md` pending; no WhatsApp/SMS; no real Google OAuth; no production infra.
 
 ## 10. Immediate next steps (docs/STATE.md §8)
 
-1. Live-capture proof on a real voice/AI-video session.
-2. Phase 10 kickoff: `phase-10/*` — integration API (API keys, create-interview, webhooks) + credit wallet UI.
-3. Provider procurement (LLM, STT, TTS, Google OAuth, WhatsApp, payments).
-4. Pilot prep: ≥3 pilot employers (PRD X9).
+1. Owner review of `docs/partner-integration-runbook.md` + `docs/PRESENTATION.md` (last open Phase-10 validation item).
+2. Live-capture proof on a real voice/AI-video session.
+3. Phase 11 kickoff: notifications (WhatsApp/SMS), Razorpay behind flag, pilot hardening + load test; tag `v0.2.0-pilot` after.
+4. Provider procurement (LLM, TTS, Google OAuth, WhatsApp, payments).
+5. Pilot prep: ≥3 pilot employers (PRD X9).
 
 ## 11. Working style notes (how this repo has been run)
 
