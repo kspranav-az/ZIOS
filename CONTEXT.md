@@ -63,7 +63,7 @@ MediaPipe pinned **0.10.21** (1.0.1 SIGABRTs on macOS/arm64, no linux/aarch64 wh
 - Foreign containers (promptwars-_, psychometric-ar-game-_) hold host ports **5432** and **5173** → zios Postgres is on **55432**, employer-web on **5273** (compose port overrides, `afed318`). Root `.env` DATABASE_URL still says 5432 — stale for host-run tests; use the 55432 URL inline.
 - psychometric-ar-game-frontend was stopped once to free 5173 for E2E; restart that project's stack when needed.
 - First OTP for a brand-new email can be rejected → hit **Resend** (known quirk).
-- Husky `commit-msg` hook shells out to `pnpm`, which is not on PATH in agent/headless shells → commits fail with code 127 there; use `--no-verify` or ensure pnpm is on PATH.
+- Toolchain on this machine: `nvm` (Node LTS jod v22.22.2, satisfies `>=22`); pnpm 11.1.1 via corepack, shim symlinked to `~/.local/bin/pnpm` so husky/commitlint works in any shell (verified 2026-09-22).
 - hapkonic.com Cloudflare tunnel exists for LAN/remote access (livekit.hapkonic.com etc.) from earlier human-mode validation.
 
 ## 8. GCP deployment analysis (done, no code written)
