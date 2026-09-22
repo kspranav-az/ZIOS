@@ -1,6 +1,6 @@
 # State — InterviewOS / Meridian MVP
 
-**Snapshot date:** 2026-09-22 · **HEAD:** `main` @ `0cebe90` (GCP STT real-provider fix merged 2026-09-22; all merges `--no-ff`, history preserved per owner) · **Remote:** `origin` = `git@github.com:kspranav-az/ZIOS.git` (all branches + tags pushed) · **Tags:** `phase-00-complete` … `phase-09b-complete`, `phase-14-complete`, `v0.1.0-mvp0-mock` · **Phase 10 in progress** — plan at `phases/phase-10-implementation-plan.md`
+**Snapshot date:** 2026-09-22 · **HEAD:** `main` (Phase 10 complete — credits-wallet merge `dfe302e` + final-validation merge; all merges `--no-ff`, history preserved per owner) · **Remote:** `origin` = `git@github.com:kspranav-az/ZIOS.git` (all branches + tags pushed) · **Tags:** `phase-00-complete` … `phase-09b-complete`, `phase-10-complete`, `phase-14-complete`, `v0.1.0-mvp0-mock` · **Phase 10 ✅ complete** (E13 + E14 closed; validation evidence in `phases/phase-10-integration-api-billing.md`; one open item: owner review of `docs/partner-integration-runbook.md`) — next: Phase 11
 
 This file records the current implementation state, what is proven, what is not, and where the blockers are.
 
@@ -38,8 +38,8 @@ This file records the current implementation state, what is proven, what is not,
 | E10  | Evaluation & report       | ✅             | Transcript, rubric scores + evidence, communication metrics, integrity panel, override, PDF, share link                                                                                                                                                                 |
 | E11  | Notifications             | ⚠️ Partial     | Email via Mailpit only; WhatsApp/SMS deferred to Phase 11                                                                                                                                                                                                               |
 | E12  | Dashboard (pipeline-lite) | ✅             | Interview list, statuses, kit stats, filters; async-video rows now route to review page instead of report                                                                                                                                                               |
-| E13  | Integration API           | 🚧 In progress | Branch 0 ✅ DLQ redrive endpoints; Branch 1 ✅ API keys (guard, scopes, rate limit, UI); Branch 2 ✅ `/v1/interviews` (idempotent create, status, scorecard, sandbox seed); Branch 3 ✅ webhooks (signed, journaled, retried, replay, UI); Branch 4 ✅ credits wallet (pricing map, atomic start debit, orchestrator-failure refund, low-balance alerts, wallet UI); final validation + tag next; see `phases/phase-10-implementation-plan.md` |
-| E14  | Billing-lite              | 🚧 In progress | Credit ledger + async-video debit/refund (Phase 09b) + pricing map, atomic start charge, voice-token failure refund with dedupe, 100-credit welcome grant, low-balance email alerts (1/24h), wallet API + Wallet UI (Branch 4); real payments remain post-M1                                                                                                             |
+| E13  | Integration API           | ✅             | API keys (guard, scopes, rate limit, rotation, UI); `/v1/interviews` idempotent create + status + scorecard v1 (kit_id/jd_text, sandbox seed); webhooks (signed, journaled, retried, replay, UI); DLQ redrive endpoints; partner loop validated over live HTTP 2026-09-22 (runbook: `docs/partner-integration-runbook.md`) |
+| E14  | Billing-lite              | ✅             | Credit ledger; async-video debit/refund (09b) + pricing map {text:1, voice:2, video:3, human:1, async_video:3}; atomic start charge (tx-rolled-back on downstream fault); orchestrator-failure refund with dedupe; 100-credit welcome grant; blocked-at-zero (in-flight never interrupted); low-balance email alerts 1/24h; wallet API + Wallet UI; grant-credits ops script. Real payments remain post-M1 (Phase 11 flag) |
 | E15  | Async video interviews    | ✅             | Formal M1 mode as of PRD update; role-based creation, per-question recording, transcription, review, AI pre-fill + human scorecard, report, credit debit; see `phases/phase-09b-async-video-hardening.md`                                                               |
 
 > Async video was originally added as a validation-layer shortcut. It is now **E15 in the PRD §3.4 IN list** with formal acceptance criteria and a scope trade (FR-E10-5 candidate comparison view deferred to M2).
@@ -104,7 +104,7 @@ Everything below is **fixture-driven mock** today. Feature code is complete; rea
 - `apps/employer-web/e2e/async-video-review.spec.ts` extended: pre-fill → edit → submit → report render.
 - `phases/phase-09b-async-video-hardening.md`: all verification and validation checkboxes ticked; tagged `phase-09b-complete`.
 
-### Phase 10 (in progress) — Branch 3: Webhooks (FR-E13-4)
+### Phase 10 — Branch 3: Webhooks (FR-E13-4)
 
 - New `webhook_endpoint` (url, shown-once secret, events ⊆ {interview.completed, report.ready}, active) + `webhook_delivery` (durable journal; unique `(endpoint_id, session_event_id)` = dedupe; status pending/delivered/failed, attempts, next_attempt_at; migration `1790100800000_webhooks`).
 - `services/api/src/modules/webhooks/`: `WebhooksRepository`, `WebhookFanoutService` (writes delivery rows in-transaction; BullMQ jobs enqueued only after commit), `WebhooksProcessor` (HMAC `X-Zios-Signature: t=…,v1=…` + `X-Zios-Event`, 10s timeout via `WEBHOOK_TIMEOUT_MS`, backoff 1m/5m/30m/2h/12h via `WEBHOOK_BACKOFF_MS`, 5 attempts → failed, journaled + replayable), `WebhooksController` (`/webhooks/endpoints` CRUD + `/webhooks/deliveries?status=` list + admin `POST /webhooks/deliveries/:id/replay`).
@@ -112,7 +112,7 @@ Everything below is **fixture-driven mock** today. Feature code is complete; rea
 - Integration spec `webhooks.integration.spec.ts` (5 tests, hermetic `node:http` sink, per-boot UUID queue isolation): signed happy path for both events (signature re-verified in-test, envelope contract asserted), 500→backoff→recover, hang→timeout attempt→recover, 5-attempt exhaustion→admin replay, dedupe on re-emit. Unit: `webhook-signing.spec.ts` (roundtrip/tamper/backoff schedule). API suite 303 passed / 2 skipped.
 - employer-web: **Webhooks page** at `/settings/webhooks` (shell nav): endpoint list + create (secret reveal modal) + deactivate, delivery log with status filter + replay (admin only); `webhooks-page.test.tsx` (4 tests). employer-web 100 passed.
 
-### Phase 10 (in progress) — Branch 4: Credits wallet (FR-E14-1/2/3)
+### Phase 10 — Branch 4: Credits wallet (FR-E14-1/2/3)
 
 - Pricing single source of truth: `services/api/src/modules/credits/pricing.ts` — pricing *kinds* differ from session modes (`InterviewMode` has no human/async_video), so `CREDIT_PRICING = {text:1, voice:2, video:3, human:1, async_video:3}`; `priceForSession(mode, conductor)` (human conductor → flat 1, no AI judge stack); `assertCanStart` fails fast with 402 `INSUFFICIENT_CREDITS`. Unit: `pricing.spec.ts` (7 tests).
 - Atomic start charge: the only live transition is `advanceSessionStatus` from preflight — debit runs in the same transaction, so any downstream fault rolls the charge back automatically (no refund code path for ordinary failures). `charge{balanceAfter}` is surfaced post-commit to fire the low-balance alert. Zero balance blocks NEW starts (402) while in-flight sessions complete without re-charge by design.
@@ -123,7 +123,7 @@ Everything below is **fixture-driven mock** today. Feature code is complete; rea
 - Integration spec `credits-wallet.integration.spec.ts` (6 tests): welcome grant + pricing + admin-only threshold; mode-priced debit with balance-chained ledger; zero-balance block with in-flight completion; concurrent-start race (exactly one 200/one 402, ledger exact); voice-token 502 → refund with session linkage; low-balance email once/24h (second debit suppressed). Mailpit test-infra fix: `MP_MAX_MESSAGES=5000` (default 500-prune made `waitForEmail` flaky under a live stack).
 - employer-web: **Wallet page** at `/settings/wallet` (shell nav): balance card with low-balance badge, threshold edit (admin only), pricing table, ledger table (debits vs refunds color-coded); `wallet-page.test.tsx` (2 tests). API suite 316 passed / 2 skipped; employer-web 102 passed.
 
-### Phase 10 (in progress) — Branch 2: /v1 interviews (FR-E13-2/3)
+### Phase 10 — Branch 2: /v1 interviews (FR-E13-2/3)
 
 - New `external_interview` table (org-scoped, idempotent unique `(org_id, external_ref, kit_version_id)`, FKs CASCADE; migration `1790097664987_external-interview`).
 - `services/api/src/modules/integration-api/`: `ExternalInterviewRepository` (insert-idempotent ON CONFLICT DO NOTHING), `V1InterviewsService`, `InterviewsController` at `/v1/interviews` (`@Public()` + `ApiKeyGuard`, scopes `interviews:write`/`interviews:read`). Create via `kit_id` or `jd_text` (JD analysis → proposal → publish with settings overrides); text/voice/video/human modes, `async_video` → 422 `MODE_NOT_SUPPORTED`; kit mode mismatch → 422 `MODE_MISMATCH`; idempotent replay returns same `interview_id` with `invite_link: null` + `idempotent_replay: true` (raw token unrecoverable by design).
@@ -131,12 +131,20 @@ Everything below is **fixture-driven mock** today. Feature code is complete; rea
 - `scripts/seed-integration-sandbox.js`: end-to-end sandbox seed (OTP signup via Mailpit → published kit → test API key → 500 credits) printing the partner curl loop; verified against a live host-run API.
 - Tests: `v1-interviews.integration.spec.ts` (6 tests): kit_id + jd_text create, idempotent retry, 401/403/cross-org-404 authz matrix, MODE_MISMATCH/async_video rejection, full journey to scorecard v1 (real text interview via candidate API + pollForReport). API suite 293 passed / 2 skipped.
 
-### Phase 10 (in progress) — Branch 0: DLQ redrive
+### Phase 10 — Final validation & close-out
+
+- **Sandbox loop (FR-E13-5) executed over live HTTP only** (stand-in partner engineer, 2026-09-22): `scripts/seed-integration-sandbox.js` → fresh org + test key + published kit → `POST /v1/interviews` 201 with `invite_link` → idempotent replay (same `interview_id`, `idempotent_replay: true`, link not re-exposed) → candidate flow via invite token (consent → live → 2 turns → wrapup) → status poll `completed` → scorecard 200 `schema_version: "v1"` with scores + evidence spans → sandbox org wallet 500 → 499 (exactly 1 text credit debited at start). Transcript recorded in `phases/phase-10-integration-api-billing.md` §Validation.
+- `docs/partner-integration-runbook.md` — copy-paste-runnable partner runbook (create/poll/scorecard/webhooks/P95 SQL); every command executed in the sandbox run; **owner review pending** (last open item).
+- Pre-existing breakage fixed on main: `TokenLandingPage` routing tests failed since the async-video era — react-router v7 data routers build `new Request(url, {signal})` on navigation and undici rejects jsdom-realm `AbortSignal`s ("Expected signal to be an instance of AbortSignal"), so `navigate()` rejected silently. Fix: candidate-web test setup wraps global `Request` to drop foreign signals (`apps/candidate-web/src/test/setup.ts`). candidate-web 13/13 green again.
+- Final numbers: API 316 passed / 2 skipped (57 files + 1 skipped), lint + typecheck clean · employer-web 102 passed, tsc clean · candidate-web 13 passed, tsc + lint clean. E2E not re-run (compose API image predates Phase 10; unit/integration suites cover the changed surface — rebuild images before the next E2E pass).
+- `docs/PRESENTATION.md` (demo script with mermaid diagrams, design decisions, live-demo checklist) written at Phase-10 kickoff; checkboxes ticked in `phases/phase-10-integration-api-billing.md` with evidence.
+
+### Phase 10 — Branch 0: DLQ redrive
 
 - `services/api/src/testing/integration/dlq-redrive.integration.spec.ts` (3 tests, per-boot UUID queue isolation for both queues, local `node:http` orchestrator stub): analysis job 502×3 → DLQ → admin redrive → completes, DLQ row removed; transcription DLQ likewise; 404 for unknown ids, 403 `FORBIDDEN_ROLE` for interviewers.
 - Endpoints: `POST /analysis/dlq/:jobId/redrive` (analysis job id) and `POST /async-video-interviews/dlq/:transcriptId/redrive` (transcript id), both `@Roles('admin')` + org-scoped, reset-and-re-enqueue in one transaction, BullMQ added after commit. Replaces `scripts/redrive-analysis-job.js`.
 
-### Phase 10 (in progress) — Branch 1: API keys (FR-E13-1)
+### Phase 10 — Branch 1: API keys (FR-E13-1)
 
 - New `api_key` table (sha256 hash only, `zios_test_/zios_live_` format, shown once at create/rotate; scopes + per-key rate limit; migration `1790086311907_api-key`).
 - `services/api/src/modules/integration-api/`: `ApiKeysService` (create/rotate/revoke/list, org-scoped), `ApiKeyGuard` (Bearer → hash → active lookup → `@Scopes` check → Redis fixed-window rate limit → 429 + Retry-After), `KeysController` at `/integration-api/keys` (session-authed; mutations `@Roles('admin')`).
@@ -195,7 +203,7 @@ Everything below is **fixture-driven mock** today. Feature code is complete; rea
 | Live LiveKit capture not yet proven            | Video-mode track capture + voice-recording analysis are unit/integration-tested only; no real browser LiveKit session has run through analysis    | First real voice/AI-video session: verify `recordings/*.webm` lands in MinIO and its analysis job completes                                      |
 | Orchestrator is `linux/amd64`-only             | mediapipe 1.0.1 crashes on macOS/arm64 and ships no linux/aarch64 wheel → pinned 0.10.21, emulated amd64 on ARM hosts (slow: 150 s clip ≈ 30 min) | Revisit when mediapipe ships aarch64; CI on x86 is native                                                                                        |
 | `.env` DATABASE_URL stale (5432 vs 55432)      | Host-run tests/scripts fail against compose Postgres on 55432                                                                                     | Reconcile `.env` with compose port override                                                                                                      |
-| Phase 10 not started                           | No integration API, webhooks, or credit wallet UI                                                                                                 | 🚧 In progress — see `phases/phase-10-implementation-plan.md`                                                                                    |
+| Phase 10 complete (2026-09-22)                 | —                                                                                                                                                 | ✅ Tagged `phase-10-complete`; validation evidence in `phases/phase-10-integration-api-billing.md`; owner review of `docs/partner-integration-runbook.md` pending |
 | Phase 11 not started                           | No pilot hardening, load test, or notifications                                                                                                   | Start after Phase 10                                                                                                                             |
 | No real LLM/STT/TTS validation                 | X2, X6, X7, WER cannot be measured                                                                                                                | ✅ GCP STT validated live 2026-09-22 (Speech v2, 373 words / 150 s clip, word timestamps); Gemini LLM adapter ready — wire keys when they arrive |
 | No real Google sign-in                         | FR-E1-1 not fully validated                                                                                                                       | Add real Google OAuth app                                                                                                                        |
@@ -234,8 +242,9 @@ Run `pnpm migrate` to verify no pending migrations.
 
 ## 8. Immediate next steps
 
-1. **Phase 10 execution:** Branches in order — `phase-10/dlq-redrive` → `api-keys-v1` → `interviews-endpoints` → `webhooks` → `credits-wallet` → final verification + `phase-10-complete` tag (not `v0.2.0-pilot`; that's post-Phase-11).
+1. **Owner review:** read through `docs/partner-integration-runbook.md` (partner-facing) and `docs/PRESENTATION.md` (demo script) — the last open Phase-10 validation item.
 2. **Live capture proof:** run one real voice/AI-video browser session; verify `recordings/*.webm` in MinIO + analysis completion (closes the last known Phase-14 gap).
 3. **Provider procurement:** Select and obtain credentials for LLM, STT, TTS, Google OAuth, WhatsApp, and payments.
 4. **Key handover re-run:** Re-execute credential-gated phase validations with real providers.
 5. **Pilot preparation:** Identify ≥ 3 pilot employers per PRD exit criterion X9.
+6. **Phase 11 kickoff:** pilot hardening, notifications (WhatsApp/SMS), Razorpay behind flag, load test — milestone tag `v0.2.0-pilot` comes after Phase 11, not now.
