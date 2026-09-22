@@ -11,6 +11,7 @@ import { CandidatesPage } from './pages/shell/CandidatesPage';
 import { AnalyticsPage } from './pages/shell/AnalyticsPage';
 import { ApiKeysPage } from './pages/shell/ApiKeysPage';
 import { WebhooksPage } from './pages/shell/WebhooksPage';
+import { WalletPage } from './pages/shell/WalletPage';
 import { InterviewsListPage } from './pages/reports/InterviewsListPage';
 import { InterviewDetailPage } from './pages/reports/InterviewDetailPage';
 import { ShareReportPage } from './pages/reports/ShareReportPage';
@@ -109,6 +110,7 @@ const router = createBrowserRouter([
           { path: 'analytics', element: <AnalyticsPage /> },
           { path: 'settings/api-keys', element: <ApiKeysPage /> },
           { path: 'settings/webhooks', element: <WebhooksPage /> },
+          { path: 'settings/wallet', element: <WalletPage /> },
         ],
       },
       { path: '/share/:token', element: <ShareReportPage /> },

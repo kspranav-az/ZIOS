@@ -17,6 +17,8 @@ export interface Org {
   name: string;
   plan: string;
   creditsBalance: number;
+  /** Low-balance alert threshold (credits wallet, FR-E14-3). */
+  lowBalanceThreshold: number;
   createdAt: string;
 }
 

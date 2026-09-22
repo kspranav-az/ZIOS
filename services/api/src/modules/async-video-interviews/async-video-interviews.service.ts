@@ -17,7 +17,7 @@ import { DatabaseService, type Queryable } from '@/modules/database';
 import { InvitesRepository } from '@/modules/invites';
 import { KitVersionsRepository } from '@/modules/kits';
 import { SessionsRepository, TranscriptRepository, transition } from '@/modules/sessions';
-import { CreditsService } from '@/modules/credits';
+import { CreditsAlertService, CreditsService, priceForKind } from '@/modules/credits';
 import {
   EvaluationRepository,
   EvaluationScoreRepository,
@@ -37,7 +37,6 @@ const ZETHEETA_ORG_ID = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11';
 const SYSTEM_USER_ID = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12';
 const DEFAULT_EXPIRY_DAYS = 180;
 const DEFAULT_MAX_DURATION_SEC = 180;
-const ASYNC_VIDEO_CREDIT_COST = 3;
 
 export interface CreateAsyncVideoInterviewInput {
   roleId: number;
@@ -172,6 +171,7 @@ export class AsyncVideoInterviewsService {
     private readonly transcriptionDlq: TranscriptionDlqService,
     private readonly analysis: AnalysisService,
     private readonly credits: CreditsService,
+    private readonly creditsAlert: CreditsAlertService,
     @Inject(JUDGE_PORT) private readonly judge: JudgePort,
     private readonly reports: EvaluationRepository,
     private readonly scores: EvaluationScoreRepository,
@@ -196,10 +196,16 @@ export class AsyncVideoInterviewsService {
         ? input.expiresInDays
         : DEFAULT_EXPIRY_DAYS;
 
-    return this.db.transaction(async (q) => {
-      await this.credits.debit(orgId, ASYNC_VIDEO_CREDIT_COST, 'async_video_created', q, {
+    const charge: { orgId: string | null; balanceAfter: number | null } = {
+      orgId: null,
+      balanceAfter: null,
+    };
+    const created = await this.db.transaction(async (q) => {
+      const debit = await this.credits.debit(orgId, priceForKind('async_video'), 'async_video_created', q, {
         metadata: { roleId: input.roleId },
       });
+      charge.orgId = orgId;
+      charge.balanceAfter = debit.balanceAfter;
 
       const { versionId, questions } = await this.roleKitResolver.resolveKitVersionId(
         orgId,
@@ -272,6 +278,10 @@ export class AsyncVideoInterviewsService {
         questions,
       };
     });
+    if (charge.orgId !== null && charge.balanceAfter !== null) {
+      await this.creditsAlert.maybeAlertLowBalance(charge.orgId, charge.balanceAfter);
+    }
+    return created;
   }
 
   async consentByToken(
@@ -858,7 +868,7 @@ export class AsyncVideoInterviewsService {
 
       await this.credits.credit(
         orgId,
-        ASYNC_VIDEO_CREDIT_COST,
+        priceForKind('async_video'),
         'async_video_refund_no_answers',
         q,
         { sessionRef: sessionId },

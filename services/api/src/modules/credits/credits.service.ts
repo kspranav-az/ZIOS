@@ -12,6 +12,28 @@ export interface LedgerEntryInput {
   metadata?: Record<string, unknown>;
 }
 
+export interface LedgerEntry {
+  id: string;
+  orgId: string;
+  delta: number;
+  balanceAfter: number;
+  reason: string;
+  sessionRef: string | null;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+}
+
+interface LedgerEntryRow {
+  id: string;
+  org_id: string;
+  delta: number;
+  balance_after: number;
+  reason: string;
+  session_ref: string | null;
+  metadata: Record<string, unknown>;
+  created_at: Date;
+}
+
 /**
  * Minimal credit ledger for Phase 09b. Tracks every balance change and keeps
  * the org.credits_balance column in sync. Full wallet UI and payment gateway
@@ -95,6 +117,35 @@ export class CreditsService {
       throw new ApiException(404, 'ORG_NOT_FOUND', 'org not found');
     }
     return org.creditsBalance;
+  }
+
+  /** Append-only ledger, newest first (credits wallet UI, FR-E14). */
+  async listLedger(orgId: string, limit = 100): Promise<LedgerEntry[]> {
+    const result = await this.orgs['db'].query(
+      `SELECT id, org_id, delta, balance_after, reason, session_ref, metadata, created_at
+       FROM credit_ledger WHERE org_id = $1 ORDER BY created_at DESC, id DESC LIMIT $2`,
+      [orgId, limit],
+    );
+    return (result.rows as LedgerEntryRow[]).map((row) => ({
+      id: row.id,
+      orgId: row.org_id,
+      delta: row.delta,
+      balanceAfter: row.balance_after,
+      reason: row.reason,
+      sessionRef: row.session_ref,
+      metadata: row.metadata,
+      createdAt: row.created_at.toISOString(),
+    }));
+  }
+
+  /** True when a refund for this session was already issued (replay guard). */
+  async hasRefundForSession(orgId: string, sessionId: string, reason: string): Promise<boolean> {
+    const result = await this.orgs['db'].query(
+      `SELECT id FROM credit_ledger
+       WHERE org_id = $1 AND session_ref = $2 AND reason = $3 LIMIT 1`,
+      [orgId, sessionId, reason],
+    );
+    return (result.rowCount ?? 0) > 0;
   }
 
   private async writeLedger(input: LedgerEntryInput, q: Queryable) {

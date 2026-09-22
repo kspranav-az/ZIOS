@@ -4,6 +4,7 @@ import { ConsentModule } from '@/modules/consent';
 import { DatabaseModule } from '@/modules/database';
 import { EvaluationModule } from '@/modules/evaluation';
 import { KitsModule } from '@/modules/kits';
+import { CreditsModule } from '@/modules/credits';
 import { LlmGatewayModule } from '@/modules/llm-gateway';
 import { WebhooksModule } from '@/modules/webhooks';
 import { EventsRepository } from './events.repository';
@@ -21,6 +22,7 @@ import { TranscriptRepository } from './transcript.repository';
     CandidatesModule,
     EvaluationModule,
     KitsModule,
+    CreditsModule,
     LlmGatewayModule,
     WebhooksModule,
   ],

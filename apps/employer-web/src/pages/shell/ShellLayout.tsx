@@ -12,6 +12,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'analytics', label: 'Analytics', icon: 'analytics', to: '/analytics' },
   { id: 'api-keys', label: 'API Keys', icon: 'key', to: '/settings/api-keys' },
   { id: 'webhooks', label: 'Webhooks', icon: 'webhook', to: '/settings/webhooks' },
+  { id: 'wallet', label: 'Wallet', icon: 'account_balance_wallet', to: '/settings/wallet' },
 ];
 
 const ROLE_LABELS = {

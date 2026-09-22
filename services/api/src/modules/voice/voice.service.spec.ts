@@ -51,6 +51,11 @@ function buildService() {
     deps.transcript as unknown as TranscriptRepository,
     deps.analysis as unknown as AnalysisService,
     deps.consent as unknown as ConsentService,
+    {
+      credit: vi.fn(),
+      debit: vi.fn(),
+      hasRefundForSession: vi.fn().mockResolvedValue(false),
+    } as never,
     { setContext: vi.fn(), warn: vi.fn() } as never,
     {} as never,
   );

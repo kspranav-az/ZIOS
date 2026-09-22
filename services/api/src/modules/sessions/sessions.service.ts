@@ -22,6 +22,12 @@ import { ApiException } from '@/common/errors';
 import { DatabaseService, type Queryable } from '@/modules/database';
 import { KitVersionsRepository } from '@/modules/kits';
 import {
+  CreditsAlertService,
+  CreditsService,
+  assertCanStart,
+  priceForSession,
+} from '@/modules/credits';
+import {
   WebhookFanoutService,
   WebhooksQueue,
   type WebhookDelivery,
@@ -102,6 +108,8 @@ export class SessionsService {
     private readonly candidates: CandidatesRepository,
     private readonly evaluation: EvaluationService,
     private readonly kitVersions: KitVersionsRepository,
+    private readonly credits: CreditsService,
+    private readonly creditsAlert: CreditsAlertService,
     private readonly webhookFanout: WebhookFanoutService,
     private readonly webhookQueue: WebhooksQueue,
     @Inject(INTERVIEWER_AI) private readonly conductor: InterviewerAi,
@@ -151,13 +159,43 @@ export class SessionsService {
     }
   }
 
+  /**
+   * Advances the state machine and journals the transition event. When the
+   * transition STARTS the interview (`to === 'live'`), the mode's credit
+   * price is debited in the same transaction (FR-E14-1/2): a system fault
+   * downstream rolls the charge back atomically. The debit result is written
+   * into `charge` so the caller can fire the low-balance alert after commit.
+   */
   private async advanceSessionStatus(
     q: Queryable,
     session: InterviewSession,
     to: InterviewSession['status'],
     extras?: Parameters<SessionsRepository['updateStatus']>[3],
+    charge?: { orgId: string | null; balanceAfter: number | null },
   ): Promise<InterviewSession> {
     transition(session.status, to);
+    if (to === 'live') {
+      const orgRow = await q.query('SELECT org_id AS id FROM invite WHERE id = $1', [
+        session.inviteId,
+      ]);
+      const orgId = (orgRow.rows[0] as { id: string } | undefined)?.id;
+      if (!orgId) {
+        throw new ApiException(404, 'INVITE_NOT_FOUND', 'invite not found');
+      }
+      const price = priceForSession(session.mode, session.conductor);
+      await assertCanStart((id) => this.credits.getBalance(id, q), orgId, price);
+      const { balanceAfter } = await this.credits.debit(
+        orgId,
+        price,
+        'session_start',
+        q,
+        { sessionRef: session.id, metadata: { mode: session.mode } },
+      );
+      if (charge) {
+        charge.orgId = orgId;
+        charge.balanceAfter = balanceAfter;
+      }
+    }
     const updated = await this.sessions.updateStatus(session.id, to, q, extras);
     if (!updated) {
       throw new ApiException(404, 'SESSION_NOT_FOUND', 'session not found');
@@ -324,6 +362,10 @@ export class SessionsService {
     rawRecoveryToken: string,
     body?: PreflightBody,
   ): Promise<PreflightResponse> {
+    const charge: { orgId: string | null; balanceAfter: number | null } = {
+      orgId: null,
+      balanceAfter: null,
+    };
     const result = await this.db.transaction(async (q) => {
       let session = await this.loadSessionByRecoveryToken(sessionId, rawRecoveryToken, q);
       const snapshot = await this.loadSnapshot(session.kitVersionId, q);
@@ -350,7 +392,7 @@ export class SessionsService {
       }
       session = await this.advanceSessionStatus(q, session, 'live', {
         startedAt: new Date(),
-      });
+      }, charge);
 
       // If the candidate is returning to a previously-live session (abandon/recovery),
       // re-present the last unanswered question/followup instead of asking a new one.
@@ -370,6 +412,10 @@ export class SessionsService {
 
       return this.buildNextTurn(q, session, snapshot);
     });
+
+    if (charge.orgId !== null && charge.balanceAfter !== null) {
+      await this.creditsAlert.maybeAlertLowBalance(charge.orgId, charge.balanceAfter);
+    }
 
     if (result.session.status === 'completed') {
       await this.enqueueWebhookDeliveries(result.webhookDeliveries);
