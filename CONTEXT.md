@@ -43,7 +43,7 @@ ZIOS — an AI interview platform (ZeTheta). Monorepo (pnpm workspaces):
 
 - API: 316 passed / 2 skipped, 57 files + 1 skipped (`pnpm --filter @zios/api test`; needs `DATABASE_URL=postgresql://interviewos:interviewos_dev@localhost:55432/interviewos` inline — see §7); lint + typecheck clean
 - Orchestrator: 104 passed / 2 skipped, ruff + mypy strict clean (`uv run pytest` etc. in `services/ai-orchestrator`)
-- employer-web: 102 unit (tsc + lint clean) · candidate-web: 13 unit (tsc + lint clean) — E2E not re-run after Phase 10 (compose API image predates it; rebuild images before the next E2E pass)
+- employer-web: 102 unit (tsc + lint clean), **12/12 E2E** · candidate-web: 13 unit (tsc + lint clean), **5/5 E2E** — E2E re-run 2026-09-23 on freshly rebuilt compose images (API + both webs), all green against the Phase-10 stack
 - Live validation: 150s clip (`test_video/interview_video_clip_test.mp4`) through full pipeline — plausible features (face 0.91, gaze 0.97, 135.9s speech / 14 pauses, pitch 235.8Hz); GCP STT validated live 2026-09-22 (Speech v2, 373 words / 150 s clip, word timestamps)
 - Partner loop (FR-E13-5): full validation-layer cycle driven over live HTTP only (create → idempotent replay → candidate interview → completed → scorecard v1; wallet debited exactly 1 text credit) — evidence in `phases/phase-10-integration-api-billing.md` §Validation
 - Validation scripts: `scripts/seed-{human,async-video,voice,video-proctoring,structured-answers,multimodal-analysis,integration-sandbox}-validation.js`, `scripts/grant-credits.js`, `scripts/sync-role-based-questions.js`
