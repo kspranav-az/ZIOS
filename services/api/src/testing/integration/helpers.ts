@@ -30,6 +30,7 @@ export async function bootApp(): Promise<TestApp> {
   // the env var themselves before calling bootApp.
   process.env.ANALYSIS_QUEUE_NAME ??= `analysis-test-${randomUUID()}`;
   process.env.TRANSCRIPTION_QUEUE_NAME ??= `transcription-test-${randomUUID()}`;
+  process.env.WEBHOOK_QUEUE_NAME ??= `webhook-test-${randomUUID()}`;
   const app = await NestFactory.create(AppModule, { logger: false });
   app.use(cookieParser());
   app.enableCors({ origin: [SPA_ORIGIN], credentials: true });

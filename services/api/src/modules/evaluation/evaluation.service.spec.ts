@@ -33,7 +33,13 @@ function fakeUser(): AppUser {
 function fakeDb(): DatabaseService {
   return {
     transaction: async (fn: (client: PoolClient) => Promise<unknown>) =>
-      fn({ query: vi.fn() } as unknown as PoolClient),
+      fn({
+        query: vi.fn(async (text: string) =>
+          text.includes('RETURNING')
+            ? { rows: [{ id: randomUUID(), occurred_at: new Date() }] }
+            : { rows: [] },
+        ),
+      } as unknown as PoolClient),
     query: vi.fn(),
   } as unknown as DatabaseService;
 }
@@ -139,6 +145,12 @@ function buildService(db: DatabaseService, user: AppUser) {
   } as unknown as InterviewNotesRepository;
   const judge = {} as JudgePort;
   const llmGateway = { getJournal: vi.fn().mockReturnValue([]) } as unknown as LlmGateway;
+  const webhookFanout = {
+    fanout: vi.fn().mockResolvedValue([]),
+  } as unknown as import('@/modules/webhooks').WebhookFanoutService;
+  const webhookQueue = {
+    add: vi.fn().mockResolvedValue(undefined),
+  } as unknown as import('@/modules/webhooks').WebhooksQueue;
 
   const service = new EvaluationService(
     db,
@@ -150,6 +162,8 @@ function buildService(db: DatabaseService, user: AppUser) {
     notesRepo,
     judge,
     llmGateway,
+    webhookFanout,
+    webhookQueue,
   );
 
   return { service, reports };

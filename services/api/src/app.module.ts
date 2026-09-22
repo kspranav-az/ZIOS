@@ -20,6 +20,7 @@ import { LiveRoomsModule } from '@/modules/live-rooms';
 import { AnalysisModule } from '@/modules/analysis';
 import { AsyncVideoInterviewsModule } from '@/modules/async-video-interviews';
 import { IntegrationApiModule } from '@/modules/integration-api';
+import { WebhooksModule } from '@/modules/webhooks';
 
 @Module({
   imports: [
@@ -57,6 +58,7 @@ import { IntegrationApiModule } from '@/modules/integration-api';
     AnalysisModule,
     AsyncVideoInterviewsModule,
     IntegrationApiModule,
+    WebhooksModule,
   ],
 })
 export class AppModule {}
