@@ -1,9 +1,14 @@
 """Google Cloud Speech-to-Text v2 adapter behind ``SttPort``.
 
-Buffers the incoming PCM16 mono 16 kHz stream and issues a single v2
-``Recognize`` call with inline content (inline content is limited to ~10 MB,
-i.e. roughly 5 minutes of PCM16 16 kHz mono — sufficient for one interview
-answer; longer media must be chunked before this adapter is used for it).
+Buffers the incoming PCM16 mono audio and issues v2 ``Recognize`` calls with
+inline content. Two real-API limits drive the shape of this adapter
+(validated against the live API 2026-09-22):
+
+- Synchronous ``Recognize`` accepts at most **60 seconds** of audio per
+  request (the 10 MB inline-content ceiling is rarely reached first), so
+  longer input is chunked into sequential per-minute ``Recognize`` calls.
+- Raw PCM16 cannot use ``AutoDetectDecodingConfig`` — the decoding params
+  must be declared explicitly.
 
 Credentials come ONLY from the environment (GOOGLE_APPLICATION_CREDENTIALS /
 ADC). Construction fails loudly when the project id is missing; the underlying
@@ -11,7 +16,8 @@ client raises if no credentials are available — no silent fallbacks.
 
 The extra ``transcribe_with_timestamps`` method (NOT part of ``SttPort``)
 returns a ``NormalizedTranscript`` with word-level timing for the analysis
-pipeline.
+pipeline. Chunked calls have their word offsets shifted so timings stay
+relative to the start of the full input.
 """
 
 from __future__ import annotations
@@ -35,8 +41,10 @@ from app.voice.ports import SttPort
 logger = structlog.get_logger()
 
 DEFAULT_LANGUAGE_CODES = ("en-US",)
-# v2 inline-content Recognize is limited to 10 MB of audio.
-MAX_INLINE_BYTES = 10 * 1024 * 1024
+# v2 synchronous Recognize rejects audio longer than 60 s per request.
+MAX_SYNC_AUDIO_SEC = 60.0
+# Default v2 model: long-form audio; required non-empty by the global location.
+DEFAULT_MODEL = "latest_long"
 
 
 class GoogleCloudSttAdapter(SttPort):
@@ -93,20 +101,36 @@ class GoogleCloudSttAdapter(SttPort):
         sample_rate: int,
         language_hint: str | None = None,
     ) -> NormalizedTranscript:
-        """Recognize buffered PCM16 mono audio and normalize word timings."""
-        if len(pcm_bytes) > MAX_INLINE_BYTES:
-            raise SttError(f"audio of {len(pcm_bytes)} bytes exceeds the v2 inline-content limit")
+        """Recognize buffered PCM16 mono audio and normalize word timings.
+
+        Input longer than 60 s is split into sequential per-minute
+        ``Recognize`` calls (the v2 sync limit); word/segment timings from
+        later chunks are shifted by the cumulative chunk duration so the
+        returned transcript stays relative to the start of the full input.
+        """
+        bytes_per_sec = sample_rate * 2  # PCM16 mono = 2 bytes per sample
+        chunk_len = int(MAX_SYNC_AUDIO_SEC * bytes_per_sec)
+        chunks = [pcm_bytes[i : i + chunk_len] for i in range(0, len(pcm_bytes), chunk_len)]
+        segments: list[TranscriptSegment] = []
+        time_offset = 0.0
         try:
-            response = await asyncio.to_thread(self._recognize, pcm_bytes, language_hint)
+            for chunk in chunks:
+                if not chunk:
+                    continue
+                response = await asyncio.to_thread(
+                    self._recognize, chunk, sample_rate, language_hint
+                )
+                segments.extend(self._normalize(response, time_offset))
+                time_offset += len(chunk) / bytes_per_sec
         except SttError:
             raise
         except Exception as exc:
             raise SttError(f"gcp speech recognize failed: {exc}") from exc
-        return self._normalize(response)
+        return NormalizedTranscript(segments=segments)
 
-    def _recognize(self, pcm_bytes: bytes, language_hint: str | None) -> Any:
+    def _recognize(self, pcm_bytes: bytes, sample_rate: int, language_hint: str | None) -> Any:
         from google.cloud.speech_v2 import (
-            AutoDetectDecodingConfig,
+            ExplicitDecodingConfig,
             RecognitionConfig,
             RecognitionFeatures,
             RecognizeRequest,
@@ -117,19 +141,30 @@ class GoogleCloudSttAdapter(SttPort):
             language_codes = [language_hint] if language_hint else list(DEFAULT_LANGUAGE_CODES)
 
         config = RecognitionConfig(
-            auto_decoding_config=AutoDetectDecodingConfig(),
+            # The SttPort contract is raw PCM16 mono, which v2 auto-detect
+            # cannot identify (validated against the real API 2026-09-22) —
+            # the decoding params must be declared explicitly.
+            explicit_decoding_config=ExplicitDecodingConfig(
+                encoding=ExplicitDecodingConfig.AudioEncoding.LINEAR16,
+                sample_rate_hertz=sample_rate,
+                audio_channel_count=1,
+            ),
             language_codes=language_codes,
             features=RecognitionFeatures(enable_word_time_offsets=True),
         )
+        # The v2 global location rejects a request without a model
+        # ("field must be non-empty"); default to long-form, the only
+        # sensible default for interview answers.
         model = self._config.get("model")
-        if isinstance(model, str) and model:
-            config.model = model
+        if not isinstance(model, str) or not model:
+            model = DEFAULT_MODEL
+        config.model = model
 
         recognizer = f"projects/{self._project_id}/locations/{self._location}/recognizers/_"
         request = RecognizeRequest(config=config, content=pcm_bytes, recognizer=recognizer)
         return self._client.recognize(request=request)
 
-    def _normalize(self, response: Any) -> NormalizedTranscript:
+    def _normalize(self, response: Any, time_offset: float = 0.0) -> list[TranscriptSegment]:
         segments: list[TranscriptSegment] = []
         for result in response.results:
             alternative = result.alternatives[0] if result.alternatives else None
@@ -138,8 +173,8 @@ class GoogleCloudSttAdapter(SttPort):
             words = [
                 WordTiming(
                     text=w.word,
-                    start=_duration_to_sec(w.start_offset),
-                    end=_duration_to_sec(w.end_offset),
+                    start=_duration_to_sec(w.start_offset) + time_offset,
+                    end=_duration_to_sec(w.end_offset) + time_offset,
                     confidence=getattr(w, "confidence", None) or None,
                 )
                 for w in alternative.words
@@ -148,7 +183,7 @@ class GoogleCloudSttAdapter(SttPort):
                 start = words[0].start
                 end = words[-1].end
             else:
-                start = _duration_to_sec(getattr(result, "result_end_offset", None))
+                start = _duration_to_sec(getattr(result, "result_end_offset", None)) + time_offset
                 end = start
             segments.append(
                 TranscriptSegment(
@@ -160,7 +195,7 @@ class GoogleCloudSttAdapter(SttPort):
                     words=words,
                 )
             )
-        return NormalizedTranscript(segments=segments)
+        return segments
 
     async def healthcheck(self) -> dict[str, object]:
         return {
