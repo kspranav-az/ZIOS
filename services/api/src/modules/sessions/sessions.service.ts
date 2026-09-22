@@ -171,7 +171,7 @@ export class SessionsService {
     session: InterviewSession,
     to: InterviewSession['status'],
     extras?: Parameters<SessionsRepository['updateStatus']>[3],
-    charge?: { orgId: string | null; balanceAfter: number | null },
+    charge?: { accountId: string | null; balanceAfter: number | null },
   ): Promise<InterviewSession> {
     transition(session.status, to);
     if (to === 'live') {
@@ -183,16 +183,17 @@ export class SessionsService {
         throw new ApiException(404, 'INVITE_NOT_FOUND', 'invite not found');
       }
       const price = priceForSession(session.mode, session.conductor);
-      await assertCanStart((id) => this.credits.getBalance(id, q), orgId, price);
+      const accountId = await this.credits.ensureAccount('org', orgId, q);
+      await assertCanStart((id) => this.credits.getBalance(id, q), accountId, price);
       const { balanceAfter } = await this.credits.debit(
-        orgId,
+        accountId,
         price,
         'session_start',
         q,
         { sessionRef: session.id, metadata: { mode: session.mode } },
       );
       if (charge) {
-        charge.orgId = orgId;
+        charge.accountId = accountId;
         charge.balanceAfter = balanceAfter;
       }
     }
@@ -362,8 +363,8 @@ export class SessionsService {
     rawRecoveryToken: string,
     body?: PreflightBody,
   ): Promise<PreflightResponse> {
-    const charge: { orgId: string | null; balanceAfter: number | null } = {
-      orgId: null,
+    const charge: { accountId: string | null; balanceAfter: number | null } = {
+      accountId: null,
       balanceAfter: null,
     };
     const result = await this.db.transaction(async (q) => {
@@ -413,8 +414,8 @@ export class SessionsService {
       return this.buildNextTurn(q, session, snapshot);
     });
 
-    if (charge.orgId !== null && charge.balanceAfter !== null) {
-      await this.creditsAlert.maybeAlertLowBalance(charge.orgId, charge.balanceAfter);
+    if (charge.accountId !== null && charge.balanceAfter !== null) {
+      await this.creditsAlert.maybeAlertLowBalance(charge.accountId, charge.balanceAfter);
     }
 
     if (result.session.status === 'completed') {

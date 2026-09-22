@@ -213,10 +213,14 @@ async function main() {
 
   console.log('1. Creating admin + org (email OTP via Mailpit)...');
   const { token: adminToken, orgId } = await signupAdmin(adminEmail);
-  await dbQuery(`UPDATE org SET credits_balance = credits_balance + $1 WHERE id = $2`, [
-    1000,
-    orgId,
-  ]);
+  await dbQuery(
+    `UPDATE credit_account SET balance = balance + $1 WHERE holder_type = 'org' AND holder_id = $2`,
+    [1000, orgId],
+  );
+  await dbQuery(
+    `UPDATE org SET credits_balance = credits_balance + $1 WHERE id = $2`,
+    [1000, orgId],
+  );
   console.log(`   admin: ${adminEmail} (org ${orgId}, +1000 credits)`);
 
   console.log('2. Seeding role-based questions...');

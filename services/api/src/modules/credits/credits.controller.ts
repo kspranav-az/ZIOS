@@ -5,7 +5,6 @@ import { CurrentUser, Roles } from '@/common/decorators';
 import { CreditsService } from './credits.service';
 import { CREDIT_PRICING, type PricingKind } from './pricing';
 import type { LedgerEntry } from './credits.service';
-import { OrgRepository } from '@/modules/org';
 
 export interface WalletResponse {
   balance: number;
@@ -21,22 +20,17 @@ export interface WalletResponse {
  */
 @Controller('credits')
 export class CreditsController {
-  constructor(
-    private readonly credits: CreditsService,
-    private readonly orgs: OrgRepository,
-  ) {}
+  constructor(private readonly credits: CreditsService) {}
 
   @Get('wallet')
   async wallet(@CurrentUser() user: AppUser): Promise<WalletResponse> {
-    const org = await this.orgs.findById(user.orgId);
-    if (!org) {
-      throw new BadRequestException('org not found');
-    }
+    const accountId = await this.credits.ensureAccount('org', user.orgId);
+    const account = await this.credits.getAccount(accountId);
     return {
-      balance: org.creditsBalance,
-      lowBalanceThreshold: org.lowBalanceThreshold,
+      balance: account.balance,
+      lowBalanceThreshold: account.lowBalanceThreshold,
       pricing: { ...CREDIT_PRICING },
-      ledger: await this.credits.listLedger(user.orgId),
+      ledger: await this.credits.listLedger(accountId),
     };
   }
 
@@ -50,7 +44,8 @@ export class CreditsController {
     if (!Number.isInteger(threshold) || threshold < 0 || threshold > 1_000_000) {
       throw new BadRequestException('threshold must be an integer between 0 and 1000000');
     }
-    await this.orgs.setLowBalanceThreshold(user.orgId, threshold);
+    const accountId = await this.credits.ensureAccount('org', user.orgId);
+    await this.credits.setLowBalanceThreshold(accountId, threshold);
     return { lowBalanceThreshold: threshold };
   }
 }

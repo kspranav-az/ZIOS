@@ -161,12 +161,15 @@ export class VoiceService {
         | { id: string; mode: 'voice' | 'video'; conductor: 'ai' | 'human' }
         | undefined;
       if (!row) return;
-      if (await this.credits.hasRefundForSession(row.id, sessionId, 'system_failure_refund')) {
+      const accountId = await this.credits.ensureAccount('org', row.id, this.db);
+      if (
+        await this.credits.hasRefundForSession(accountId, sessionId, 'system_failure_refund')
+      ) {
         return;
       }
       await this.db.transaction(async (q) => {
         await this.credits.credit(
-          row.id,
+          accountId,
           priceForSession(row.mode, row.conductor),
           'system_failure_refund',
           q,

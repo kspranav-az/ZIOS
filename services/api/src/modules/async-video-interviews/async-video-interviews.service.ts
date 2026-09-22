@@ -196,15 +196,16 @@ export class AsyncVideoInterviewsService {
         ? input.expiresInDays
         : DEFAULT_EXPIRY_DAYS;
 
-    const charge: { orgId: string | null; balanceAfter: number | null } = {
-      orgId: null,
+    const charge: { accountId: string | null; balanceAfter: number | null } = {
+      accountId: null,
       balanceAfter: null,
     };
     const created = await this.db.transaction(async (q) => {
-      const debit = await this.credits.debit(orgId, priceForKind('async_video'), 'async_video_created', q, {
+      const accountId = await this.credits.ensureAccount('org', orgId, q);
+      const debit = await this.credits.debit(accountId, priceForKind('async_video'), 'async_video_created', q, {
         metadata: { roleId: input.roleId },
       });
-      charge.orgId = orgId;
+      charge.accountId = accountId;
       charge.balanceAfter = debit.balanceAfter;
 
       const { versionId, questions } = await this.roleKitResolver.resolveKitVersionId(
@@ -278,8 +279,8 @@ export class AsyncVideoInterviewsService {
         questions,
       };
     });
-    if (charge.orgId !== null && charge.balanceAfter !== null) {
-      await this.creditsAlert.maybeAlertLowBalance(charge.orgId, charge.balanceAfter);
+    if (charge.accountId !== null && charge.balanceAfter !== null) {
+      await this.creditsAlert.maybeAlertLowBalance(charge.accountId, charge.balanceAfter);
     }
     return created;
   }
@@ -866,8 +867,9 @@ export class AsyncVideoInterviewsService {
         return { refunded: false };
       }
 
+      const accountId = await this.credits.ensureAccount('org', orgId, q);
       await this.credits.credit(
-        orgId,
+        accountId,
         priceForKind('async_video'),
         'async_video_refund_no_answers',
         q,

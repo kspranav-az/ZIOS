@@ -102,14 +102,24 @@ async function wallet(test: TestApp, token: string): Promise<WalletView> {
 /** Sets the org balance directly (test-only top-up/drain). */
 async function setBalance(test: TestApp, orgId: string, target: number): Promise<void> {
   await test.db.transaction(async (q) => {
-    const current = await q.query(`SELECT credits_balance AS b FROM "org" WHERE id = $1`, [orgId]);
-    const balance = (current.rows[0] as { b: number }).b;
+    await q.query(
+      `INSERT INTO credit_account (holder_type, holder_id, balance)
+       VALUES ('org', $1, 0)
+       ON CONFLICT (holder_type, holder_id) DO NOTHING`,
+      [orgId],
+    );
+    const found = await q.query(
+      `SELECT id, balance FROM credit_account WHERE holder_type = 'org' AND holder_id = $1`,
+      [orgId],
+    );
+    const { id: accountId, balance } = found.rows[0] as { id: string; balance: number };
     const delta = target - balance;
+    await q.query(`UPDATE credit_account SET balance = $2 WHERE id = $1`, [accountId, target]);
     await q.query(`UPDATE "org" SET credits_balance = $2 WHERE id = $1`, [orgId, target]);
     await q.query(
-      `INSERT INTO credit_ledger (org_id, delta, balance_after, reason)
-       VALUES ($1, $2, $3, 'test_adjust')`,
-      [orgId, delta, target],
+      `INSERT INTO credit_ledger (account_id, org_id, delta, balance_after, reason)
+       VALUES ($1, $2, $3, $4, 'test_adjust')`,
+      [accountId, orgId, delta, target],
     );
   });
 }

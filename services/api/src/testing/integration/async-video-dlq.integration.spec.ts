@@ -29,9 +29,11 @@ describe.runIf(INTEGRATION_AVAILABLE)('Async video transcription DLQ', () => {
     const signupResult = await signup(test.baseUrl, ns.email('admin'));
     adminToken = signupResult.token;
     // Seed credits so async-video creation can debit 3 credits per interview.
-    await test.db.query(`UPDATE org SET credits_balance = 1000 WHERE id = $1`, [
-      signupResult.org.id,
-    ]);
+    await test.db.query(
+      `UPDATE credit_account SET balance = 1000 WHERE holder_type = 'org' AND holder_id = $1`,
+      [signupResult.org.id],
+    );
+    await test.db.query(`UPDATE org SET credits_balance = 1000 WHERE id = $1`, [signupResult.org.id]);
 
     await test.db.query(
       `INSERT INTO role_based_questions

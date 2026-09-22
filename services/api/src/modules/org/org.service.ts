@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { AppUser, Org } from '@zios/shared-types';
 import { DatabaseService } from '@/modules/database';
+import { CreditsService } from '@/modules/credits';
 import { UsersService } from '@/modules/users';
 import { orgNameFromEmail, userNameFromEmail } from './naming';
 import { OrgRepository } from './org.repository';
@@ -11,6 +12,7 @@ export class OrgService {
     private readonly db: DatabaseService,
     private readonly orgs: OrgRepository,
     private readonly users: UsersService,
+    private readonly credits: CreditsService,
   ) {}
 
   /**
@@ -24,15 +26,12 @@ export class OrgService {
     return this.db.transaction(async (client) => {
       const org = await this.orgs.insert({ name: orgNameFromEmail(email), plan: 'pilot' }, client);
       const welcomeCredits = 100;
-      await client.query(
-        `UPDATE "org" SET credits_balance = credits_balance + $2 WHERE id = $1`,
-        [org.id, welcomeCredits],
-      );
-      await client.query(
-        `INSERT INTO credit_ledger (org_id, delta, balance_after, reason, metadata)
-         VALUES ($1, $2, $2, 'welcome_grant', $3::jsonb)`,
-        [org.id, welcomeCredits, JSON.stringify({ plan: 'pilot' })],
-      );
+      // The credit_account row is the balance source of truth (Phase 12,
+      // D1-D3); org.credits_balance is updated as a synced cache.
+      const accountId = await this.credits.ensureAccount('org', org.id, client);
+      await this.credits.credit(accountId, welcomeCredits, 'welcome_grant', client, {
+        metadata: { plan: 'pilot' },
+      });
       const user = await this.users.create(
         { orgId: org.id, email, name: userNameFromEmail(email), role: 'admin' },
         client,

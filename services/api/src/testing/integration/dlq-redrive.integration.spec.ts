@@ -181,9 +181,11 @@ describe.runIf(INTEGRATION_AVAILABLE)('DLQ redrive endpoints', () => {
     await ns.purge(test.db);
     const signupResult = await signup(test.baseUrl, ns.email('admin'));
     adminToken = signupResult.token;
-    await test.db.query(`UPDATE org SET credits_balance = 1000 WHERE id = $1`, [
-      signupResult.org.id,
-    ]);
+    await test.db.query(
+      `UPDATE credit_account SET balance = 1000 WHERE holder_type = 'org' AND holder_id = $1`,
+      [signupResult.org.id],
+    );
+    await test.db.query(`UPDATE org SET credits_balance = 1000 WHERE id = $1`, [signupResult.org.id]);
     await seedRoleQuestions(test.db, roleId, roleName);
   });
 

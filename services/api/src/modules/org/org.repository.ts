@@ -67,12 +67,15 @@ export class OrgRepository {
   }
 
   /**
-   * Sets the low-balance alert threshold (FR-E14-3). NOTE: "org" has no
-   * updated_at column — never add one to this statement.
+   * Sets the low-balance alert threshold (FR-E14-3). The threshold lives on
+   * the holder's credit_account row (Phase 12, D3); org.low_balance_threshold
+   * is a legacy cache. NOTE: "org" has no updated_at column — never add one
+   * to statements that touch it.
    */
   async setLowBalanceThreshold(id: string, threshold: number): Promise<boolean> {
     const result = await this.db.query(
-      `UPDATE "org" SET low_balance_threshold = $2 WHERE id = $1 RETURNING id`,
+      `UPDATE credit_account SET low_balance_threshold = $2
+       WHERE holder_type = 'org' AND holder_id = $1 RETURNING id`,
       [id, threshold],
     );
     return (result.rowCount ?? 0) > 0;
