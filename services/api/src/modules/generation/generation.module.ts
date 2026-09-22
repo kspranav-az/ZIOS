@@ -22,5 +22,6 @@ import { StubExternalQuestionSourceAdapter } from './stub-external-question-sour
       useClass: StubExternalQuestionSourceAdapter,
     },
   ],
+  exports: [GenerationService],
 })
 export class GenerationModule {}

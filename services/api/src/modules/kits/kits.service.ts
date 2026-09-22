@@ -155,9 +155,10 @@ export class KitsService {
     profile: JdProfile,
     generationId: string,
     generationMetadata: Record<string, unknown>,
+    settingsOverrides?: Partial<KitSettings>,
   ): Promise<{ kit: Kit; version: KitVersionSummary }> {
     return this.db.withTenant(async (client) => {
-      const settings = mergeSettings(DEFAULT_SETTINGS, {});
+      const settings = mergeSettings(DEFAULT_SETTINGS, settingsOverrides ?? {});
       const kit = await this.kits.insert(
         {
           orgId: user.orgId,
