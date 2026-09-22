@@ -162,6 +162,27 @@ All org-scoped queries run inside `TenantContext.run({ orgId, userId, role })` s
 5. End-call triggers `NotesService.generateForSession` + `EvaluationService.evaluateSession` → `pending` report.
 6. Interviewer submits `HumanScorecardBody`; report becomes `completed` with `source: 'human'` scores.
 
+### Async video interview (E15)
+
+1. `POST /async-video-interviews` creates invite by role (questions from `role_based_questions`, snapshotted on first open), debits 3 credits, seeds per-question transcript rows.
+2. Candidate consent → preflight → records per-question video (`MediaRecorder` webm, max duration per invite) → multipart upload per question.
+3. Upload transaction stores the object at `async-video/{sessionId}/{questionId}/{sha256}.webm` (MinIO), writes `answer_data.videoAnswer`, appends a media ref, and — when `enableAnalysis` (default on) — inserts an `analysis_job(kind='multimodal_feature_extraction')`; BullMQ enqueue happens after commit. With `enableAnalysis: false` the legacy `transcription_job` path runs unchanged.
+4. Analysis worker → orchestrator `/analysis/video` → transcript written back to `session_transcript` (review page works identically either path).
+5. Employer reviews per-question video + transcript + analysis features panel → optional AI judge pre-fill → human scorecard → `evaluation_report` in the live-mode schema.
+
+### Multimodal feature extraction (Phase 14, branch `ai-analysis`)
+
+1. A durable `analysis_job` row (kind, payload, status) is the record; BullMQ queue `analysis` is the trigger. Kinds: `transcription`, `multimodal_feature_extraction`.
+2. The API processor enforces consent (artifact must exist, else `CONSENT_MISSING`, no processing) and calls the orchestrator with a typed JSON contract (`node:http` client with `ANALYSIS_HTTP_TIMEOUT_MS`, default 10 min — long videos exceed undici's 300 s default).
+3. Orchestrator (`app/analysis/`): chunked MinIO download to a unique temp dir → ffprobe metadata → ffmpeg (audio: mono 16 kHz PCM; video: ~854 px, 5 FPS sequential PPM stream, one frame in memory at a time) → per-stage extractors → align (10 s windows) → aggregate (3 levels) → persist JSON artifacts to `analysis/{sessionId}/{questionId|session}/` in MinIO → respond 200 with transcript + Level-3 features, or typed 4xx/5xx (`error_code`/`error_message`); never 200-with-fake.
+4. Extractors are independently fault-tolerant: a failed group reports `valid: false, reason: ...` — never fabricated zeros. STT failure with `include_transcript` fails the job (502 → retries → `analysis_job_dlq`).
+5. STT goes through the existing `SttPort`; `STT_ADAPTER=mock|gcp` selects `MockSttAdapter` (default) or `GoogleCloudSttAdapter` (Speech v2, word-level offsets, normalized to the internal segment/word schema).
+6. Voice-mode session recordings (`recordings/{sessionId}/{sha256}.wav`) and video-mode captured tracks (`recordings/{sessionId}/{sha256}.webm`, hidden subscribe-only LiveKit recorder participant) are notified to the API via voice telemetry (`{"recording": ref, "media_kind": ...}`) and enqueue audio/video analysis the same way.
+7. Interaction features require a two-party timeline; single-speaker recordings report the whole group `valid: false, reason: 'single_speaker_recording'`.
+8. Employers read results via `GET /analysis/sessions/:sessionId` and `GET /analysis/sessions/:sessionId/questions/:questionId/features`; the review page renders an objective-measurements-only panel (no interpretive language).
+
+Feature semantics are contractual: **raw measurements → derived features only**. No emotion, personality, confidence, or deception inference exists anywhere in this pipeline; gaze is reported as `camera_gaze_ratio`, never "eye contact".
+
 ---
 
 ## 5. AI orchestrator (Python)
@@ -175,8 +196,10 @@ All org-scoped queries run inside `TenantContext.run({ orgId, userId, role })` s
 Current responsibilities:
 
 - Voice-mode LiveKit agent and turn orchestration
-- Mock STT/TTS adapters behind contracts
+- Mock STT/TTS adapters behind contracts (`SttPort`/`TtsPort`), plus `GoogleCloudSttAdapter` selected via `STT_ADAPTER` (mock default)
 - Recording artifact upload to MinIO
+- Video-mode candidate-track capture (hidden subscribe-only LiveKit participant → streaming ffmpeg webm encode → MinIO)
+- Multimodal feature extraction (`app/analysis/`): ffmpeg preprocessing, MediaPipe face/pose/hands (CPU, pinned models), Silero VAD (onnxruntime), librosa pitch/energy, transcript normalization, temporal alignment, 3-level aggregation, MinIO artifact persistence — objective measurements only, pydantic-typed, typed error propagation
 
 ---
 

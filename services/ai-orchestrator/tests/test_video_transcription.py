@@ -80,11 +80,41 @@ def _read_file_bytes(path: str) -> bytes:
         return f.read()
 
 
+def _reachable_storage() -> StorageClient | None:
+    """StorageClient bound to a reachable MinIO, or None when offline.
+
+    Tries the compose-network hostname and localhost with the default dev
+    credentials so the integration test works both inside and outside Docker.
+    """
+    import socket
+
+    for host in ("minio", "localhost"):
+        try:
+            with socket.create_connection((host, 9000), timeout=1):
+                pass
+        except OSError:
+            continue
+        for password in ("minioadmin", "minioadmin_dev"):
+            os.environ["MINIO_ENDPOINT"] = f"{host}:9000"
+            os.environ["MINIO_ROOT_PASSWORD"] = password
+            candidate = StorageClient()
+            try:
+                candidate.ensure_bucket()
+                return candidate
+            except Exception:
+                continue
+    return None
+
+
 @pytest.mark.asyncio
 async def test_service_uses_ffmpeg_pipeline_with_real_video() -> None:
     """Generate a tiny valid WebM with ffmpeg, upload it to MinIO, and transcribe."""
     if not shutil.which("ffmpeg"):
         pytest.skip("ffmpeg not installed")
+
+    storage = _reachable_storage()
+    if storage is None:
+        pytest.skip("MinIO not reachable with dev credentials")
 
     with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as video_file:
         video_path = video_file.name
@@ -95,7 +125,6 @@ async def test_service_uses_ffmpeg_pipeline_with_real_video() -> None:
     except (subprocess.CalledProcessError, FileNotFoundError):
         pytest.skip("could not generate test webm")
 
-    storage = StorageClient()
     storage.ensure_bucket()
     object_name = "test/async-video-transcription/test.webm"
     try:

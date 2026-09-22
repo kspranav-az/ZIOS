@@ -86,6 +86,9 @@ describe.runIf(INTEGRATION_AVAILABLE)('Async video interviews', () => {
         roleId,
         candidate: { name: 'Async Candidate', email },
         enableTranscription: true,
+        // Pin the legacy transcription path (Phase 14 analysis path is covered
+        // by analysis.integration.spec.ts).
+        enableAnalysis: false,
       },
       bearer(adminToken),
     );
@@ -109,6 +112,7 @@ describe.runIf(INTEGRATION_AVAILABLE)('Async video interviews', () => {
         roleId,
         candidate: { name: 'Async Candidate 2', email },
         enableTranscription: true,
+        enableAnalysis: false,
       },
       bearer(adminToken),
     );
@@ -210,6 +214,7 @@ describe.runIf(INTEGRATION_AVAILABLE)('Async video interviews', () => {
         roleId,
         candidate: { name: 'Async Candidate 3', email },
         enableTranscription: true,
+        enableAnalysis: false,
       },
       bearer(adminToken),
     );
@@ -286,6 +291,7 @@ describe.runIf(INTEGRATION_AVAILABLE)('Async video interviews', () => {
         roleId,
         candidate: { name: 'Async Candidate 4', email },
         enableTranscription: false,
+        enableAnalysis: false,
       },
       bearer(adminToken),
     );
@@ -316,6 +322,7 @@ describe.runIf(INTEGRATION_AVAILABLE)('Async video interviews', () => {
         roleId,
         candidate: { name: 'Async Candidate 5', email: email2 },
         enableTranscription: false,
+        enableAnalysis: false,
       },
       bearer(adminToken),
     );

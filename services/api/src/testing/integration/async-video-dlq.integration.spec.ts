@@ -84,6 +84,9 @@ describe.runIf(INTEGRATION_AVAILABLE)('Async video transcription DLQ', () => {
           roleId,
           candidate: { name: 'Async DLQ Candidate', email },
           enableTranscription: true,
+          // Pin the legacy transcription path so this suite exercises the
+          // transcription_job DLQ (the analysis DLQ has its own suite).
+          enableAnalysis: false,
         },
         bearer(adminToken),
       );

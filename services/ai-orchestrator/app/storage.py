@@ -39,21 +39,22 @@ class StorageClient:
     def upload_recording(
         self,
         session_id: str,
-        audio_bytes: bytes,
+        media_bytes: bytes,
         content_type: str = "audio/wav",
+        extension: str = ".wav",
     ) -> dict[str, Any]:
         """Upload a recording and return a signed URI + checksum."""
         self.ensure_bucket()
-        checksum = hashlib.sha256(audio_bytes).hexdigest()
-        object_name = f"recordings/{session_id}/{checksum}.wav"
+        checksum = hashlib.sha256(media_bytes).hexdigest()
+        object_name = f"recordings/{session_id}/{checksum}{extension}"
         client = self._client_instance()
         from io import BytesIO
 
         client.put_object(
             self.bucket,
             object_name,
-            data=BytesIO(audio_bytes),
-            length=len(audio_bytes),
+            data=BytesIO(media_bytes),
+            length=len(media_bytes),
             content_type=content_type,
             metadata={"x-amz-meta-sha256": checksum},
         )
@@ -66,5 +67,33 @@ class StorageClient:
             "uri": url,
             "objectName": object_name,
             "checksum": {"algorithm": "sha256", "value": checksum},
-            "sizeBytes": len(audio_bytes),
+            "sizeBytes": len(media_bytes),
+        }
+
+    def upload_analysis_artifact(
+        self,
+        session_id: str,
+        question_id: str | None,
+        name: str,
+        json_bytes: bytes,
+    ) -> dict[str, Any]:
+        """Persist one analysis artifact under the analysis/ prefix."""
+        self.ensure_bucket()
+        checksum = hashlib.sha256(json_bytes).hexdigest()
+        object_name = f"analysis/{session_id}/{question_id or 'session'}/{name}.json"
+        client = self._client_instance()
+        from io import BytesIO
+
+        client.put_object(
+            self.bucket,
+            object_name,
+            data=BytesIO(json_bytes),
+            length=len(json_bytes),
+            content_type="application/json",
+            metadata={"x-amz-meta-sha256": checksum},
+        )
+        return {
+            "objectName": object_name,
+            "checksum": {"algorithm": "sha256", "value": checksum},
+            "sizeBytes": len(json_bytes),
         }

@@ -22,6 +22,14 @@ export interface TestApp {
 }
 
 export async function bootApp(): Promise<TestApp> {
+  // Isolate BullMQ queues from the compose stack's workers (and from other
+  // concurrently running suites): booting AppModule registers real queue
+  // workers, so without an isolated name a test app steals jobs off the
+  // shared `analysis`/`transcription` queues and app.close() then blocks on
+  // minutes-long in-flight media jobs. Specs that need a specific queue set
+  // the env var themselves before calling bootApp.
+  process.env.ANALYSIS_QUEUE_NAME ??= `analysis-test-${randomUUID()}`;
+  process.env.TRANSCRIPTION_QUEUE_NAME ??= `transcription-test-${randomUUID()}`;
   const app = await NestFactory.create(AppModule, { logger: false });
   app.use(cookieParser());
   app.enableCors({ origin: [SPA_ORIGIN], credentials: true });

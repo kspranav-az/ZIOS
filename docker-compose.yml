@@ -146,6 +146,9 @@ services:
       PREVIEW_TOKEN_SECRET: ${PREVIEW_TOKEN_SECRET:-interviewos-local-preview-secret}
       # Phase 07: voice orchestrator endpoint
       ORCHESTRATOR_URL: http://ai-orchestrator:8000
+      # Phase 14: multimodal analysis pipeline (BullMQ queue + HTTP timeout)
+      ANALYSIS_QUEUE_NAME: ${ANALYSIS_QUEUE_NAME:-analysis}
+      ANALYSIS_HTTP_TIMEOUT_MS: ${ANALYSIS_HTTP_TIMEOUT_MS:-600000}
       # Phase 07/09: external WebRTC signalling URL returned to browsers
       LIVEKIT_URL: ${LIVEKIT_URL:-ws://localhost:7880}
       # Object storage (MinIO) — used by video answers, media, reports
@@ -224,6 +227,8 @@ services:
     # FastAPI AI orchestration worker service — Phase 00 skeleton + Phase 07 voice
     build:
       context: services/ai-orchestrator
+    # mediapipe ships no linux/aarch64 wheel — build/run emulated on Apple Silicon
+    platform: linux/amd64
     container_name: zios-ai-orchestrator
     depends_on:
       postgres:
@@ -242,6 +247,16 @@ services:
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
       MINIO_BUCKET_MEDIA: ${MINIO_BUCKET_MEDIA}
       MINIO_SECURE: 'false'
+      # Phase 14: multimodal analysis pipeline (STT selection + tuning knobs)
+      STT_ADAPTER: ${STT_ADAPTER:-mock}
+      GCP_PROJECT_ID: ${GCP_PROJECT_ID:-}
+      GCP_LOCATION: ${GCP_LOCATION:-global}
+      GCP_STT_CONFIG: ${GCP_STT_CONFIG:-}
+      VIDEO_ANALYSIS_FPS: ${VIDEO_ANALYSIS_FPS:-5}
+      VIDEO_ANALYSIS_WIDTH: ${VIDEO_ANALYSIS_WIDTH:-854}
+      VAD_THRESHOLD: ${VAD_THRESHOLD:-0.5}
+      ANALYSIS_WINDOW_SEC: ${ANALYSIS_WINDOW_SEC:-10}
+      FILLER_WORDS: ${FILLER_WORDS:-um,uh,erm,like,you know,actually,basically,sort of}
     ports:
       - '${ORCHESTRATOR_PORT}:8000'
     healthcheck:

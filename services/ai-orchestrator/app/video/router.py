@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Any
 
 import structlog
 from fastapi import APIRouter, Form
@@ -34,7 +34,7 @@ async def transcribe_video(
 
 
 @router.get("/health/transcription")
-async def transcription_healthcheck() -> dict:
+async def transcription_healthcheck() -> dict[str, Any]:
     """Health check for the async video transcription pipeline."""
     service = AsyncVideoTranscriptionService()
     return await service.healthcheck()

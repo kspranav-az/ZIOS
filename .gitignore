@@ -42,3 +42,4 @@ playwright-report/
 
 # --- Docker / local data volumes ---
 .data/
+test_video

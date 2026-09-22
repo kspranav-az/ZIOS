@@ -17,6 +17,7 @@ import { SessionsModule } from '@/modules/sessions';
 import { UsersModule } from '@/modules/users';
 import { VoiceModule } from '@/modules/voice';
 import { LiveRoomsModule } from '@/modules/live-rooms';
+import { AnalysisModule } from '@/modules/analysis';
 import { AsyncVideoInterviewsModule } from '@/modules/async-video-interviews';
 
 @Module({
@@ -52,6 +53,7 @@ import { AsyncVideoInterviewsModule } from '@/modules/async-video-interviews';
     VoiceModule,
     IntegrityModule,
     LiveRoomsModule,
+    AnalysisModule,
     AsyncVideoInterviewsModule,
   ],
 })

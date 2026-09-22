@@ -85,3 +85,27 @@ class ConductorClient:
             headers={"x-recovery-token": recovery_token},
         ) as response:
             response.raise_for_status()
+
+    async def recording_notification(
+        self,
+        session_id: str,
+        recovery_token: str,
+        recording: dict[str, Any],
+        media_kind: str | None = None,
+    ) -> None:
+        """Attach the uploaded session recording to the telemetry endpoint.
+
+        Sent with a top-level ``recording`` key (not wrapped in ``turn``) so
+        the API's recording hook can pick it up and enqueue media analysis.
+        """
+        url = f"{self.base_url}/sessions/{session_id}/voice/telemetry"
+        body: dict[str, Any] = {"recording": recording}
+        if media_kind is not None:
+            body["media_kind"] = media_kind
+        session = await self._session_instance()
+        async with session.post(
+            url,
+            json=body,
+            headers={"x-recovery-token": recovery_token},
+        ) as response:
+            response.raise_for_status()
