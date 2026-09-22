@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ApiException } from '@/common/errors';
-import type { Queryable } from '@/modules/database';
+import { DatabaseService, type Queryable } from '@/modules/database';
 import { InvitesRepository } from '@/modules/invites';
 import { SessionsRepository } from '@/modules/sessions';
 import { AnalysisQueue, type AnalysisMediaKind } from './analysis.queue';
@@ -58,6 +58,7 @@ export interface QuestionFeaturesResult {
 @Injectable()
 export class AnalysisService {
   constructor(
+    private readonly db: DatabaseService,
     private readonly repo: AnalysisRepository,
     private readonly queue: AnalysisQueue,
     private readonly sessions: SessionsRepository,
@@ -120,6 +121,25 @@ export class AnalysisService {
       includeTranscript: payload.includeTranscript,
       languageHint: payload.languageHint ?? undefined,
     });
+  }
+
+  /**
+   * Admin redrive: moves a DLQ'd analysis job back to pending and re-enqueues
+   * it on the analysis queue. Org-scoped like the read endpoints; the BullMQ
+   * job is added only after the reset transaction commits.
+   */
+  async redrive(orgId: string, jobId: string): Promise<AnalysisJobSummary> {
+    const dlq = await this.repo.findDlqByAnalysisJobId(jobId);
+    if (!dlq) {
+      throw new ApiException(404, 'DLQ_JOB_NOT_FOUND', 'no DLQ row for this analysis job');
+    }
+    await this.assertSessionInOrg(orgId, dlq.sessionId);
+    const job = await this.repo.redriveFromDlq(jobId, this.db);
+    if (!job) {
+      throw new ApiException(404, 'ANALYSIS_JOB_NOT_FOUND', 'analysis job not found');
+    }
+    await this.enqueueAfterCommit(job);
+    return this.summarize(job);
   }
 
   async getSessionAnalysis(orgId: string, sessionId: string): Promise<SessionAnalysisResult> {

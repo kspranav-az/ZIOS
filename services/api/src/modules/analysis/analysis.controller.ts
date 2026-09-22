@@ -1,8 +1,9 @@
-import { Controller, Get, Param } from '@nestjs/common';
+import { Controller, Get, HttpCode, Param, Post } from '@nestjs/common';
 import type { AppUser } from '@zios/shared-types';
-import { CurrentUser } from '@/common/decorators';
+import { CurrentUser, Roles } from '@/common/decorators';
 import {
   AnalysisService,
+  type AnalysisJobSummary,
   type QuestionFeaturesResult,
   type SessionAnalysisResult,
 } from './analysis.service';
@@ -10,6 +11,20 @@ import {
 @Controller('analysis')
 export class AnalysisController {
   constructor(private readonly analysis: AnalysisService) {}
+
+  /**
+   * Admin-only redrive of a DLQ'd analysis job: resets the job to pending and
+   * re-enqueues it. Replaces the manual `scripts/redrive-analysis-job.js`.
+   */
+  @Post('dlq/:jobId/redrive')
+  @HttpCode(200)
+  @Roles('admin')
+  async redriveDlq(
+    @CurrentUser() user: AppUser,
+    @Param('jobId') jobId: string,
+  ): Promise<AnalysisJobSummary> {
+    return this.analysis.redrive(user.orgId, jobId);
+  }
 
   @Get('sessions/:sessionId')
   async getSessionAnalysis(

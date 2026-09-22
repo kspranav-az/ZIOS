@@ -41,6 +41,18 @@ export interface AnalysisDlqInput {
   attempts: number;
 }
 
+export interface AnalysisDlqRecord {
+  jobId: string;
+  analysisJobId: string;
+  kind: AnalysisJobKind;
+  sessionId: string;
+  questionId: string | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  attempts: number;
+  failedAt: string;
+}
+
 interface AnalysisJobRow {
   id: string;
   kind: AnalysisJobKind;
@@ -204,5 +216,68 @@ export class AnalysisRepository {
         input.attempts,
       ],
     );
+  }
+
+  async findDlqByAnalysisJobId(
+    analysisJobId: string,
+    q: Queryable = this.db,
+  ): Promise<AnalysisDlqRecord | null> {
+    const result = await q.query(
+      `SELECT job_id, analysis_job_id, kind, session_id, question_id,
+              error_code, error_message, attempts, failed_at
+       FROM analysis_job_dlq WHERE analysis_job_id = $1`,
+      [analysisJobId],
+    );
+    const row = result.rows[0] as
+      | {
+          job_id: string;
+          analysis_job_id: string;
+          kind: AnalysisJobKind;
+          session_id: string;
+          question_id: string | null;
+          error_code: string | null;
+          error_message: string | null;
+          attempts: number;
+          failed_at: Date;
+        }
+      | undefined;
+    if (!row) {
+      return null;
+    }
+    return {
+      jobId: row.job_id,
+      analysisJobId: row.analysis_job_id,
+      kind: row.kind,
+      sessionId: row.session_id,
+      questionId: row.question_id,
+      errorCode: row.error_code,
+      errorMessage: row.error_message,
+      attempts: row.attempts,
+      failedAt: row.failed_at.toISOString(),
+    };
+  }
+
+  /**
+   * Moves a DLQ'd job back to 'pending' in one transaction: reset the
+   * analysis_job row (attempts/error cleared), delete the DLQ row. The DLQ
+   * row is removed (not kept) because the job row itself now carries the
+   * recovery audit trail via status + attempts.
+   */
+  async redriveFromDlq(analysisJobId: string, q: Queryable): Promise<AnalysisJobRecord | null> {
+    const result = await q.query(
+      `UPDATE analysis_job
+       SET status = 'pending', attempts = 0,
+           error_code = NULL, error_message = NULL,
+           started_at = NULL, completed_at = NULL
+       WHERE id = $1
+       RETURNING ${COLUMNS}`,
+      [analysisJobId],
+    );
+    const row = result.rows[0] as AnalysisJobRow | undefined;
+    if (!row) {
+      return null;
+    }
+    await q.query(`DELETE FROM analysis_job_dlq WHERE analysis_job_id = $1`, [analysisJobId]);
+    return mapRow(row);
   }
 }

@@ -54,6 +54,7 @@ function buildService(options: { session?: unknown; invite?: unknown } = {}) {
     ),
   };
   const service = new AnalysisService(
+    {} as unknown as import('@/modules/database').DatabaseService,
     repo as unknown as AnalysisRepository,
     queue as unknown as AnalysisQueue,
     sessions as unknown as SessionsRepository,
