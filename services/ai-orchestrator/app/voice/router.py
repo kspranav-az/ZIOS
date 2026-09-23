@@ -18,6 +18,7 @@ from app.storage import StorageClient
 from app.video.capture import VideoCaptureSession, capture_enabled
 from app.voice.mock_stt import MockSttAdapter
 from app.voice.mock_tts import MockTtsAdapter
+from app.voice.models import TurnTelemetry
 from app.voice.service import VoiceSessionService
 
 router = APIRouter(prefix="/voice", tags=["voice"])
@@ -33,6 +34,19 @@ _sessions: dict[str, VoiceSessionService] = {}
 
 def _room_name(session_id: str) -> str:
     return f"voice-{session_id}"
+
+
+def _json_default(value: Any) -> Any:
+    """JSON serializer for non-primitive event payloads.
+
+    process_turn yields TurnTelemetry dataclasses inside the "telemetry"
+    event; starlette's send_json would raise TypeError and surface to the
+    candidate as a STREAM_ERROR, so dataclasses serialize via their explicit
+    wire shape. Anything else is a real bug — fail loudly.
+    """
+    if isinstance(value, TurnTelemetry):
+        return value.to_wire_dict()
+    raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
 
 
 @router.post("/sessions/{session_id}/token")
@@ -166,7 +180,7 @@ async def voice_stream(websocket: WebSocket, session_id: str) -> None:
 
     try:
         async for event in service.process_turn(_audio_gen()):
-            await websocket.send_json(event)
+            await websocket.send_text(json.dumps(event, default=_json_default))
     except WebSocketDisconnect:
         pass
     except Exception as exc:

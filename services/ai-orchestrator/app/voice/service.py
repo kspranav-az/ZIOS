@@ -273,17 +273,7 @@ class VoiceSessionService:
             await self.conductor.telemetry(
                 self.state.session_id,
                 self.recovery_token,
-                {
-                    "turnIndex": telemetry.turn_index,
-                    "vadMs": telemetry.vad_ms,
-                    "sttFinalMs": telemetry.stt_final_ms,
-                    "plannerMs": telemetry.planner_ms,
-                    "ttsFirstAudioMs": telemetry.tts_first_audio_ms,
-                    "totalTurnMs": telemetry.total_turn_ms,
-                    "transcript": telemetry.transcript,
-                    "bargedIn": telemetry.barged_in,
-                    "degradationRung": telemetry.degradation_rung,
-                },
+                telemetry.to_wire_dict(),
             )
         except Exception as exc:
             logger.warning(
