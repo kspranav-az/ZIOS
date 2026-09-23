@@ -279,6 +279,8 @@ services:
       VAD_THRESHOLD: ${VAD_THRESHOLD:-0.5}
       ANALYSIS_WINDOW_SEC: ${ANALYSIS_WINDOW_SEC:-10}
       FILLER_WORDS: ${FILLER_WORDS:-um,uh,erm,like,you know,actually,basically,sort of}
+      # Phase 12b: resume PDF text extraction (pypdf = local library; mock = fixture)
+      DOCUMENT_EXTRACTION_ADAPTER: ${DOCUMENT_EXTRACTION_ADAPTER:-pypdf}
     ports:
       - '${ORCHESTRATOR_PORT}:8000'
     healthcheck:

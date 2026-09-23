@@ -21,6 +21,7 @@ dependencies = [
     "soundfile>=0.14.0",
     "onnxruntime>=1.30.0",
     "google-cloud-speech>=2.40.0",
+    "pypdf>=5.0.0",
 ]
 
 [dependency-groups]

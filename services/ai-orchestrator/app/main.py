@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 
 from app.analysis.router import router as analysis_router
+from app.documents.router import router as documents_router
 from app.logging import CorrelationIdMiddleware, configure_logging
 from app.telemetry import init_tracing
 from app.video.router import router as video_router
@@ -14,6 +15,7 @@ app.add_middleware(CorrelationIdMiddleware)
 app.include_router(voice_router)
 app.include_router(video_router)
 app.include_router(analysis_router)
+app.include_router(documents_router)
 
 
 @app.get("/healthz")

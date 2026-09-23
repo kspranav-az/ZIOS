@@ -8,10 +8,22 @@ import { ApiException } from '@/common/errors';
 import { LlmGateway } from '@/modules/llm-gateway';
 import { StorageClient } from '@/modules/storage';
 import { CandidateResumeRepository, type CandidateResumeRecord } from './candidate-resume.repository';
+import { DocumentExtractionClient } from './document-extraction.client';
 import { validateMatchHonesty } from './honesty';
 
 /** v1 upload cap (~1.5 MB base64 payload). */
 const MAX_RESUME_BYTES = 1_000_000;
+
+/**
+ * Heuristic binary sniff: NUL bytes or C0 control characters (other than
+ * tab/newline/CR) mean the buffer is not plain text. PDFs and office formats
+ * both trip this, so callers decide by file name first.
+ */
+function looksLikePlainText(buffer: Buffer): boolean {
+  if (buffer.includes(0)) return false;
+  // eslint-disable-next-line no-control-regex
+  return !/[\x01-\x08\x0B\x0C\x0E-\x1F]/.test(buffer.toString('utf8'));
+}
 
 /**
  * Candidate resume intelligence (Phase 12, D10). The raw file lives in MinIO
@@ -25,6 +37,7 @@ export class ResumeService {
     private readonly resumes: CandidateResumeRepository,
     private readonly storage: StorageClient,
     private readonly llmGateway: LlmGateway,
+    private readonly extraction: DocumentExtractionClient,
   ) {}
 
   async upload(
@@ -48,27 +61,56 @@ export class ResumeService {
       throw new ApiException(413, 'RESUME_TOO_LARGE', 'resume must be between 1 byte and 1 MB');
     }
 
-    // v1 parsing is text-based: text/plain decodes directly, anything else
-    // must carry an extracted-text companion field (PDF parsing lands later).
-    const looksText = !buffer.includes(0);
-    const resumeText =
-      typeof body?.text === 'string' && body.text.trim()
-        ? body.text
-        : looksText
-          ? buffer.toString('utf8')
-          : null;
+    // Text resolution, in priority order:
+    //   1. explicit companion text (paste-as-text flow)
+    //   2. .pdf file name → orchestrator extraction port (pypdf/mock)
+    //   3. printable bytes decode directly (utf-8 .txt uploads)
+    //   4. anything else → 422 without touching the orchestrator
+    const isPdfName = fileName.toLowerCase().endsWith('.pdf');
+    let resumeText =
+      typeof body?.text === 'string' && body.text.trim() ? body.text : null;
+    let contentType: string;
+    if (!resumeText && isPdfName) {
+      contentType = 'application/pdf';
+      try {
+        resumeText = (await this.extraction.extract(body.contentBase64, 'application/pdf')).text;
+      } catch (cause) {
+        if (cause instanceof ApiException && cause.getStatus() === 502) {
+          throw new ApiException(
+            422,
+            'TEXT_REQUIRED',
+            'could not extract text from this PDF — it may be corrupt or a scanned image. Paste the plain text instead.',
+          );
+        }
+        throw cause;
+      }
+    } else if (!resumeText) {
+      if (!looksLikePlainText(buffer)) {
+        throw new ApiException(
+          422,
+          'TEXT_REQUIRED',
+          'unsupported file type — upload a .txt or .pdf resume, or paste the plain text',
+        );
+      }
+      contentType = 'text/plain';
+      resumeText = buffer.toString('utf8');
+    } else if (isPdfName) {
+      contentType = 'application/pdf';
+    } else {
+      contentType = 'text/plain';
+    }
     if (!resumeText || resumeText.trim().length < 20) {
       throw new ApiException(
         422,
         'TEXT_REQUIRED',
-        'could not extract resume text — paste the plain text (PDF parsing lands in a later drop)',
+        'could not extract resume text — paste the plain text if the file has nothing selectable',
       );
     }
 
     const upload = await this.storage.uploadResume(
       `resumes/${accountId}`,
       buffer,
-      'text/plain; charset=utf-8',
+      `${contentType}; charset=utf-8`,
     );
     const previous = await this.resumes.findByAccountId(accountId);
 
@@ -76,7 +118,7 @@ export class ResumeService {
       accountId,
       fileKey: upload.objectName,
       fileName,
-      contentType: 'text/plain',
+      contentType,
     });
 
     // Replace semantics: the old object must not outlive its row.

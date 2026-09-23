@@ -100,6 +100,26 @@ describe('ResumePage', () => {
     expect(screen.getByText(/backend engineer with 6 years/i)).toBeInTheDocument();
   });
 
+  it('uploads a PDF file directly — no paste needed (Phase 12b)', async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchResume).mockRejectedValue(new Error('network'));
+    vi.mocked(uploadResume).mockResolvedValue({ ...parsedResume, fileName: 'priya.pdf' });
+    render(<ResumePage />);
+
+    const input = await screen.findByTestId('resume-file');
+    const pdf = new File(['%PDF-fake-bytes'], 'priya.pdf', { type: 'application/pdf' });
+    await user.upload(input, pdf);
+
+    await waitFor(() =>
+      expect(uploadResume).toHaveBeenCalledWith(
+        expect.objectContaining({ fileName: 'priya.pdf' }),
+      ),
+    );
+    const sent = vi.mocked(uploadResume).mock.calls[0]?.[0] as { contentBase64: string };
+    expect(sent.contentBase64.length).toBeGreaterThan(0);
+    expect(await screen.findByText(/PDF uploaded/i)).toBeInTheDocument();
+  });
+
   it('runs a JD match and flags honest rewrites', async () => {
     const user = userEvent.setup();
     vi.mocked(fetchResume).mockResolvedValue(parsedResume);

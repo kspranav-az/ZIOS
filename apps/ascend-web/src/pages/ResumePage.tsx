@@ -39,14 +39,43 @@ export function ResumePage() {
       });
   }, []);
 
+  const fileToBase64 = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string;
+        resolve(result.slice(result.indexOf(',') + 1));
+      };
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
+
   const handleFile = async (file: File) => {
     setError(null);
     setNotice(null);
+    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    if (isPdf) {
+      // Binary upload: the API forwards the bytes to the orchestrator's
+      // extraction port (pypdf) and parses the returned text.
+      setUploading(true);
+      try {
+        const contentBase64 = await fileToBase64(file);
+        const uploaded = await uploadResume({ fileName: file.name, contentBase64 });
+        setResume(uploaded);
+        setMatch(null);
+        setResumeText('');
+        setFileName(file.name);
+        setNotice('PDF uploaded — text extracted, ATS check complete.');
+      } catch (err) {
+        setError(err instanceof ApiErrorResponse ? err.message : 'PDF upload failed. Please try again.');
+      } finally {
+        setUploading(false);
+      }
+      return;
+    }
     const text = await file.text().catch(() => '');
     if (!text.trim() || text.includes('')) {
-      setError(
-        'This looks like a binary file. In the closed beta please paste your resume as plain text below — PDF parsing lands in a later drop.',
-      );
+      setError('This file type is not supported yet — upload a .txt or .pdf resume, or paste the plain text below.');
       return;
     }
     setResumeText(text);
@@ -140,7 +169,7 @@ export function ResumePage() {
           <input
             ref={fileInput}
             type="file"
-            accept=".txt,.md,text/plain"
+            accept=".txt,.md,.pdf,text/plain,application/pdf"
             className="hidden"
             data-testid="resume-file"
             onChange={(e) => {
@@ -151,7 +180,7 @@ export function ResumePage() {
           />
           <div className="mt-3 flex flex-wrap gap-3">
             <Button variant="outline" onClick={() => fileInput.current?.click()}>
-              Choose a text file
+              Choose a .txt or .pdf file
             </Button>
             {resume && (
               <Button variant="ghost" onClick={() => void handleErase()}>
