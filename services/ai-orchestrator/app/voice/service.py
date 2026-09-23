@@ -52,6 +52,7 @@ class VoiceSessionService:
         conductor: ConductorClient,
         language: str = "en",
         mode: str = "voice",
+        practice: bool = False,
     ) -> None:
         self.state = VoiceSessionState(session_id=session_id, room_name=room_name)
         self.recovery_token = recovery_token
@@ -62,6 +63,9 @@ class VoiceSessionService:
         # Interview mode reported by the API ("voice" | "video"); video-mode
         # sessions additionally run a LiveKit track capture (Phase 14).
         self.mode = mode
+        # Live practice sessions (Phase 12e): practice conductor client,
+        # no company-only callbacks (integrity/analysis notification).
+        self.practice = practice
         self._shutting_down = False
 
     async def _classify_intent(self, turn_index: int, transcript: str) -> TurnIntent:
