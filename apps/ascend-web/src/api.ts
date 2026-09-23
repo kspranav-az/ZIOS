@@ -16,6 +16,7 @@ import type {
   PracticeCreateResponse,
   PracticeFromJdBody,
   PracticeLibraryPack,
+  PracticeLiveTokenResponse,
   PracticePreflightResponse,
   PracticeReport,
   PracticeSessionDetailResponse,
@@ -200,6 +201,34 @@ export function submitPracticeAudio(
     'POST',
     `/cand/practice/${sessionId}/turn-audio`,
     body,
+    true,
+    recoveryToken ? { 'x-recovery-token': recoveryToken } : undefined,
+  );
+}
+
+/** Live practice (Phase 12e): LiveKit room token + orchestrator WS. */
+export function getPracticeLiveToken(
+  sessionId: string,
+  recoveryToken: string,
+): Promise<PracticeLiveTokenResponse> {
+  return request(
+    'POST',
+    `/cand/practice/${sessionId}/live/token`,
+    {},
+    true,
+    recoveryToken ? { 'x-recovery-token': recoveryToken } : undefined,
+  );
+}
+
+/** Abandon a live practice session (candidate left the room). */
+export function abandonPractice(
+  sessionId: string,
+  recoveryToken: string,
+): Promise<{ session: unknown }> {
+  return request(
+    'POST',
+    `/cand/practice/${sessionId}/abandon`,
+    {},
     true,
     recoveryToken ? { 'x-recovery-token': recoveryToken } : undefined,
   );

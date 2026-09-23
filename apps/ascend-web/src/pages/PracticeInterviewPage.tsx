@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Button, Card, Icon } from '@zios/ui';
 import type { PracticeMode, SessionTurnResponse } from '@zios/shared-types';
 import {
@@ -50,6 +50,11 @@ function blobToBase64(blob: Blob): Promise<string> {
 export function PracticeInterviewPage() {
   const { sessionId = '' } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  // Live sessions that already went through the room phase continue here in
+  // text (`?room=done`); without the flag we route fresh live sessions to the
+  // LiveKit room instead.
+  const roomPhaseDone = searchParams.has('room');
   const [turn, setTurn] = useState<SessionTurnResponse | null>(null);
   const [answer, setAnswer] = useState('');
   const [history, setHistory] = useState<HistoryItem[]>([]);
@@ -79,6 +84,13 @@ export function PracticeInterviewPage() {
         navigate(`/practice/${sessionId}/report`, { replace: true });
         return;
       }
+      // Live-mode sessions run in the LiveKit room (Phase 12e); preflight
+      // above already performed the charge + live transition. Sessions that
+      // finished the room phase continue here in text.
+      if (detail.session.mode === 'live' && !roomPhaseDone) {
+        navigate(`/practice/${sessionId}/live`, { replace: true });
+        return;
+      }
       setTurn(preflight.turn);
     } catch (err) {
       setError(
@@ -87,7 +99,7 @@ export function PracticeInterviewPage() {
           : 'Could not resume your mock. Please start a new one.',
       );
     }
-  }, [sessionId, recoveryToken, navigate]);
+  }, [sessionId, recoveryToken, navigate, roomPhaseDone]);
 
   useEffect(() => {
     if (!recoveryToken) {
@@ -121,7 +133,9 @@ export function PracticeInterviewPage() {
       }
     } catch (err) {
       setError(
-        err instanceof ApiErrorResponse ? err.message : 'Could not submit your answer. Please try again.',
+        err instanceof ApiErrorResponse
+          ? err.message
+          : 'Could not submit your answer. Please try again.',
       );
     } finally {
       setLoading(false);

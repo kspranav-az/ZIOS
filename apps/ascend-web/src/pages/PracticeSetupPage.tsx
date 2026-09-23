@@ -75,7 +75,7 @@ export function PracticeSetupPage() {
     <div className="mx-auto w-full max-w-3xl">
       <h1 className="text-headline-sm text-on-surface">Practice mock interview</h1>
       <p className="mt-1 text-body-md text-on-surface-variant">
-        Pick a starter pack. Text mock 1 credit · voice mock 2 credits.
+        Pick a starter pack. Text mock 1 credit · voice mock 2 credits · live room 3 credits.
       </p>
 
       {error && (
@@ -135,7 +135,11 @@ export function PracticeSetupPage() {
         />
         <div className="mt-3 flex items-center justify-between">
           <p className="text-body-sm text-on-surface-variant">
-            {mode === 'voice' ? 'Voice mode · 2 credits' : 'Text mode · 1 credit'}
+            {mode === 'voice'
+              ? 'Voice mode · 2 credits'
+              : mode === 'live'
+                ? 'Live room · 3 credits'
+                : 'Text mode · 1 credit'}
           </p>
           <Button
             variant="outline"
@@ -176,6 +180,20 @@ export function PracticeSetupPage() {
             <span className="block font-bold text-on-surface">Voice</span>
             <span className="block text-body-sm text-on-surface-variant">
               Record your answer · 2 credits
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode('live')}
+            className={`rounded-xl border px-4 py-3 text-left transition-colors ${
+              mode === 'live'
+                ? 'border-primary bg-primary-container/30'
+                : 'border-outline-variant bg-surface-container-low hover:bg-surface-container'
+            }`}
+          >
+            <span className="block font-bold text-on-surface">Live room</span>
+            <span className="block text-body-sm text-on-surface-variant">
+              Real video interview with the AI · 3 credits
             </span>
           </button>
         </div>

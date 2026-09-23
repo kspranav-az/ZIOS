@@ -35,6 +35,9 @@ importers:
       '@fontsource/plus-jakarta-sans':
         specifier: ^5.2.5
         version: 5.2.8
+      '@zios/interview-room':
+        specifier: workspace:*
+        version: link:../../packages/interview-room
       '@zios/shared-types':
         specifier: workspace:*
         version: link:../../packages/shared-types

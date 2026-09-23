@@ -27,7 +27,9 @@ COPY packages/interview-room packages/interview-room
 COPY apps/ascend-web apps/ascend-web
 
 ARG VITE_API_URL=http://localhost:3000
+ARG VITE_ORCHESTRATOR_URL=ws://localhost:8000
 ENV VITE_API_URL=$VITE_API_URL
+ENV VITE_ORCHESTRATOR_URL=$VITE_ORCHESTRATOR_URL
 
 RUN pnpm --filter @zios/shared-types build && pnpm --filter ascend-web build
 
