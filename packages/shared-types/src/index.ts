@@ -312,6 +312,33 @@ export interface CandidateReadinessResponse {
   sessionsUsed: number;
 }
 
+/* ---- Candidate interview history (Phase 12e, Step 3) ---- */
+
+/**
+ * Company interview row on the candidate's history — candidate-safe fields
+ * only. Linked from the employer-side candidate row by exact email match.
+ */
+export interface CandidateCompanyHistoryItem {
+  sessionId: string;
+  orgName: string;
+  roleTitle: string | null;
+  mode: string;
+  status: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  /**
+   * Always false for now: employer-side evidence-linked reports default to
+   * not-shared. Candidate-side report access is a separate product decision.
+   */
+  reportAvailable: boolean;
+}
+
+export interface CandidateHistoryResponse {
+  /** Practice progress payload — same shape as GET /cand/practice/progress. */
+  practice: CandidateProgressResponse;
+  company: CandidateCompanyHistoryItem[];
+}
+
 /* ---- Ascend JD + resume intelligence (Phase 12, D10) ---- */
 
 export interface PracticeFromJdBody {

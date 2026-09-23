@@ -24,6 +24,7 @@ import { AsyncVideoInterviewsModule } from '@/modules/async-video-interviews';
 import { IntegrationApiModule } from '@/modules/integration-api';
 import { WebhooksModule } from '@/modules/webhooks';
 import { ResumeModule } from '@/modules/resume';
+import { HistoryModule } from '@/modules/history/history.module';
 
 @Module({
   imports: [
@@ -65,6 +66,7 @@ import { ResumeModule } from '@/modules/resume';
     CandidateAccountsModule,
     PracticeModule,
     ResumeModule,
+    HistoryModule,
   ],
 })
 export class AppModule {}
