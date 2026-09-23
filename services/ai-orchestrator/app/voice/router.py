@@ -17,9 +17,9 @@ from app.practice import PracticeConductorClient
 from app.storage import StorageClient
 from app.video.capture import VideoCaptureSession, capture_enabled
 from app.voice.mock_stt import MockSttAdapter
-from app.voice.mock_tts import MockTtsAdapter
 from app.voice.models import TurnTelemetry
 from app.voice.service import VoiceSessionService
+from app.voice.tts_factory import build_tts_adapter
 
 router = APIRouter(prefix="/voice", tags=["voice"])
 logger = structlog.get_logger()
@@ -30,6 +30,9 @@ LIVEKIT_API_SECRET = os.environ.get("LIVEKIT_API_SECRET", "secret")
 
 _orchestrator_tokens: dict[str, str] = {}
 _sessions: dict[str, VoiceSessionService] = {}
+# TTS adapter is process-wide and selected at boot: a bad TTS_ADAPTER value
+# must fail loudly before any request, not mid-interview.
+_tts_adapter = build_tts_adapter()
 
 
 def _room_name(session_id: str) -> str:
@@ -83,7 +86,7 @@ async def issue_voice_token(session_id: str, body: dict[str, Any]) -> dict[str, 
             room_name=room_name,
             recovery_token=recovery_token,
             stt=MockSttAdapter(),
-            tts=MockTtsAdapter(),
+            tts=_tts_adapter,
             conductor=PracticeConductorClient() if practice else ConductorClient(),
             mode=mode,
             practice=practice,
