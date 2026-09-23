@@ -20,6 +20,8 @@ import type {
   PracticePreflightResponse,
   PracticeReportDetailResponse,
   PracticeSessionDetailResponse,
+  PracticeTurnAudioBody,
+  PracticeTurnAudioResponse,
   PracticeTurnBody,
   PracticeTurnResponse,
 } from '@zios/shared-types';
@@ -32,6 +34,7 @@ import {
 import { ResumeService } from '@/modules/resume';
 import { PRACTICE_CONSENT_TEXT, PRACTICE_CONSENT_TEXT_VERSION } from './consent-text';
 import { PRACTICE_LIBRARY_PACKS } from './library';
+import { PracticeAudioService } from './practice-audio.service';
 import { PracticeEvaluationService } from './practice-evaluation.service';
 import { PracticeService } from './practice.service';
 
@@ -48,6 +51,7 @@ export class PracticeController {
     private readonly practice: PracticeService,
     private readonly evaluation: PracticeEvaluationService,
     private readonly resumes: ResumeService,
+    private readonly audio: PracticeAudioService,
   ) {}
 
   @Get('library')
@@ -123,6 +127,22 @@ export class PracticeController {
     @Headers('x-recovery-token') recoveryToken: string,
   ): Promise<PracticePreflightResponse> {
     return this.practice.preflight(auth.account.id, id, recoveryToken ?? '');
+  }
+
+  /**
+   * Voice-practice audio turn (Phase 12b): store the recording, transcribe it
+   * via the orchestrator, return the transcript. The client submits the
+   * transcript through POST :id/turn (optionally with the recordingRef).
+   */
+  @Post(':id/turn-audio')
+  @HttpCode(200)
+  async turnAudio(
+    @CurrentCandidate() auth: CandidateAuthContext,
+    @Param('id') id: string,
+    @Headers('x-recovery-token') recoveryToken: string,
+    @Body() body: PracticeTurnAudioBody,
+  ): Promise<PracticeTurnAudioResponse> {
+    return this.audio.transcribeTurn(auth.account.id, id, recoveryToken ?? '', body);
   }
 
   @Post(':id/turn')

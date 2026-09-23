@@ -21,6 +21,8 @@ import type {
   PracticeSessionDetailResponse,
   PracticeTurnBody,
   PracticeTurnResponse,
+  PracticeTurnAudioBody,
+  PracticeTurnAudioResponse,
   ResumeJdMatchResponse,
   SessionTranscript,
 } from '@zios/shared-types';
@@ -182,6 +184,21 @@ export function submitPracticeTurn(
   return request(
     'POST',
     `/cand/practice/${sessionId}/turn`,
+    body,
+    true,
+    recoveryToken ? { 'x-recovery-token': recoveryToken } : undefined,
+  );
+}
+
+/** Voice practice (Phase 12b): store + transcribe an audio answer turn. */
+export function submitPracticeAudio(
+  sessionId: string,
+  recoveryToken: string,
+  body: PracticeTurnAudioBody,
+): Promise<PracticeTurnAudioResponse> {
+  return request(
+    'POST',
+    `/cand/practice/${sessionId}/turn-audio`,
     body,
     true,
     recoveryToken ? { 'x-recovery-token': recoveryToken } : undefined,

@@ -1,13 +1,14 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Button, Card, Icon } from '@zios/ui';
-import type { SessionTurnResponse } from '@zios/shared-types';
+import type { PracticeMode, SessionTurnResponse } from '@zios/shared-types';
 import {
   ApiErrorResponse,
   clearPracticeRecovery,
   fetchPracticeSession,
   loadPracticeRecovery,
   preflightPractice,
+  submitPracticeAudio,
   submitPracticeTurn,
 } from '../api';
 import { PageShell } from '../components/PageShell';
@@ -15,6 +16,30 @@ import { PageShell } from '../components/PageShell';
 interface HistoryItem {
   prompt: string;
   answer: string | null;
+}
+
+function pickRecordingMimeType(): string {
+  if (typeof MediaRecorder === 'undefined') return 'audio/webm';
+  for (const candidate of ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4']) {
+    try {
+      if (MediaRecorder.isTypeSupported(candidate)) return candidate;
+    } catch {
+      // isTypeSupported unsupported — fall through to the default.
+    }
+  }
+  return 'audio/webm';
+}
+
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      resolve(result.slice(result.indexOf(',') + 1));
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
 }
 
 /**
@@ -29,6 +54,12 @@ export function PracticeInterviewPage() {
   const [answer, setAnswer] = useState('');
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [totalQuestions, setTotalQuestions] = useState(0);
+  const [sessionMode, setSessionMode] = useState<PracticeMode>('text');
+  const [recordingRef, setRecordingRef] = useState<string | null>(null);
+  const [recorderState, setRecorderState] = useState<'idle' | 'recording' | 'transcribing'>('idle');
+  const [recorderError, setRecorderError] = useState<string | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
   const [loading, setLoading] = useState(false);
   const [initializing, setInitializing] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -43,6 +74,7 @@ export function PracticeInterviewPage() {
         fetchPracticeSession(sessionId),
       ]);
       setTotalQuestions(detail.questions.length);
+      setSessionMode(detail.session.mode);
       if (preflight.session.status === 'completed') {
         navigate(`/practice/${sessionId}/report`, { replace: true });
         return;
@@ -72,11 +104,15 @@ export function PracticeInterviewPage() {
     setLoading(true);
     setError(null);
     try {
-      const response = await submitPracticeTurn(sessionId, recoveryToken, { answer: text });
+      const response = await submitPracticeTurn(sessionId, recoveryToken, {
+        answer: text,
+        ...(recordingRef ? { recordingRef } : {}),
+      });
       if (turn) {
         setHistory((prev) => [...prev, { prompt: turn.text, answer: text }]);
       }
       setAnswer('');
+      setRecordingRef(null);
       if (response.turn.type === 'wrapup') {
         clearPracticeRecovery(sessionId);
         navigate(`/practice/${sessionId}/report`, { replace: true });
@@ -89,6 +125,65 @@ export function PracticeInterviewPage() {
       );
     } finally {
       setLoading(false);
+    }
+  };
+
+  /* ---- voice recorder (Phase 12b: record → transcribe → submit) ---- */
+
+  const startRecording = async () => {
+    setRecorderError(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = pickRecordingMimeType();
+      const recorder = new MediaRecorder(stream, { mimeType });
+      chunksRef.current = [];
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) chunksRef.current.push(event.data);
+      };
+      recorder.onerror = () => {
+        setRecorderError('Recording failed. You can type your answer instead.');
+        setRecorderState('idle');
+        stream.getTracks().forEach((t) => t.stop());
+      };
+      mediaRecorderRef.current = recorder;
+      recorder.start();
+      setRecorderState('recording');
+    } catch {
+      setRecorderError('Microphone access was denied. Allow the mic, or type your answer instead.');
+    }
+  };
+
+  const stopRecording = async () => {
+    const recorder = mediaRecorderRef.current;
+    if (!recorder || recorder.state === 'inactive') return;
+    recorder.onstop = () => {
+      recorder.stream.getTracks().forEach((t) => t.stop());
+      const blob = new Blob(chunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+      void transcribeRecording(blob);
+    };
+    recorder.stop();
+  };
+
+  const transcribeRecording = async (blob: Blob) => {
+    if (!recoveryToken) return;
+    setRecorderState('transcribing');
+    setRecorderError(null);
+    try {
+      const audioBase64 = await blobToBase64(blob);
+      const result = await submitPracticeAudio(sessionId, recoveryToken, {
+        audioBase64,
+        contentType: blob.type || 'audio/webm',
+      });
+      setAnswer(result.transcript);
+      setRecordingRef(result.objectName);
+      setRecorderState('idle');
+    } catch (err) {
+      setRecorderState('idle');
+      setRecorderError(
+        err instanceof ApiErrorResponse
+          ? err.message
+          : 'Could not transcribe your recording. You can type your answer instead.',
+      );
     }
   };
 
@@ -157,6 +252,46 @@ export function PracticeInterviewPage() {
               </div>
             </div>
 
+            {sessionMode === 'voice' && (
+              <div className="mb-4 rounded-xl border border-outline-variant bg-surface-container-low p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-body-md font-bold text-on-surface">Answer by voice</p>
+                    <p className="text-body-sm text-on-surface-variant">
+                      {recorderState === 'recording'
+                        ? 'Recording… speak your answer, then stop.'
+                        : recorderState === 'transcribing'
+                          ? 'Transcribing your answer…'
+                          : 'Record your answer — we transcribe it and you can edit before submitting.'}
+                    </p>
+                  </div>
+                  {recorderState === 'idle' && (
+                    <Button variant="outline" icon="mic" onClick={() => void startRecording()}>
+                      Record
+                    </Button>
+                  )}
+                  {recorderState === 'recording' && (
+                    <Button variant="outline" icon="stop" onClick={() => void stopRecording()}>
+                      Stop
+                    </Button>
+                  )}
+                  {recorderState === 'transcribing' && (
+                    <Icon name="progress_activity" className="animate-spin text-2xl text-primary" />
+                  )}
+                </div>
+                {recorderError && (
+                  <p className="mt-3 rounded-lg bg-error-container p-3 text-body-sm text-on-error-container">
+                    {recorderError}
+                  </p>
+                )}
+                {recordingRef && recorderState === 'idle' && (
+                  <p className="mt-3 text-body-sm text-on-surface-variant">
+                    Recording attached — review the transcript below, edit if needed, then submit.
+                  </p>
+                )}
+              </div>
+            )}
+
             <label htmlFor="practice-answer" className="sr-only">
               Your answer
             </label>
@@ -164,10 +299,14 @@ export function PracticeInterviewPage() {
               id="practice-answer"
               rows={6}
               className="w-full resize-y rounded-xl border border-outline-variant bg-white p-4 text-body-md text-on-surface outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/10"
-              placeholder="Type your answer here…"
+              placeholder={
+                sessionMode === 'voice'
+                  ? 'Your transcribed answer appears here — edit it if needed…'
+                  : 'Type your answer here…'
+              }
               value={answer}
               onChange={(e) => setAnswer(e.target.value)}
-              disabled={loading}
+              disabled={loading || recorderState === 'transcribing'}
             />
 
             {error && (

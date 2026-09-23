@@ -66,7 +66,7 @@ export function PracticeSetupPage() {
     setLoading(true);
     setError(null);
     try {
-      const { session, recoveryToken } = await createPracticeFromJd({ jdText, mode: 'text' });
+      const { session, recoveryToken } = await createPracticeFromJd({ jdText, mode });
       routeToConsent(session, recoveryToken);
     } catch (err) {
       setError(friendlyError(err));
@@ -80,7 +80,7 @@ export function PracticeSetupPage() {
       <div className="mx-auto w-full max-w-3xl">
         <h1 className="text-headline-sm text-on-surface">Practice mock interview</h1>
         <p className="mt-1 text-body-md text-on-surface-variant">
-          Pick a starter pack. A text mock costs 1 credit.
+          Pick a starter pack. Text mock 1 credit · voice mock 2 credits.
         </p>
 
         {error && (
@@ -139,7 +139,9 @@ export function PracticeSetupPage() {
             onChange={(e) => setJdText(e.target.value)}
           />
           <div className="mt-3 flex items-center justify-between">
-            <p className="text-body-sm text-on-surface-variant">Text mode · 1 credit</p>
+            <p className="text-body-sm text-on-surface-variant">
+              {mode === 'voice' ? 'Voice mode · 2 credits' : 'Text mode · 1 credit'}
+            </p>
             <Button
               variant="outline"
               onClick={() => void handleFromJd()}
@@ -167,15 +169,20 @@ export function PracticeSetupPage() {
               <span className="block font-bold text-on-surface">Text</span>
               <span className="block text-body-sm text-on-surface-variant">1 credit</span>
             </button>
-            <div
-              className="cursor-not-allowed rounded-xl border border-outline-variant/50 bg-surface-container-low px-4 py-3 opacity-60"
-              title="Voice mocks arrive in a later beta drop"
+            <button
+              type="button"
+              onClick={() => setMode('voice')}
+              className={`rounded-xl border px-4 py-3 text-left transition-colors ${
+                mode === 'voice'
+                  ? 'border-primary bg-primary-container/30'
+                  : 'border-outline-variant bg-surface-container-low hover:bg-surface-container'
+              }`}
             >
               <span className="block font-bold text-on-surface">Voice</span>
               <span className="block text-body-sm text-on-surface-variant">
-                Coming in a later beta drop
+                Record your answer · 2 credits
               </span>
-            </div>
+            </button>
           </div>
         </div>
 

@@ -12,6 +12,7 @@ vi.mock('../api', () => ({
   fetchPracticeSession: vi.fn(),
   loadPracticeRecovery: vi.fn(),
   preflightPractice: vi.fn(),
+  submitPracticeAudio: vi.fn(),
   submitPracticeTurn: vi.fn(),
 }));
 
@@ -20,6 +21,7 @@ import {
   fetchPracticeSession,
   loadPracticeRecovery,
   preflightPractice,
+  submitPracticeAudio,
   submitPracticeTurn,
 } from '../api';
 import { PracticeInterviewPage } from './PracticeInterviewPage';
@@ -36,6 +38,44 @@ const liveSession = {
   startedAt: new Date().toISOString(),
   completedAt: null,
 };
+
+const liveVoiceSession = { ...liveSession, mode: 'voice' as const };
+
+/** Minimal MediaRecorder double: captures start/stop and emits one chunk. */
+class FakeMediaRecorder {
+  static instances: FakeMediaRecorder[] = [];
+  state: 'inactive' | 'recording' = 'inactive';
+  mimeType = 'audio/webm';
+  stream = { getTracks: () => [{ stop: vi.fn() }] };
+  ondataavailable: ((event: { data: Blob }) => void) | null = null;
+  onstop: (() => void) | null = null;
+
+  constructor() {
+    FakeMediaRecorder.instances.push(this);
+  }
+
+  static isTypeSupported(): boolean {
+    return true;
+  }
+
+  start(): void {
+    this.state = 'recording';
+  }
+
+  stop(): void {
+    this.state = 'inactive';
+    this.ondataavailable?.({ data: new Blob(['fake-audio'], { type: 'audio/webm' }) });
+    this.onstop?.();
+  }
+}
+
+function stubMediaDevices(): void {
+  vi.stubGlobal('MediaRecorder', FakeMediaRecorder);
+  Object.defineProperty(navigator, 'mediaDevices', {
+    configurable: true,
+    value: { getUserMedia: vi.fn().mockResolvedValue({ getTracks: () => [] }) },
+  });
+}
 
 function renderInterview(recoveryToken: string | null) {
   vi.mocked(loadPracticeRecovery).mockReturnValue(recoveryToken);
@@ -105,5 +145,72 @@ describe('PracticeInterviewPage', () => {
   it('shows a recovery hint when the token is missing from this tab', async () => {
     renderInterview(null);
     expect(await screen.findByText(/mock not found/i)).toBeInTheDocument();
+  });
+
+  describe('voice mode (Phase 12b record → transcribe → submit)', () => {
+    beforeEach(() => {
+      stubMediaDevices();
+      FakeMediaRecorder.instances = [];
+      vi.mocked(fetchPracticeSession).mockResolvedValue({
+        session: liveVoiceSession,
+        transcript: [],
+        questions: [
+          { id: 'q1', prompt: 'Tell me about yourself', type: 'open_ended', rubricLines: [] },
+        ],
+      } as unknown as Awaited<ReturnType<typeof fetchPracticeSession>>);
+      vi.mocked(preflightPractice).mockResolvedValue({
+        session: liveVoiceSession,
+        turn: { type: 'question', text: 'Tell me about yourself', questionId: 'q1' },
+      });
+    });
+
+    it('records, transcribes into the editable box, and submits with the recording ref', async () => {
+      const user = userEvent.setup();
+      vi.mocked(submitPracticeAudio).mockResolvedValue({
+        transcript: 'I led the migration and cut failed transactions forty percent.',
+        objectName: 'practice-recordings/ps-1/abc/checksum.webm',
+      });
+      vi.mocked(submitPracticeTurn).mockResolvedValue({
+        session: liveVoiceSession,
+        turn: { type: 'question', text: 'Why this role?', questionId: 'q2' },
+      });
+      renderInterview('rec-1');
+
+      await user.click(await screen.findByRole('button', { name: /^record$/i }));
+      expect(FakeMediaRecorder.instances[0]?.state).toBe('recording');
+      await user.click(screen.getByRole('button', { name: /^stop$/i }));
+
+      // Transcript lands in the editable textarea.
+      const box = await screen.findByLabelText(/your answer/i);
+      await waitFor(() =>
+        expect(box).toHaveValue('I led the migration and cut failed transactions forty percent.'),
+      );
+      expect(screen.getByText(/recording attached/i)).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: /submit answer/i }));
+      await waitFor(() =>
+        expect(submitPracticeTurn).toHaveBeenCalledWith('ps-1', 'rec-1', {
+          answer: 'I led the migration and cut failed transactions forty percent.',
+          recordingRef: 'practice-recordings/ps-1/abc/checksum.webm',
+        }),
+      );
+    });
+
+    it('shows a friendly error when the mic is denied and falls back to typing', async () => {
+      const user = userEvent.setup();
+      Object.defineProperty(navigator, 'mediaDevices', {
+        configurable: true,
+        value: { getUserMedia: vi.fn().mockRejectedValue(new Error('denied')) },
+      });
+      renderInterview('rec-1');
+
+      await user.click(await screen.findByRole('button', { name: /^record$/i }));
+      expect(
+        await screen.findByText(/microphone access was denied/i),
+      ).toBeInTheDocument();
+      // Typing still works.
+      await user.type(screen.getByLabelText(/your answer/i), 'Typed fallback.');
+      expect(screen.getByLabelText(/your answer/i)).toHaveValue('Typed fallback.');
+    });
   });
 });
