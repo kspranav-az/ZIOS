@@ -2,6 +2,7 @@ import type {
   ApiError,
   CandidateAccount,
   CandidateAuthResponse,
+  CandidateHistoryResponse,
   CandidateMeResponse,
   CandidateProgressResponse,
   CandidateReadinessResponse,
@@ -125,6 +126,7 @@ export function patchMe(patch: {
 
 export type {
   CandidateAccount,
+  CandidateHistoryResponse,
   CandidateProgressResponse,
   CandidateReadinessResponse,
   CandidateWalletResponse,
@@ -246,6 +248,15 @@ export function fetchWallet(): Promise<CandidateWalletResponse> {
 
 export function fetchProgress(): Promise<CandidateProgressResponse> {
   return request('GET', '/cand/practice/progress', undefined, true);
+}
+
+/**
+ * Full interview history (Phase 12e): practice progress + company interviews
+ * linked by exact email match. Supersedes fetchProgress for the Progress
+ * page; the old endpoint stays for compatibility.
+ */
+export function fetchHistory(): Promise<CandidateHistoryResponse> {
+  return request('GET', '/cand/me/history', undefined, true);
 }
 
 export function fetchReadiness(): Promise<CandidateReadinessResponse> {
