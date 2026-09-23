@@ -44,3 +44,6 @@ playwright-report/
 .data/
 test_video
 docker-compose.override.yml
+
+# Piper TTS voice models (downloaded, sha256-pinned in the Dockerfile; never commit)
+services/ai-orchestrator/models/
