@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Card, Icon } from '@zios/ui';
+import { Button, Card } from '@zios/ui';
 import {
-  Room,
-  RoomEvent,
-  Track,
-  type LocalVideoTrack,
-  type RemoteTrack,
-  type RemoteTrackPublication,
-} from 'livekit-client';
+  ConnectionBadge,
+  InterviewerBubble,
+  connectRoomSession,
+  openOrchestratorSocket,
+  type ConnectionQuality,
+  type RoomSession,
+} from '@zios/interview-room';
 import type { IntegrityEventBody } from '@zios/shared-types';
 import { ApiErrorResponse, fallbackToText, getVoiceToken, recordIntegrityEvents } from '../api';
 import { loadRecovery, loadStoredSessionId, useInterview } from '../InterviewContext';
@@ -39,16 +39,6 @@ function captureSnapshot(video: HTMLVideoElement): string | null {
   }
 }
 
-type TurnEvent =
-  | { type: 'stt_partial'; text: string }
-  | { type: 'stt_final'; text: string }
-  | { type: 'ai_text'; text: string }
-  | { type: 'tts_audio'; audio_base64: string; text: string }
-  | { type: 'backchannel'; text: string }
-  | { type: 'telemetry'; telemetry: Record<string, unknown> }
-  | { type: 'barge_in'; turn_index: number }
-  | { type: 'error'; code: string; message: string };
-
 export function VideoInterviewPage() {
   const navigate = useNavigate();
   const { session: contextSession, recoveryToken: contextRecoveryToken } = useInterview();
@@ -60,16 +50,13 @@ export function VideoInterviewPage() {
   const [aiText, setAiText] = useState('');
   const [isListening, setIsListening] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
-  const [connectionQuality, setConnectionQuality] = useState<'good' | 'poor' | 'unknown'>(
-    'unknown',
-  );
+  const [connectionQuality, setConnectionQuality] = useState<ConnectionQuality>('unknown');
   const [fallbackLoading, setFallbackLoading] = useState(false);
   const [flagCount, setFlagCount] = useState(0);
 
-  const roomRef = useRef<Room | null>(null);
+  const sessionRef = useRef<RoomSession | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
-  const localVideoRef = useRef<LocalVideoTrack | null>(null);
   const videoElementRef = useRef<HTMLVideoElement | null>(null);
   const snapshotTimerRef = useRef<number | null>(null);
 
@@ -150,60 +137,6 @@ export function VideoInterviewPage() {
     };
   }, [sendIntegrityEvents]);
 
-  const playAudio = useCallback((audioBase64: string) => {
-    try {
-      const bytes = Uint8Array.from(atob(audioBase64), (c) => c.charCodeAt(0));
-      const ctx = audioContextRef.current ?? new AudioContext();
-      audioContextRef.current = ctx;
-      const buffer = ctx.createBuffer(1, bytes.length / 2, 24000);
-      const channel = buffer.getChannelData(0);
-      const view = new DataView(bytes.buffer);
-      for (let i = 0; i < channel.length; i += 1) {
-        channel[i] = view.getInt16(i * 2, true) / 32768;
-      }
-      const source = ctx.createBufferSource();
-      source.buffer = buffer;
-      source.connect(ctx.destination);
-      source.start();
-    } catch {
-      // Synthetic audio playback is best-effort in mock mode.
-    }
-  }, []);
-
-  const handleOrchestratorMessage = useCallback(
-    (event: MessageEvent) => {
-      const payload = JSON.parse(event.data as string) as TurnEvent;
-      switch (payload.type) {
-        case 'stt_partial':
-          setCaption(payload.text);
-          break;
-        case 'stt_final':
-          setCaption(payload.text);
-          break;
-        case 'ai_text':
-          setAiText(payload.text);
-          break;
-        case 'tts_audio':
-          playAudio(payload.audio_base64);
-          break;
-        case 'backchannel':
-          setAiText((prev) => (prev ? `${prev} (${payload.text})` : payload.text));
-          break;
-        case 'telemetry':
-          break;
-        case 'barge_in':
-          setAiText('');
-          break;
-        case 'error':
-          setError(`${payload.code}: ${payload.message}`);
-          break;
-        default:
-          break;
-      }
-    },
-    [playAudio],
-  );
-
   useEffect(() => {
     if (!sessionId || !recoveryToken) return;
 
@@ -212,57 +145,42 @@ export function VideoInterviewPage() {
     let cancelled = false;
 
     async function startVideo() {
-      if (!token) return;
       try {
         const tokenResponse = await getVoiceToken(sid, token);
         if (cancelled) return;
 
         const { livekit, orchestrator } = tokenResponse;
-        const room = new Room({
-          adaptiveStream: true,
-          dynacast: true,
-          publishDefaults: { simulcast: false },
+        const roomSession = await connectRoomSession({
+          url: livekit.url,
+          token: livekit.token,
+          videoElement: videoElementRef.current,
+          onConnectionQuality: (quality) => setConnectionQuality(quality),
         });
-        roomRef.current = room;
-
-        room.on(
-          RoomEvent.TrackSubscribed,
-          (_track: RemoteTrack, publication: RemoteTrackPublication) => {
-            if (publication.kind === Track.Kind.Audio) {
-              publication.audioTrack?.attach();
-            }
-          },
-        );
-        room.on(RoomEvent.ConnectionQualityChanged, () => {
-          setConnectionQuality('good');
-        });
-
-        await room.connect(livekit.url, livekit.token);
-        await room.localParticipant.enableCameraAndMicrophone();
-        const localVideo = room.localParticipant.getTrackPublication(Track.Source.Camera)
-          ?.videoTrack as LocalVideoTrack | undefined;
-        localVideoRef.current = localVideo ?? null;
-        if (localVideo && videoElementRef.current) {
-          localVideo.attach(videoElementRef.current);
+        if (cancelled) {
+          void roomSession.disconnect();
+          return;
         }
+        sessionRef.current = roomSession;
 
-        snapshotTimerRef.current = window.setInterval(captureAndSendSnapshot, SNAPSHOT_INTERVAL_MS);
+        snapshotTimerRef.current = window.setInterval(
+          captureAndSendSnapshot,
+          SNAPSHOT_INTERVAL_MS,
+        );
 
         const wsUrl = `${ORCHESTRATOR_BASE.replace(/^http/, 'ws')}${orchestrator.wsUrl}`;
-        const ws = new WebSocket(wsUrl);
-        wsRef.current = ws;
-        ws.onopen = () => {
-          setConnecting(false);
-          setIsListening(true);
-          ws.send(JSON.stringify({ type: 'start_turn' }));
-          ws.send(JSON.stringify({ type: 'audio_chunk', data: '00'.repeat(320) }));
-          ws.send(JSON.stringify({ type: 'end_turn' }));
-        };
-        ws.onmessage = handleOrchestratorMessage;
-        ws.onerror = () => setError('Video connection error. Please try again.');
-        ws.onclose = () => {
-          setIsListening(false);
-        };
+        wsRef.current = openOrchestratorSocket(wsUrl, {
+          audioContext: audioContextRef,
+          onCaption: setCaption,
+          onAiText: setAiText,
+          onError: setError,
+          onBargeIn: () => setAiText(''),
+          onOpen: () => {
+            setConnecting(false);
+            setIsListening(true);
+          },
+          onClose: () => setIsListening(false),
+          onTransportError: () => setError('Video connection error. Please try again.'),
+        });
       } catch (err) {
         setConnecting(false);
         setError(
@@ -279,15 +197,13 @@ export function VideoInterviewPage() {
       cancelled = true;
       if (snapshotTimerRef.current) window.clearInterval(snapshotTimerRef.current);
       wsRef.current?.close();
-      void roomRef.current?.disconnect();
+      void sessionRef.current?.disconnect();
       void audioContextRef.current?.close();
     };
-  }, [sessionId, recoveryToken, handleOrchestratorMessage, captureAndSendSnapshot]);
+  }, [sessionId, recoveryToken, captureAndSendSnapshot]);
 
   const handleToggleMute = () => {
-    const audioTrack = roomRef.current?.localParticipant.getTrackPublication(
-      Track.Source.Microphone,
-    )?.audioTrack;
+    const audioTrack = sessionRef.current?.localAudioTrack;
     if (!audioTrack) return;
     if (audioTrack.isMuted) {
       void audioTrack.unmute();
@@ -299,7 +215,7 @@ export function VideoInterviewPage() {
   };
 
   const handleToggleCamera = () => {
-    const videoTrack = localVideoRef.current;
+    const videoTrack = sessionRef.current?.localVideoTrack;
     if (!videoTrack) return;
     if (videoTrack.isMuted) {
       void videoTrack.unmute();
@@ -347,33 +263,12 @@ export function VideoInterviewPage() {
                 {flagCount} integrity flag{flagCount === 1 ? '' : 's'}
               </span>
             )}
-            <div className="flex items-center gap-2">
-              <span
-                className={`inline-block h-2 w-2 rounded-full ${
-                  connectionQuality === 'good' ? 'bg-success' : 'bg-warning'
-                }`}
-              />
-              <span className="text-label-bold text-on-surface-variant">
-                {connectionQuality === 'good' ? 'Connected' : 'Connecting…'}
-              </span>
-            </div>
+            <ConnectionBadge quality={connectionQuality} />
           </div>
         </div>
 
         <Card padding="lg" radius="2xl">
-          {aiText && (
-            <div className="mb-6 flex items-start gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-container">
-                <Icon name="smart_toy" className="text-xl text-on-primary" />
-              </div>
-              <div>
-                <p className="text-sm font-bold uppercase tracking-wide text-on-surface-variant">
-                  Interviewer
-                </p>
-                <p className="mt-1 text-body-lg text-on-surface">{aiText}</p>
-              </div>
-            </div>
-          )}
+          <InterviewerBubble text={aiText} />
 
           <div className="relative overflow-hidden rounded-xl bg-surface-container-low">
             <video

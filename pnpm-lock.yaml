@@ -114,6 +114,9 @@ importers:
       '@fontsource/plus-jakarta-sans':
         specifier: ^5.2.5
         version: 5.2.8
+      '@zios/interview-room':
+        specifier: workspace:*
+        version: link:../../packages/interview-room
       '@zios/shared-types':
         specifier: workspace:*
         version: link:../../packages/shared-types
@@ -315,6 +318,55 @@ importers:
       typescript-eslint:
         specifier: ^8.27.0
         version: 8.64.0(eslint@9.39.5(jiti@2.7.0))(typescript@5.9.3)
+
+  packages/interview-room:
+    dependencies:
+      '@zios/ui':
+        specifier: workspace:*
+        version: link:../ui
+    devDependencies:
+      '@testing-library/dom':
+        specifier: ^10.4.0
+        version: 10.4.1
+      '@testing-library/jest-dom':
+        specifier: ^6.8.0
+        version: 6.9.1
+      '@testing-library/react':
+        specifier: ^16.3.0
+        version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@types/react':
+        specifier: ^19.2.0
+        version: 19.2.17
+      '@types/react-dom':
+        specifier: ^19.2.0
+        version: 19.2.3(@types/react@19.2.17)
+      '@zios/config':
+        specifier: workspace:*
+        version: link:../config
+      eslint:
+        specifier: ^9.23.0
+        version: 9.39.5(jiti@2.7.0)
+      globals:
+        specifier: ^16.0.0
+        version: 16.5.0
+      jsdom:
+        specifier: ^26.1.0
+        version: 26.1.0
+      livekit-client:
+        specifier: ^2.20.1
+        version: 2.20.1(@types/dom-mediacapture-record@1.0.22)
+      react:
+        specifier: ^19.2.0
+        version: 19.2.7
+      react-dom:
+        specifier: ^19.2.0
+        version: 19.2.7(react@19.2.7)
+      typescript:
+        specifier: ^5.8.2
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.7(@types/node@22.20.1)(jiti@2.7.0)(jsdom@26.1.0)(lightningcss@1.32.0)(terser@5.49.0)(yaml@2.9.0)
 
   packages/shared-types:
     devDependencies:
