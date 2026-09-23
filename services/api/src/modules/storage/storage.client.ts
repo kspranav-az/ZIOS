@@ -1,4 +1,4 @@
-import { createHash, createCipheriv, randomBytes } from 'node:crypto';
+import { createHash, createCipheriv, randomBytes, randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { Client } from 'minio';
 
@@ -88,5 +88,35 @@ export class StorageClient {
     });
     const url = await this.presignClient.presignedGetObject(this.bucket, objectName, 24 * 60 * 60);
     return { uri: url, checksum };
+  }
+
+  /** Resume storage (Phase 12, D10): plain object under resumes/{accountId}/. */
+  async uploadResume(
+    path: string,
+    data: Buffer,
+    contentType: string,
+  ): Promise<{ objectName: string; uri: string }> {
+    await this.ensureBucket();
+    const objectName = `${path}/${randomUUID()}.txt`;
+    await this.client.putObject(this.bucket, objectName, data, data.length, {
+      'Content-Type': contentType,
+    });
+    const url = await this.presignClient.presignedGetObject(this.bucket, objectName, 24 * 60 * 60);
+    return { objectName, uri: url };
+  }
+
+  /** Remove an object by its key (resume erasure, D10). No-op when absent. */
+  async deleteObject(objectName: string): Promise<void> {
+    await this.client.removeObject(this.bucket, objectName);
+  }
+
+  /** Whether an object exists (erasure tests + replace-semantics checks). */
+  async objectExists(objectName: string): Promise<boolean> {
+    try {
+      await this.client.statObject(this.bucket, objectName);
+      return true;
+    } catch {
+      return false;
+    }
   }
 }

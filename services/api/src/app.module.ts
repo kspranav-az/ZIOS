@@ -23,6 +23,7 @@ import { AnalysisModule } from '@/modules/analysis';
 import { AsyncVideoInterviewsModule } from '@/modules/async-video-interviews';
 import { IntegrationApiModule } from '@/modules/integration-api';
 import { WebhooksModule } from '@/modules/webhooks';
+import { ResumeModule } from '@/modules/resume';
 
 @Module({
   imports: [
@@ -63,6 +64,7 @@ import { WebhooksModule } from '@/modules/webhooks';
     WebhooksModule,
     CandidateAccountsModule,
     PracticeModule,
+    ResumeModule,
   ],
 })
 export class AppModule {}

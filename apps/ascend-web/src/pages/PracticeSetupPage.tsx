@@ -1,22 +1,24 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Icon } from '@zios/ui';
+import { Button, Card, Icon } from '@zios/ui';
 import type { PracticeMode } from '@zios/shared-types';
 import {
   ApiErrorResponse,
   createPractice,
+  createPracticeFromJd,
   fetchPracticeLibrary,
   storePracticeRecovery,
   type PracticeLibraryResponse,
 } from '../api';
 import { PageShell } from '../components/PageShell';
 
-/** Pack picker + mode select → creates the session and routes to consent. */
+/** Pack picker or JD paste → creates the session and routes to consent. */
 export function PracticeSetupPage() {
   const navigate = useNavigate();
   const [library, setLibrary] = useState<PracticeLibraryResponse | null>(null);
   const [packId, setPackId] = useState<string | null>(null);
   const [mode, setMode] = useState<PracticeMode>('text');
+  const [jdText, setJdText] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -28,22 +30,46 @@ export function PracticeSetupPage() {
       );
   }, []);
 
+  const routeToConsent = (
+    session: { id: string },
+    recoveryToken: string,
+  ) => {
+    storePracticeRecovery(session.id, recoveryToken);
+    navigate(`/practice/${session.id}/consent`, { state: { session, consent: library?.consent } });
+  };
+
+  const friendlyError = (err: unknown): string => {
+    if (err instanceof ApiErrorResponse && err.statusCode === 429) {
+      return 'You have hit today’s practice limit (3 completed mocks per day). Come back tomorrow!';
+    }
+    if (err instanceof ApiErrorResponse && err.statusCode === 402) {
+      return 'You are out of practice credits. Credits are granted during the closed beta — contact support.';
+    }
+    return err instanceof Error ? err.message : 'Could not start the mock. Please try again.';
+  };
+
   const handleStart = async () => {
     if (!packId) return;
     setLoading(true);
     setError(null);
     try {
       const { session, recoveryToken } = await createPractice({ packId, mode });
-      storePracticeRecovery(session.id, recoveryToken);
-      navigate(`/practice/${session.id}/consent`, { state: { session, consent: library?.consent } });
+      routeToConsent(session, recoveryToken);
     } catch (err) {
-      if (err instanceof ApiErrorResponse && err.statusCode === 429) {
-        setError('You have hit today’s practice limit (3 completed mocks per day). Come back tomorrow!');
-      } else if (err instanceof ApiErrorResponse && err.statusCode === 402) {
-        setError('You are out of practice credits. Credits are granted during the closed beta — contact support.');
-      } else {
-        setError(err instanceof Error ? err.message : 'Could not start the mock. Please try again.');
-      }
+      setError(friendlyError(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleFromJd = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { session, recoveryToken } = await createPracticeFromJd({ jdText, mode: 'text' });
+      routeToConsent(session, recoveryToken);
+    } catch (err) {
+      setError(friendlyError(err));
     } finally {
       setLoading(false);
     }
@@ -94,6 +120,37 @@ export function PracticeSetupPage() {
             );
           })}
         </div>
+
+        <Card padding="lg" radius="2xl" className="mt-8">
+          <h2 className="text-title-md text-on-surface">Or target a real job description</h2>
+          <p className="mt-1 text-body-sm text-on-surface-variant">
+            Paste a JD and we will generate questions for it — if you have a resume on file, one
+            question will probe the biggest gap.
+          </p>
+          <label htmlFor="jd-paste" className="sr-only">
+            Job description
+          </label>
+          <textarea
+            id="jd-paste"
+            rows={6}
+            className="mt-3 w-full resize-y rounded-xl border border-outline-variant bg-white p-4 text-body-md text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
+            placeholder="Paste the full job description…"
+            value={jdText}
+            onChange={(e) => setJdText(e.target.value)}
+          />
+          <div className="mt-3 flex items-center justify-between">
+            <p className="text-body-sm text-on-surface-variant">Text mode · 1 credit</p>
+            <Button
+              variant="outline"
+              onClick={() => void handleFromJd()}
+              loading={loading}
+              disabled={jdText.trim().length < 40}
+              icon="auto_awesome"
+            >
+              Build my mock
+            </Button>
+          </div>
+        </Card>
 
         <div className="mt-6">
           <p className="text-label-bold uppercase tracking-wide text-on-surface-variant">Mode</p>

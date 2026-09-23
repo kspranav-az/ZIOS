@@ -13,6 +13,7 @@ vi.mock('../api', () => ({
     }
   },
   createPractice: vi.fn(),
+  createPracticeFromJd: vi.fn(),
   fetchPracticeLibrary: vi.fn(),
   storePracticeRecovery: vi.fn(),
 }));
@@ -84,6 +85,37 @@ describe('PracticeSetupPage', () => {
     );
     expect(storePracticeRecovery).toHaveBeenCalledWith('ps-1', 'rec-1');
     await waitFor(() => expect(router.state.location.pathname).toBe('/practice/ps-1/consent'));
+  });
+
+  it('builds a JD-targeted mock from pasted text', async () => {
+    const user = userEvent.setup();
+    const { createPracticeFromJd, storePracticeRecovery } = await import('../api');
+    vi.mocked(createPracticeFromJd).mockResolvedValue({
+      session: {
+        id: 'ps-jd-1',
+        accountId: 'acc-1',
+        mode: 'text',
+        source: 'jd',
+        title: 'JD practice: Senior Backend Engineer',
+        status: 'created',
+        consentId: null,
+        createdAt: new Date().toISOString(),
+        startedAt: null,
+        completedAt: null,
+      },
+      recoveryToken: 'rec-jd',
+    });
+    const router = renderSetup();
+
+    const jdBox = await screen.findByLabelText(/job description/i);
+    await user.type(jdBox, 'A'.repeat(60));
+    await user.click(screen.getByRole('button', { name: /build my mock/i }));
+
+    await waitFor(() =>
+      expect(createPracticeFromJd).toHaveBeenCalledWith({ jdText: 'A'.repeat(60), mode: 'text' }),
+    );
+    expect(storePracticeRecovery).toHaveBeenCalledWith('ps-jd-1', 'rec-jd');
+    await waitFor(() => expect(router.state.location.pathname).toBe('/practice/ps-jd-1/consent'));
   });
 
   it('shows the daily-cap message on 429', async () => {

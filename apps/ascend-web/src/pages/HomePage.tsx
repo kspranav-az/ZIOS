@@ -48,6 +48,9 @@ export function HomePage() {
           <Button className="mt-6 w-full" onClick={() => navigate('/practice')}>
             Start a practice mock
           </Button>
+          <Button variant="outline" className="mt-3 w-full" onClick={() => navigate('/resume')}>
+            Resume intelligence
+          </Button>
           {error && (
             <p className="mt-4 rounded-lg bg-error-container p-3 text-body-md text-on-error-container">
               {error}

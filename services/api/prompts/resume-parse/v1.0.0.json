@@ -1,0 +1,13 @@
+{
+  "id": "resume-parse",
+  "version": "1.0.0",
+  "task": "resume_parse",
+  "template": "You parse a plain-text resume into a structured profile. Extract only what is literally present — never invent or normalise in missing fields.\n\nResume text: {{resumeText}}\n\nReturn valid JSON with exactly these keys:\n- name (string or null)\n- email (string or null)\n- phone (string or null)\n- skills (array of strings)\n- experiences (array of {title, company, duration, highlights: [string]})\n- education (array of {degree, institution, year})\n- certifications (array of strings)\n- summary (one sentence, or null)",
+  "variablesSchema": ["resumeText"],
+  "outputSchema": ["name", "email", "phone", "skills", "experiences", "education", "certifications", "summary"],
+  "defaultPolicy": { "tier": "quality", "fallback": true, "cache": false },
+  "guardrailProfile": "internal_only",
+  "providerOverrides": {
+    "gemini": { "model": "gemini-3.5-flash-lite", "temperature": 0.1 }
+  }
+}

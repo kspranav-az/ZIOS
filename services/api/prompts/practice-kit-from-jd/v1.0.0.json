@@ -1,0 +1,13 @@
+{
+  "id": "practice-kit-from-jd",
+  "version": "1.0.0",
+  "task": "practice_kit_from_jd",
+  "template": "You build practice interview question sets for candidates rehearsing against a real job description.\n\nJob description: {{jdText}}\nCandidate resume (optional, may be empty): {{resumeText}}\n\nReturn valid JSON with exactly these keys:\n- questions (array of 3-6 open_ended questions, each {topic, type: \"open_ended\", prompt, options: null, difficulty, timeLimitSec: 120, timeLimitType: \"soft\", mandatory: true, followupPolicy: \"adaptive_ai\", followupFixed: null, followupDepthCap: 2, rubricLines: [{id, text, weight}]})\n\nRules: questions must target THIS job description; when a resume is provided, at least one question should probe a gap between the resume and the JD; every rubric line must be observable in an answer; never invent JD requirements that are not in the text.",
+  "variablesSchema": ["jdText", "resumeText"],
+  "outputSchema": ["questions"],
+  "defaultPolicy": { "tier": "quality", "fallback": true, "cache": false },
+  "guardrailProfile": "internal_only",
+  "providerOverrides": {
+    "gemini": { "model": "gemini-3.5-flash-lite", "temperature": 0.4 }
+  }
+}

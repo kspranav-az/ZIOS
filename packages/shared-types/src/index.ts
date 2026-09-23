@@ -235,6 +235,76 @@ export interface CandidateWalletResponse {
   lowBalanceThreshold: number;
 }
 
+/* ---- Ascend JD + resume intelligence (Phase 12, D10) ---- */
+
+export interface PracticeFromJdBody {
+  jdText: string;
+  mode: PracticeMode;
+}
+
+export interface ParsedResumeProfile {
+  name: string | null;
+  email: string | null;
+  phone: string | null;
+  skills: string[];
+  experiences: Array<{
+    title: string;
+    company: string;
+    duration: string | null;
+    highlights: string[];
+  }>;
+  education: Array<{ degree: string; institution: string; year: string | null }>;
+  certifications: string[];
+  summary: string | null;
+}
+
+export interface AtsIssue {
+  severity: 'high' | 'medium' | 'low';
+  section: 'contact' | 'summary' | 'skills' | 'experience' | 'education' | 'formatting' | string;
+  issue: string;
+  fix: string;
+}
+
+export interface AtsReadinessReport {
+  score: number;
+  issues: AtsIssue[];
+}
+
+/** Read model for GET /cand/resume (raw file stays in object storage). */
+export interface CandidateResumeResponse {
+  id: string;
+  fileName: string;
+  parsed: ParsedResumeProfile | null;
+  atsReport: AtsReadinessReport | null;
+  updatedAt: string;
+}
+
+export interface ResumeUploadBody {
+  fileName: string;
+  /** Base64-encoded file content (text/plain in v1; PDF parsing lands later). */
+  contentBase64: string;
+  /** Extracted plain text when uploading a non-text file (PDF v1 path). */
+  text?: string;
+}
+
+export interface ResumeJdMatchBody {
+  jdText: string;
+}
+
+export interface ResumeJdMatchSuggestion {
+  original: string;
+  improved: string;
+  /** Honesty guardrail (D10): numbers in `improved` that do not appear in
+   * `original` are flagged here instead of being shown as fact. */
+  honestyFlags: string[];
+}
+
+export interface ResumeJdMatchResponse {
+  coverage: Array<{ keyword: string; present: boolean; evidence: string | null }>;
+  missingKeywords: string[];
+  suggestions: ResumeJdMatchSuggestion[];
+}
+
 export interface OrgInvite {
   id: string;
   orgId: string;
