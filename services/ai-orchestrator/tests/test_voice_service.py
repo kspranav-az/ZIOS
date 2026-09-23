@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -10,6 +11,7 @@ import pytest
 from app.conductor_client import ConductorClient
 from app.voice.mock_stt import MockSttAdapter
 from app.voice.mock_tts import MockTtsAdapter
+from app.voice.router import _json_default
 from app.voice.service import VoiceSessionService
 
 
@@ -98,3 +100,43 @@ async def test_service_tts_degradation_emits_text() -> None:
     assert telemetry.degradation_rung == "tts_text"
     ai_texts = [e for e in events if e["type"] == "ai_text"]
     assert any("Why Python?" in t["text"] for t in ai_texts)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "tts",
+    [
+        MockTtsAdapter(chunk_ms=1),
+        MockTtsAdapter(chunk_ms=1, fail_after_text="Why"),
+    ],
+    ids=["happy_path", "tts_degraded"],
+)
+async def test_service_events_are_json_serializable(tts: MockTtsAdapter) -> None:
+    """Regression: the WS transport json.dumps every event with _json_default.
+
+    TurnTelemetry used to leak as a raw dataclass, which starlette's send_json
+    rejected with TypeError — surfaced to the candidate as STREAM_ERROR
+    (found live during the Phase 12e gemini smoke of the practice room).
+    """
+    service = VoiceSessionService(
+        session_id="s1",
+        room_name="voice-s1",
+        recovery_token="rt",
+        stt=MockSttAdapter(fixture="short"),
+        tts=tts,
+        conductor=FakeConductor(),
+    )
+    events = [e async for e in service.process_turn(_audio())]
+    assert events
+    for event in events:
+        serialized = json.dumps(event, default=_json_default)
+        assert json.loads(serialized)["type"] == event["type"]
+    telemetry_event = json.loads(
+        json.dumps(
+            next(e for e in events if e["type"] == "telemetry"),
+            default=_json_default,
+        )
+    )
+    wire = telemetry_event["telemetry"]
+    assert wire["totalTurnMs"] > 0
+    assert "total_turn_ms" not in wire

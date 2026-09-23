@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Literal
+from typing import Any, Literal
 
 
 class TurnIntent(StrEnum):
@@ -49,6 +49,22 @@ class TurnTelemetry:
     transcript: str
     barged_in: bool = False
     degradation_rung: Literal["tts_text", "stt_text", "ai_pause", None] = None
+
+    def to_wire_dict(self) -> dict[str, Any]:
+        """camelCase JSON shape — the same mapping the conductor telemetry
+        callback posts to the API, so the WS stream and the callback cannot
+        drift."""
+        return {
+            "turnIndex": self.turn_index,
+            "vadMs": self.vad_ms,
+            "sttFinalMs": self.stt_final_ms,
+            "plannerMs": self.planner_ms,
+            "ttsFirstAudioMs": self.tts_first_audio_ms,
+            "totalTurnMs": self.total_turn_ms,
+            "transcript": self.transcript,
+            "bargedIn": self.barged_in,
+            "degradationRung": self.degradation_rung,
+        }
 
 
 @dataclass
