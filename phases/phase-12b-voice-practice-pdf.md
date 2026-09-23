@@ -57,6 +57,13 @@ Queue-isolated `bootApp`. Flow: candidate signup → create **voice** session (l
 
 API suite + ascend-web unit + e2e green; lint/typecheck clean. Commit + `--no-ff` merge.
 
+✅ **DONE 2026-09-23** — merge `a768da4` (branch commit `0243735`).
+Evidence: API 361 passed (incl. 3 new voice integration specs); ascend-web 33
+unit passed (+4 new); voice e2e golden journey passed (13.9s, wallet 50→48);
+text practice e2e regression passed; ruff/mypy/eslint/tsc clean on touched
+packages. Bug found at gate: MediaRecorder sends `audio/webm;codecs=opus` —
+fixed by matching the bare MIME; regression test added.
+
 ---
 
 ## Branch B — `phase-12b/resume-pdf-parsing` — document extraction port
@@ -93,6 +100,17 @@ API suite + ascend-web unit + e2e green; lint/typecheck clean. Commit + `--no-ff
 ### B5. Gate
 
 Orchestrator suite + ruff + mypy strict; API suite; ascend-web unit; lint/typecheck; rebuild compose (`docker compose build ai-orchestrator api ascend-web && up -d`) and re-run ascend e2e (resume e2e + practice e2e). Commit + `--no-ff` merge.
+
+✅ **DONE 2026-09-23** — merge `ddb0ff6` (branch commit `cf22231`).
+Evidence: orchestrator 118 passed / 2 skipped (14 new extraction specs);
+API 364 passed (3 new PDF integration specs, shared `tiny-resume.pdf`
+fixture); ascend-web 34 unit passed (+1 PDF upload test); full ascend e2e
+4/4 passed (incl. new PDF journey: file picker → extraction → ATS card);
+ruff/mypy strict/eslint/tsc clean. Bug found at gate: NUL-byte sniffing
+cannot tell a small PDF from text — content-type decision is now
+file-name-driven (.pdf → extraction port, else printable-text heuristic).
+compose runs `DOCUMENT_EXTRACTION_ADAPTER=pypdf` (mock remains the
+env-unset default for contract tests).
 
 ---
 
