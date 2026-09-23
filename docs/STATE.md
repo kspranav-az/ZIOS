@@ -1,6 +1,6 @@
 # State — InterviewOS / Meridian MVP
 
-**Snapshot date:** 2026-09-22 · **HEAD:** `main` (Phase 10 complete — credits-wallet merge `dfe302e` + final-validation merge; all merges `--no-ff`, history preserved per owner) · **Remote:** `origin` = `git@github.com:kspranav-az/ZIOS.git` (all branches + tags pushed) · **Tags:** `phase-00-complete` … `phase-09b-complete`, `phase-10-complete`, `phase-14-complete`, `v0.1.0-mvp0-mock` · **Phase 10 ✅ complete** (E13 + E14 closed; validation evidence in `phases/phase-10-integration-api-billing.md`; one open item: owner review of `docs/partner-integration-runbook.md`) — next: Phase 11
+**Snapshot date:** 2026-09-23 · **HEAD:** `main` (Phase 12 complete — M2 Ascend merged via `phase-12/*` branches + `--no-ff` merges, history preserved per owner; one direct chore commit `c23fb9e` for the dress-rehearsal seed script, noted for transparency) · **Remote:** `origin` = `git@github.com:kspranav-az/ZIOS.git` (all branches + tags pushed) · **Tags:** `phase-00-complete` … `phase-09b-complete`, `phase-10-complete`, `phase-12-complete`, `phase-14-complete`, `v0.1.0-mvp0-mock` · **Phase 12 ✅ complete** (M2 Ascend candidate app — closed, grant-funded beta; validation evidence in `phases/phase-12-implementation-plan.md` §Validation; `v0.2.0-pilot` intentionally NOT tagged — that waits for Phase 11's pilot gate) — next: Phase 11
 
 This file records the current implementation state, what is proven, what is not, and where the blockers are.
 
@@ -10,14 +10,17 @@ This file records the current implementation state, what is proven, what is not,
 
 | Check                      | Result                                             | Command                                        |
 | -------------------------- | -------------------------------------------------- | ---------------------------------------------- |
-| API unit + integration     | ✅ 271 passed / 48 files                           | `pnpm --filter @zios/api test`                 |
+| API unit + integration     | ✅ 358 passed / 2 skipped (65 files)               | `DATABASE_URL=postgresql://interviewos:interviewos_dev@localhost:55432/interviewos pnpm --filter @zios/api test` |
 | Orchestrator pytest        | ✅ 104 passed / 2 skipped                          | `cd services/ai-orchestrator && uv run pytest` |
 | Orchestrator ruff + mypy   | ✅ Clean (mypy strict)                             | `uv run ruff check app tests && uv run mypy`   |
-| Employer unit              | ✅ 92 passed                                       | `pnpm --filter employer-web test`              |
+| Employer unit              | ✅ 102 passed                                      | `pnpm --filter employer-web test`              |
 | Employer typecheck + lint  | ✅ Clean (1 pre-existing warning in CockpitPage)   | `pnpm --filter employer-web typecheck/lint`    |
 | Candidate typecheck + lint | ✅ Clean                                           | `pnpm --filter candidate-web typecheck/lint`   |
+| Ascend unit                | ✅ 29 passed                                       | `pnpm --filter ascend-web test`                |
+| Ascend typecheck + lint    | ✅ Clean                                           | `pnpm --filter ascend-web typecheck/lint`      |
 | Employer E2E               | ✅ 12 passed                                       | `pnpm --filter employer-web e2e`               |
 | Candidate E2E              | ✅ 5 passed                                        | `pnpm --filter candidate-web e2e`              |
+| Ascend E2E                 | ✅ 2 passed                                        | `pnpm --filter ascend-web e2e` (rebuild image first) |
 | Docker Compose             | ✅ All healthy (orchestrator pinned `linux/amd64`) | `docker compose up -d --build`                 |
 
 ---
@@ -54,6 +57,19 @@ Post-M1 extension (not in the frozen PRD §3.4): objective multimodal feature ex
 - Video-mode capture: hidden subscribe-only LiveKit recorder participant → streaming webm encode → `recordings/{sessionId}/{sha256}.webm` → telemetry (`media_kind`) → analysis enqueue; voice-mode recordings (`...wav`) enqueue audio analysis.
 - Employer review page: `AnalysisFeaturesPanel` per question (objective measurements only, `n/a — reason` for invalid, `heuristic` badges); API `GET /analysis/sessions/:id` + `GET /analysis/sessions/:id/questions/:qid/features`.
 - **No inference:** no emotion/personality/lie/confidence scoring anywhere in the pipeline.
+
+### Post-M1: Phase 12 — Ascend candidate app, M2 closed beta (✅ complete, merged to `main`)
+
+M2 candidate-facing practice product per `phases/phase-12-implementation-plan.md` (spec) and `phases/phase-12-m2-outline.md` (scope). **Complete and tagged `phase-12-complete` (2026-09-23). Ships as a closed, grant-funded, transactional-email-only beta** — the M1 pilot-gate and COGS pre-conditions remain formally open (recorded exception in the plan; `v0.2.0-pilot` waits for Phase 11).
+
+- **Monetization deviation (locked, D-log):** Blueprint §20.3 freemium replaced by credit grants — `CANDIDATE_WELCOME_GRANT_CREDITS = 50` at signup, operator top-ups via `scripts/grant-credits.js --holder candidate --email <email> <amount> [reason]`; Razorpay top-up lands with Phase 11 and will serve both products.
+- **Wallet generalization (D1–D3):** `credit_account` (`holder_type 'org'|'candidate'`, unique `(holder_type, holder_id)`); ledger rows carry `account_id`; `org.credits_balance` kept as a synced read cache (retired in a later phase); threshold moved to the account row. Employer wallet contract unchanged.
+- **Candidate accounts (D7/D8):** email OTP via `otp_code.audience`, `candidate_account` table, JWT audience `candidate` + `CandidateAuthGuard` (employer token → 403, garbage → 401); `apps/ascend-web` on **:5175** (compose service).
+- **Practice engine (D5/D6/D9, X8):** own tables (`practice_session/transcript/consent/report` — the employer wall is by construction, not flags); question sets from an inline `snapshot jsonb` (seeded library packs or LLM-generated from a JD); conductor/judge/evaluation ports reused as-is via an adapter; consent artifact required before the live transition (409 `CONSENT_REQUIRED`); exact 1-credit debit (`practice_start`) in the live-transition tx; `x-recovery-token` recovery like interviews; **3 completed mocks/day cap** (429 `DAILY_CAP_REACHED`, create-time check).
+- **Reports & coaching (D9):** judged `practice_report` with cited scores/evidence spans + LLM `coaching-tips` task — every tip quotes a verbatim transcript span (mock LLM fixtures; contract-tested).
+- **JD + resume intelligence (D10):** 4 versioned LLM tasks (`practice-kit-from-jd`, `resume-parse`, `ats-readiness-check`, `resume-jd-match`) with prompts + fixtures + honesty guardrail (fabricated-metric claims rejected/flagged); `candidate_resume` (one per account, MinIO `resumes/{accountId}/{uuid}`, `DELETE /cand/resume` erases object + row). **v1 deviation:** parsing is paste-text (base64 upload with text); binary/PDF parsing deferred.
+- **Progress, readiness, beta ops (D14/D15, FR-E14):** `GET /cand/practice/progress` (history, pace/filler trend series, streak, daily cap), `GET /cand/practice/readiness` (`READINESS_FORMULA_V1`: scoreBlend 0.5 / pace 0.2 / fillers 0.15 / structure 0.15, component breakdown, computed on read — no table), wallet ledger in `GET /cand/wallet`, candidate low-balance email (≤1/24h, `lowbal:` watermark) wired into the practice debit; Ascend Wallet/Progress pages + home readiness card; `docs/ascend-beta-runbook.md` (onboarding, grants, caps, weekly COGS review, schema-verified erasure SQL). **Plan-text deviation:** progress/readiness live under `/cand/practice/*` (not `/cand/*`); Progress page ships a trend chart instead of a skill radar.
+- **Known beta deferrals:** voice-mode practice UI (text-only turn API this drop — voice ships as a later beta drop), resume PDF parsing, real-LLM prompt evals (mock fixtures only).
 
 ---
 
@@ -204,7 +220,9 @@ Everything below is **fixture-driven mock** today. Feature code is complete; rea
 | Orchestrator is `linux/amd64`-only             | mediapipe 1.0.1 crashes on macOS/arm64 and ships no linux/aarch64 wheel → pinned 0.10.21, emulated amd64 on ARM hosts (slow: 150 s clip ≈ 30 min) | Revisit when mediapipe ships aarch64; CI on x86 is native                                                                                        |
 | `.env` DATABASE_URL stale (5432 vs 55432)      | Host-run tests/scripts fail against compose Postgres on 55432                                                                                     | Reconcile `.env` with compose port override                                                                                                      |
 | Phase 10 complete (2026-09-22)                 | —                                                                                                                                                 | ✅ Tagged `phase-10-complete`; validation evidence in `phases/phase-10-integration-api-billing.md`; owner review of `docs/partner-integration-runbook.md` pending |
-| Phase 11 not started                           | No pilot hardening, load test, or notifications                                                                                                   | Start after Phase 10                                                                                                                             |
+| Phase 11 not started                           | No pilot hardening, load test, or notifications                                                                                                   | Start after Phase 12 — it gates `v0.2.0-pilot` for both products                                                                                 |
+| Ascend voice-mode practice deferred            | Text-only practice turn API this drop; voice mocks are a later beta drop                                                                          | Reuse candidate-web LiveKit voice patterns (audio-first, low-bandwidth defaults)                                                                 |
+| Resume binary parsing deferred                 | Resume v1 accepts pasted text (base64 upload with `text`); PDF parsing not built                                                                  | Add a parse adapter (pdf→text) behind the resume port when real uploads arrive                                                                   |
 | No real LLM/STT/TTS validation                 | X2, X6, X7, WER cannot be measured                                                                                                                | ✅ GCP STT validated live 2026-09-22 (Speech v2, 373 words / 150 s clip, word timestamps); Gemini LLM adapter ready — wire keys when they arrive |
 | No real Google sign-in                         | FR-E1-1 not fully validated                                                                                                                       | Add real Google OAuth app                                                                                                                        |
 | No WhatsApp/SMS                                | E11 partial                                                                                                                                       | File template approvals (already noted as Week-1 exception)                                                                                      |
@@ -224,7 +242,8 @@ All migrations through Phase 14 are applied in the compose stack. Key tables:
 - Human-facilitated: `interview_slot`, `session_coverage`
 - Integrity: `integrity_flag`, `integrity_snapshot`
 - Generation: `jd_generation`
-- Async video: `role_based_questions`, `async_video_review_score`, `transcription_job`, `transcription_job_dlq`, `credit_ledger`
+- Async video: `role_based_questions`, `async_video_review_score`, `transcription_job`, `transcription_job_dlq`, `credit_ledger`, `credit_account`
+- Ascend (M2): `candidate_account`, `candidate_resume`, `practice_session`, `practice_consent`, `practice_transcript`, `practice_report`, `practice_report_score`, `practice_report_evidence_span`
 - Analysis (Phase 14): `analysis_job`, `analysis_job_dlq`
 - Infra: `evaluation_pipeline_log`, `preview_token`
 
@@ -234,17 +253,17 @@ Run `pnpm migrate` to verify no pending migrations.
 
 ## 7. Git hygiene
 
-- **Branches:** All `phase-NN/*` branches preserved and pushed to GitHub. `phase-09b/async-video-hardening` (tagged `phase-09b-complete`) and `ai-analysis` (Phase 14, tagged `phase-14-complete`) were merged into `main` on 2026-09-22 with `--no-ff` merge commits (`4ff5d5b`, `3666889`) — full commit history preserved per owner request (not squash-merged).
-- **Main:** Phase history plus merge commits for Phases 09b and 14; tags `phase-00-complete` … `phase-09-complete`, `phase-09b-complete`, `phase-14-complete`, and `v0.1.0-mvp0-mock`. Remote `origin` = `git@github.com:kspranav-az/ZIOS.git` (SSH; HTTPS lacked credentials on this machine).
+- **Branches:** All `phase-NN/*` branches preserved and pushed to GitHub. `phase-09b/async-video-hardening` (tagged `phase-09b-complete`) and `ai-analysis` (Phase 14, tagged `phase-14-complete`) were merged into `main` on 2026-09-22 with `--no-ff` merge commits (`4ff5d5b`, `3666889`) — full commit history preserved per owner request (not squash-merged). Phase 12 (M2 Ascend) merged 2026-09-23 the same way: `phase-12/wallet-accounts`, `phase-12/candidate-accounts`, `phase-12/practice-engine`, `phase-12/mock-player-report`, `phase-12/jd-resume-intelligence`, `phase-12/coaching-readiness-beta`, `phase-12/beta-validation` → tag `phase-12-complete`. One direct-to-main chore commit (`c23fb9e`, dress-rehearsal seed script) — recorded here for transparency; not repeated.
+- **Main:** Phase history plus merge commits for Phases 09b, 12, and 14; tags `phase-00-complete` … `phase-09-complete`, `phase-09b-complete`, `phase-10-complete`, `phase-12-complete`, `phase-14-complete`, and `v0.1.0-mvp0-mock`. Remote `origin` = `git@github.com:kspranav-az/ZIOS.git` (SSH; HTTPS lacked credentials on this machine).
 - **Working tree:** Clean on `main` at snapshot time.
 
 ---
 
 ## 8. Immediate next steps
 
-1. **Owner review:** read through `docs/partner-integration-runbook.md` (partner-facing) and `docs/PRESENTATION.md` (demo script) — the last open Phase-10 validation item.
-2. **Live capture proof:** run one real voice/AI-video browser session; verify `recordings/*.webm` in MinIO + analysis completion (closes the last known Phase-14 gap).
-3. **Provider procurement:** Select and obtain credentials for LLM, STT, TTS, Google OAuth, WhatsApp, and payments.
-4. **Key handover re-run:** Re-execute credential-gated phase validations with real providers.
-5. **Pilot preparation:** Identify ≥ 3 pilot employers per PRD exit criterion X9.
-6. **Phase 11 kickoff:** pilot hardening, notifications (WhatsApp/SMS), Razorpay behind flag, load test — milestone tag `v0.2.0-pilot` comes after Phase 11, not now.
+1. **Phase 11 kickoff:** pilot hardening, notifications (WhatsApp/SMS), Razorpay behind flag (serves both Meridian and Ascend credit top-ups), load test — milestone tag `v0.2.0-pilot` comes after Phase 11, not before.
+2. **Owner review:** read through `docs/partner-integration-runbook.md` (partner-facing), `docs/PRESENTATION.md` (demo script), and `docs/ascend-beta-runbook.md` (Ascend beta ops) — the last open validation items.
+3. **Live capture proof:** run one real voice/AI-video browser session; verify `recordings/*.webm` in MinIO + analysis completion (closes the last known Phase-14 gap).
+4. **Provider procurement:** Select and obtain credentials for LLM, STT, TTS, Google OAuth, WhatsApp, and payments.
+5. **Ascend beta dry-run with real users:** closed cohort on the grant-funded beta; collect readiness-formula feedback (credibility of D14/D15) before the voice drop.
+6. **Pilot preparation:** Identify ≥ 3 pilot employers per PRD exit criterion X9.
