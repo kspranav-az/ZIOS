@@ -3,6 +3,7 @@ import type {
   CandidateAuthResponse,
   CandidateMePatchBody,
   CandidateMeResponse,
+  CandidateWalletResponse,
   CandOtpRequestBody,
   CandOtpRequestResponse,
   CandOtpVerifyBody,
@@ -58,5 +59,12 @@ export class CandidateAccountsController {
     @Body() body: CandidateMePatchBody,
   ): Promise<CandidateMeResponse> {
     return this.candidates.patchMe(auth.account.id, body ?? {});
+  }
+
+  @Public()
+  @UseGuards(CandidateAuthGuard)
+  @Get('wallet')
+  async wallet(@CurrentCandidate() auth: CandidateAuthContext): Promise<CandidateWalletResponse> {
+    return this.candidates.getWallet(auth.account.id);
   }
 }

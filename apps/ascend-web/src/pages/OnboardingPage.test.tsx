@@ -4,6 +4,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../api', () => ({
+  fetchWallet: vi.fn(),
   ApiErrorResponse: class extends Error {},
   patchMe: vi.fn(),
 }));

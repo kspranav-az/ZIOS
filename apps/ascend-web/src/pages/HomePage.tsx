@@ -43,14 +43,17 @@ export function HomePage() {
             {account?.targetRole
               ? `Practice mocks targeted at ${account.targetRole} roles. `
               : ''}
-            Mock interviews and coaching reports arrive in the next beta drop.
+            Run a mock interview and get an evidence-linked coaching report.
           </p>
+          <Button className="mt-6 w-full" onClick={() => navigate('/practice')}>
+            Start a practice mock
+          </Button>
           {error && (
             <p className="mt-4 rounded-lg bg-error-container p-3 text-body-md text-on-error-container">
               {error}
             </p>
           )}
-          <Button variant="outline" className="mt-6 w-full" onClick={() => void handleLogout()}>
+          <Button variant="outline" className="mt-3 w-full" onClick={() => void handleLogout()}>
             Sign out
           </Button>
         </Card>

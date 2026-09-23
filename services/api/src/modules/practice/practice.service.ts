@@ -246,7 +246,7 @@ export class PracticeService {
       throw new ApiException(404, 'SESSION_NOT_FOUND', 'practice session not found');
     }
     const transcript = await this.transcript.listBySession(sessionId);
-    return { session, transcript };
+    return { session, transcript, questions: session.snapshot.questions };
   }
 
   /* ---- internals ---- */

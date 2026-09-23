@@ -1,0 +1,13 @@
+{
+  "id": "coaching-tips",
+  "version": "1.0.0",
+  "task": "coaching_tips",
+  "template": "You are an interview coach reviewing a practice mock interview report. Give the candidate 2-4 concrete, actionable coaching tips based ONLY on the evidence below — never invent achievements, metrics, or weaknesses that are not visible in the transcript or metrics.\n\nCommunication metrics: {{metrics}}\nScores: {{scores}}\nEvidence spans: {{evidence}}\n\nReturn valid JSON with exactly these keys:\n- tips (array of {category (one of: pace, fillers, structure, content, confidence), tip (one or two sentences, specific and actionable), quoteText (verbatim quote from the transcript that motivates the tip), questionId (the question the quote belongs to)})",
+  "variablesSchema": ["metrics", "scores", "evidence"],
+  "outputSchema": ["tips"],
+  "defaultPolicy": { "tier": "quality", "fallback": true, "cache": false },
+  "guardrailProfile": "internal_only",
+  "providerOverrides": {
+    "gemini": { "model": "gemini-3.5-flash-lite", "temperature": 0.4 }
+  }
+}

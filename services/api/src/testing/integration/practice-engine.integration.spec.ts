@@ -226,16 +226,40 @@ describe.runIf(INTEGRATION_AVAILABLE)('practice engine (Phase 12, D5/D9, X8)', (
     expect(reportRes.status).toBe(200);
     const report = (await reportRes.json()) as {
       report: { status: string; overallRecommendation: number | null } | null;
-      scores: Array<{ score: number; evidence_span_ids: string[] }>;
-      evidenceSpans: Array<{ quote_text: string }>;
+      scores: Array<{ score: number; evidenceSpanIds: string[] }>;
+      evidenceSpans: Array<{ quoteText: string }>;
+      coachingTips: Array<{ category: string; tip: string; quoteText: string }>;
     };
     expect(report.report?.status).toBe('completed');
     expect(report.report?.overallRecommendation).toBeGreaterThanOrEqual(1);
     expect(report.scores.length).toBeGreaterThan(0);
     for (const score of report.scores) {
-      expect(score.evidence_span_ids.length).toBeGreaterThan(0);
+      expect(score.evidenceSpanIds.length).toBeGreaterThan(0);
     }
     expect(report.evidenceSpans.length).toBeGreaterThan(0);
+
+    // Coaching tips (D9): every tip cites a verbatim evidence-span quote and
+    // the tips cost was folded into the report cost.
+    expect(report.coachingTips.length).toBeGreaterThan(0);
+    const quotes = new Set(report.evidenceSpans.map((span) => span.quoteText));
+    for (const tip of report.coachingTips) {
+      expect(tip.tip.length).toBeGreaterThan(0);
+      expect(quotes.has(tip.quoteText)).toBe(true);
+    }
+    const reportRow = (
+      await test.db.query(`SELECT cost, coaching_tips_cost FROM practice_report WHERE session_id = $1`, [
+        session.id,
+      ])
+    ).rows[0] as { cost: number; coaching_tips_cost: number };
+    expect(Number(reportRow.coaching_tips_cost)).toBeGreaterThan(0);
+    expect(Number(reportRow.cost)).toBeGreaterThanOrEqual(Number(reportRow.coaching_tips_cost));
+
+    // Wallet view: welcome grant minus the exact practice debit.
+    const wallet = await fetch(`${test.baseUrl}/cand/wallet`, { headers: authed(candidate.token) });
+    expect(wallet.status).toBe(200);
+    const walletBody = (await wallet.json()) as { balance: number; lowBalanceThreshold: number };
+    expect(walletBody.balance).toBe(balanceBefore.balance - 1);
+    expect(walletBody.lowBalanceThreshold).toBeGreaterThanOrEqual(0);
   }, 180_000);
 
   it('402 at zero balance with the in-flight session preserved', async () => {

@@ -13,11 +13,12 @@ async function bootstrap(): Promise<void> {
   // Session cookie parsing (zios_session, httpOnly) — see the auth module.
   app.use(cookieParser());
 
-  // SPA dev server origin (Vite on :5173); credentials for the session cookie.
+  // SPA dev server origins (Vite: employer :5173, candidate :5174, ascend :5175);
+  // credentials for the session cookie.
   // Origins are normalised to lowercase because browsers send the Origin header
   // with a lowercase host, and the CORS middleware does a case-sensitive match.
   app.enableCors({
-    origin: (process.env.CORS_ORIGIN ?? 'http://localhost:5173')
+    origin: (process.env.CORS_ORIGIN ?? 'http://localhost:5173,http://localhost:5174,http://localhost:5175')
       .split(',')
       .map((origin) => origin.trim().toLowerCase()),
     credentials: true,
