@@ -125,7 +125,7 @@ export interface CandidateMePatchBody {
 
 // ---- Ascend practice engine (Phase 12, D5/D6) ----
 
-export type PracticeMode = 'text' | 'voice';
+export type PracticeMode = 'text' | 'voice' | 'live';
 export type PracticeSource = 'library' | 'jd';
 
 export interface PracticeLibraryPack {
@@ -200,6 +200,23 @@ export interface PracticeTurnAudioResponse {
 export interface PracticeTurnResponse {
   session: PracticeSession;
   turn: SessionTurnResponse;
+}
+
+/** Live practice (Phase 12e): LiveKit room token for an orchestrator-run
+ * practice session. Same payload shape as the company-interview voice token —
+ * the Ascend live page connects to the room and the orchestrator WS exactly
+ * like candidate-web's interview pages. */
+export interface PracticeLiveTokenResponse {
+  session: PracticeSession;
+  livekit: {
+    url: string;
+    token: string;
+    roomName: string;
+  };
+  orchestrator: {
+    wsUrl: string;
+    token: string;
+  };
 }
 
 export interface PracticeSessionDetailResponse {

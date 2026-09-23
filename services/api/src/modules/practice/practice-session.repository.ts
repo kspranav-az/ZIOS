@@ -1,5 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import type { KitQuestion, PracticeMode, PracticeSession, PracticeSource } from '@zios/shared-types';
+import type {
+  KitQuestion,
+  PracticeMode,
+  PracticeSession,
+  PracticeSource,
+} from '@zios/shared-types';
 import { DatabaseService, type Queryable } from '@/modules/database';
 
 interface PracticeSessionRow {
@@ -81,6 +86,40 @@ export class PracticeSessionRepository {
 
   async findById(id: string, q: Queryable = this.db): Promise<PracticeSessionRecord | null> {
     const result = await q.query(`SELECT ${COLUMNS} FROM practice_session WHERE id = $1`, [id]);
+    const row = result.rows[0] as PracticeSessionRow | undefined;
+    return row ? mapRow(row) : null;
+  }
+
+  /**
+   * Atomic preflight staging: only a session still in 'consented' can be
+   * staged. Concurrent callers (React StrictMode double-mount fires two
+   * prefights back to back) race here; the loser gets null and must reload.
+   */
+  async claimPreflight(id: string, q: Queryable): Promise<PracticeSessionRecord | null> {
+    const result = await q.query(
+      `UPDATE practice_session SET status = 'preflight', updated_at = now()
+       WHERE id = $1 AND status = 'consented' RETURNING ${COLUMNS}`,
+      [id],
+    );
+    const row = result.rows[0] as PracticeSessionRow | undefined;
+    return row ? mapRow(row) : null;
+  }
+
+  /**
+   * Atomic charge-point claim: consented/preflight → live with started_at.
+   * Exactly one concurrent preflight wins (and therefore debits exactly
+   * once); losers get null and replay idempotently without a second debit.
+   */
+  async claimLive(
+    id: string,
+    startedAt: Date,
+    q: Queryable,
+  ): Promise<PracticeSessionRecord | null> {
+    const result = await q.query(
+      `UPDATE practice_session SET status = 'live', started_at = $2, updated_at = now()
+       WHERE id = $1 AND status IN ('consented', 'preflight') RETURNING ${COLUMNS}`,
+      [id, startedAt],
+    );
     const row = result.rows[0] as PracticeSessionRow | undefined;
     return row ? mapRow(row) : null;
   }
