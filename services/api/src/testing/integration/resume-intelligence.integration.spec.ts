@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type {
   CandidateAuthResponse,
@@ -18,6 +19,20 @@ import {
 } from './helpers';
 
 const ns = makeTestNamespace('resume-intelligence.test');
+
+// Host-run integration tests must reach the compose-published orchestrator,
+// not the docker-network hostname.
+process.env.ORCHESTRATOR_URL ??= 'http://localhost:8000';
+
+/**
+ * fixtures/tiny-resume.pdf — a real one-page PDF (reportlab) with selectable
+ * text; the byte-identical twin of the orchestrator's extraction fixture.
+ * Parsing is fixture-driven under the mock LLM, so assertions target the
+ * pipeline (201, stored content type), not the PDF's literal text.
+ */
+const TINY_PDF_BASE64 = readFileSync(
+  new URL('./fixtures/tiny-resume.pdf', import.meta.url),
+).toString('base64');
 
 const SAMPLE_RESUME = `Priya Sharma
 priya.sharma@example.com | +91 98765 43210
@@ -115,6 +130,56 @@ describe.runIf(INTEGRATION_AVAILABLE)('resume intelligence (Phase 12, D10)', () 
 
     const fetched = await fetch(`${test.baseUrl}/cand/resume`, { headers: authed(candidate.token) });
     expect(fetched.status).toBe(200);
+  });
+
+  it('uploads a PDF, extracts text via the orchestrator, parses + ATS-checks (Phase 12b)', async () => {
+    const candidate = await candSignup(test, ns.email('pdf-upload'));
+    const upload = await postJson(
+      test.baseUrl,
+      '/cand/resume',
+      { fileName: 'priya-resume.pdf', contentBase64: TINY_PDF_BASE64 },
+      authed(candidate.token),
+    );
+    expect(upload.status).toBe(201);
+    const resume = (await upload.json()) as CandidateResumeResponse;
+    expect(resume.fileName).toBe('priya-resume.pdf');
+    expect(resume.parsed).not.toBeNull();
+    expect(resume.atsReport?.score).toBeGreaterThan(0);
+
+    // The stored object is tagged as a real PDF, not text/plain.
+    const row = await test.db.query(
+      `SELECT content_type FROM candidate_resume WHERE account_id = $1`,
+      [candidate.accountId],
+    );
+    expect((row.rows[0] as { content_type: string }).content_type).toBe('application/pdf');
+  });
+
+  it('corrupt PDF bytes surface a friendly 422, not a 502', async () => {
+    const candidate = await candSignup(test, ns.email('pdf-corrupt'));
+    const upload = await postJson(
+      test.baseUrl,
+      '/cand/resume',
+      {
+        fileName: 'broken.pdf',
+        contentBase64: Buffer.from('definitely not a pdf').toString('base64'),
+      },
+      authed(candidate.token),
+    );
+    expect(upload.status).toBe(422);
+  });
+
+  it('unsupported binary types are rejected without touching the orchestrator', async () => {
+    const candidate = await candSignup(test, ns.email('docx'));
+    const upload = await postJson(
+      test.baseUrl,
+      '/cand/resume',
+      {
+        fileName: 'resume.docx',
+        contentBase64: Buffer.from('PK\x03\x04binary-docx-bytes').toString('base64'),
+      },
+      authed(candidate.token),
+    );
+    expect(upload.status).toBe(422);
   });
 
   it('re-upload replaces the row and deletes the old MinIO object', async () => {

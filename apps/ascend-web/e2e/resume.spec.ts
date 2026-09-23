@@ -1,5 +1,12 @@
 import { expect, test } from '@playwright/test';
+import path from 'node:path';
 import { candidateEmail, extractOtp, waitForEmail } from './helpers';
+
+/** Real one-page PDF shared with the orchestrator extraction tests. */
+const PDF_FIXTURE = path.resolve(
+  process.cwd(),
+  '../../services/ai-orchestrator/tests/fixtures/tiny-resume.pdf',
+);
 
 const RESUME_TEXT = `Priya Sharma
 priya.sharma@e2e.example.com | +91 98765 43210
@@ -98,4 +105,21 @@ test('candidate uploads a resume, sees the ATS card, and runs a JD mock with a g
   await expect(
     page.getByText(/python|payments|backend|gap/i).first(),
   ).toBeVisible();
+});
+
+test('candidate uploads a PDF resume — extraction, parse, ATS card with no pasting (Phase 12b)', async ({
+  page,
+}) => {
+  await login(page);
+
+  await page.getByRole('button', { name: /resume intelligence/i }).click();
+  await expect(page).toHaveURL(/\/resume$/);
+  await page.getByTestId('resume-file').setInputFiles(PDF_FIXTURE);
+
+  // The API forwards the bytes to the orchestrator's pypdf port; the parsed
+  // profile and ATS card render without the candidate pasting anything.
+  await expect(page.getByText(/PDF uploaded/i)).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText(/on file:/i)).toContainText(/tiny-resume\.pdf/i);
+  await expect(page.getByText(/ats readiness/i)).toBeVisible();
+  await expect(page.getByText(/parsed profile/i)).toBeVisible();
 });
