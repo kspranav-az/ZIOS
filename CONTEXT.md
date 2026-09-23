@@ -1,6 +1,6 @@
 # CONTEXT.md — ZIOS Working Context
 
-**Last updated:** 2026-09-22 · **Branch:** `main` (Phase 10 complete — branches `dlq-redrive`, `api-keys-v1`, `interviews-endpoints`, `webhooks`, `credits-wallet`, `final-validation` all merged via `--no-ff` merge commits, history preserved per owner; tagged `phase-10-complete`) · **Remote:** `origin` = `git@github.com:kspranav-az/ZIOS.git` (SSH; all branches + tags pushed)
+**Last updated:** 2026-09-23 · **Branch:** `main` (Phase 12 complete — M2 Ascend merged via `phase-12/*` branches, `--no-ff` merges, history preserved per owner; tagged `phase-12-complete`; `v0.2.0-pilot` intentionally waits for Phase 11) · **Remote:** `origin` = `git@github.com:kspranav-az/ZIOS.git` (SSH; all branches + tags pushed)
 
 This file is the session-to-session handover: where the project is, how it runs, what's proven, what's pending, and the operational gotchas. Authoritative deep-dives live in `docs/` (`PRD`, `ARCHITECTURE.md`, `STATE.md`, `FEATURES.md`, `DEMO.md`) and `phases/`.
 
@@ -12,7 +12,7 @@ ZIOS — an AI interview platform (ZeTheta). Monorepo (pnpm workspaces):
 
 - `services/api` — NestJS modular monolith (strict TS), port `:3000`
 - `services/ai-orchestrator` — Python 3.12 FastAPI (uv, ruff, mypy strict), port `:8000` — media/speech/analysis hot plane
-- `apps/employer-web` (`:5173`, currently `:5273` — see §7) · `apps/candidate-web` (`:5174`) — React + Vite, TS only (`.tsx`, never `.jsx`)
+- `apps/employer-web` (`:5173`, currently `:5273` — see §7) · `apps/candidate-web` (`:5174`) · `apps/ascend-web` (`:5175`, M2 candidate practice app) — React + Vite, TS only (`.tsx`, never `.jsx`)
 - `packages/{ui,shared-types,config}` — design system + shared contracts
 - `infra/migrations` — node-pg-migrate; expand-migrate-contract only
 - `phases/` — the executable plan; a phase is done only when every verification + validation checkbox is ticked
@@ -31,7 +31,7 @@ ZIOS — an AI interview platform (ZeTheta). Monorepo (pnpm workspaces):
 
 ## 3. Feature status (all phases tagged complete)
 
-- **Phases 00–09 + 09b + 14 complete.** Phase 10 (integration API + billing-lite) complete 2026-09-22, tagged `phase-10-complete` (partner loop validated over live HTTP; runbook `docs/partner-integration-runbook.md`; owner review of runbook pending). Phase 11 (notifications/hardening/pilot), 12/13 (M2/M3) not started.
+- **Phases 00–09 + 09b + 14 + 12 complete.** Phase 10 (integration API + billing-lite) complete 2026-09-22, tagged `phase-10-complete` (partner loop validated over live HTTP; runbook `docs/partner-integration-runbook.md`; owner review of runbook pending). **Phase 12 (M2 Ascend) complete 2026-09-23, tagged `phase-12-complete`** — closed, grant-funded candidate practice beta: OTP candidate accounts + `CandidateAuthGuard` (audience-separated JWTs), practice engine on own tables (consent-gated X8, exact 1-credit live-transition debit, 3/day cap), judged reports with evidence-linked coaching tips, 4 LLM tasks (JD kit, resume parse, ATS check, resume-JD match with honesty guardrail), readiness formula `READINESS_FORMULA_V1` + progress/trend/streak, wallet ledger + candidate low-balance alerts, `apps/ascend-web` on :5175, ops runbook `docs/ascend-beta-runbook.md`. Ships without voice-mode practice UI and resume PDF parsing (recorded deferrals). Phase 11 (notifications/hardening/pilot) is the only phase not started — it gates `v0.2.0-pilot`.
 - **5 interview modes:** text (AI), voice (AI, LiveKit + text fallback), video (AI + proctoring baseline), human-facilitated (LiveKit cockpit, coverage tracking, scorecard), async video role-based (E15: create-by-role API, per-question recording → MinIO → transcription → review → AI pre-fill → human scorecard → report in live-mode schema; 3-credit debit, refund only before first answer).
 - **Employer platform:** OTP auth (Mailpit), orgs + Admin/Interviewer roles, kit builder with immutable versions, JD→kit generation, question bank + `role_based_questions` (synced from external Neon DB — separate table, biweekly-ish upstream changes), invites (single/CSV, token links, OTP, reschedule, .ics), dashboard.
 - **Evaluation:** evidence-linked reports, judge ensemble (2 parallel judges + adjudication), communication metrics, integrity panel, human overrides, PDF, share links.
@@ -39,11 +39,11 @@ ZIOS — an AI interview platform (ZeTheta). Monorepo (pnpm workspaces):
 - **Credits:** `credit_ledger` append-only; balance on `org.credits_balance`; insufficient → 402. ⚠️ `org` has **no `updated_at`** column — referencing it in credit queries silently breaks debit (learned the hard way).
 - **Phase 14 — multimodal analysis (post-M1 extension):** generalized `analysis_job(kind, payload, status)` + `analysis_job_dlq`; BullMQ `analysis` queue; orchestrator `app/analysis/` — streaming ffmpeg preprocess (16kHz mono PCM; 5FPS/854px sequential frames), MediaPipe face/pose/hands (camera_gaze_ratio, solvePnP head pose, posture, gesture frequency, blur/quality), Silero VAD via onnxruntime (no torch), librosa pitch/energy over speech only, WPM/fillers/disfluency heuristics, temporal alignment + 3-level aggregation, pydantic schema (`Measurement{value,valid,reason,heuristic}` — no fake zeros), artifacts in MinIO `analysis/{sessionId}/{questionId|session}/*.json`, typed errors (2xx/4xx/5xx, never 200-with-fake). `STT_ADAPTER=mock|gcp` factory + `GoogleCloudSttAdapter` (Speech v2, word timestamps); mock is the default everywhere. Video-mode capture: hidden LiveKit recorder participant → webm → MinIO → telemetry → analysis. Employer review page has an objective-only features panel.
 
-## 4. Test state (all green at `phase-10-complete`, 2026-09-22)
+## 4. Test state (all green at `phase-12-complete`, 2026-09-23)
 
-- API: 316 passed / 2 skipped, 57 files + 1 skipped (`pnpm --filter @zios/api test`; needs `DATABASE_URL=postgresql://interviewos:interviewos_dev@localhost:55432/interviewos` inline — see §7); lint + typecheck clean
+- API: 358 passed / 2 skipped, 65 files (`pnpm --filter @zios/api test`; needs `DATABASE_URL=postgresql://interviewos:interviewos_dev@localhost:55432/interviewos` inline — see §7); lint + typecheck clean
 - Orchestrator: 104 passed / 2 skipped, ruff + mypy strict clean (`uv run pytest` etc. in `services/ai-orchestrator`)
-- employer-web: 102 unit (tsc + lint clean), **12/12 E2E** · candidate-web: 13 unit (tsc + lint clean), **5/5 E2E** — E2E re-run 2026-09-23 on freshly rebuilt compose images (API + both webs), all green against the Phase-10 stack
+- employer-web: 102 unit (tsc + lint clean), **12/12 E2E** · candidate-web: 13 unit (tsc + lint clean), **5/5 E2E** · ascend-web: 29 unit (tsc + lint clean), **2/2 E2E** (golden journey extended through progress, wallet ledger, readiness card) — E2E re-run 2026-09-23 on freshly rebuilt compose images (API + all three webs), all green against the Phase-12 stack
 - Live validation: 150s clip (`test_video/interview_video_clip_test.mp4`) through full pipeline — plausible features (face 0.91, gaze 0.97, 135.9s speech / 14 pauses, pitch 235.8Hz); GCP STT validated live 2026-09-22 (Speech v2, 373 words / 150 s clip, word timestamps)
 - Partner loop (FR-E13-5): full validation-layer cycle driven over live HTTP only (create → idempotent replay → candidate interview → completed → scorecard v1; wallet debited exactly 1 text credit) — evidence in `phases/phase-10-integration-api-billing.md` §Validation
 - Validation scripts: `scripts/seed-{human,async-video,voice,video-proctoring,structured-answers,multimodal-analysis,integration-sandbox}-validation.js`, `scripts/grant-credits.js`, `scripts/sync-role-based-questions.js`
@@ -62,6 +62,14 @@ ZIOS — an AI interview platform (ZeTheta). Monorepo (pnpm workspaces):
 - Orchestrator contract: `POST /analysis/video` (JSON, pydantic) — see ARCHITECTURE.md §4; API client uses `node:http` with `ANALYSIS_HTTP_TIMEOUT_MS` (default 10 min) because undici's 300s default killed long videos.
 - Integration tests must isolate queue names (`bootApp` uses per-boot UUID queues) — otherwise test workers steal live jobs (root-caused the orphaned-`pending` incident).
 - Voice telemetry recording contract: top-level `{"recording": ref, "media_kind": "video"|"audio"}` (the old `{"turn":{"recording":...}}` nesting never fired — fixed).
+- **Phase-12 gotchas (learned the hard way):**
+  - `end` is a reserved word in Postgres — quote it (`"end"`) or the query dies; `practice_report_evidence_span.start`/`"end"` both need care.
+  - Nest POST endpoints default to **201** — an endpoint the UI treats as an action (e.g. `/cand/resume/match`) needs `@HttpCode(200)`.
+  - In Nest, a literal route (`@Get('progress')`) declared **below** `@Get(':id')` is shadowed by the param route — declare literals first or they 404/return the wrong shape.
+  - `LlmGateway` task output field is **`parsed`**, not `output` — the mock fixture table enforces known task names, so a new task needs prompt JSON + fixture + contract test together or the gateway throws on boot.
+  - Avoiding a CreditsModule ↔ CandidateAccountsModule DI cycle: the alert service queries `candidate_account` with direct SQL instead of injecting the module.
+  - Practice `advance()` never stamped `completed_at` until Branch 5 — any new status transition that business logic later filters on must set its timestamp explicitly in `updateStatus` extras.
+  - `grant-credits.js` needs `DATABASE_URL` inline (55432) when run from a shell whose `.env` is stale.
 
 ## 6. MediaPipe / platform constraint
 
@@ -111,15 +119,17 @@ Recommended: single **x86** `e2-standard-4` VM running compose unchanged; `VIDEO
 
 - Live LiveKit capture proof pending (unit/integration only — owner signed off; verify on next real voice/video session: `recordings/*.webm` in MinIO + analysis completes).
 - Real-provider validation pending (Gemini/GCP STT adapters ready; GCP STT validated live 2026-09-22; Gemini LLM adapter ready — wire keys when they arrive; TTS quality metrics unmeasurable on mocks).
-- Phase 11 not started (pilot hardening, notifications, Razorpay behind flag, load test → `v0.2.0-pilot`); owner review of `docs/partner-integration-runbook.md` pending; no WhatsApp/SMS; no real Google OAuth; no production infra.
+- Ascend beta deferrals: voice-mode practice UI (text-only this drop), resume PDF/binary parsing (paste-text v1), real-LLM prompt evals (mock fixtures only) — all recorded in `docs/STATE.md` §5.
+- Phase 11 not started (pilot hardening, notifications, Razorpay behind flag, load test → `v0.2.0-pilot`); owner review of `docs/partner-integration-runbook.md` + `docs/ascend-beta-runbook.md` pending; no WhatsApp/SMS; no real Google OAuth; no production infra.
 
 ## 10. Immediate next steps (docs/STATE.md §8)
 
-1. Owner review of `docs/partner-integration-runbook.md` + `docs/PRESENTATION.md` (last open Phase-10 validation item).
-2. Live-capture proof on a real voice/AI-video session.
-3. Phase 11 kickoff: notifications (WhatsApp/SMS), Razorpay behind flag, pilot hardening + load test; tag `v0.2.0-pilot` after.
-4. Provider procurement (LLM, TTS, Google OAuth, WhatsApp, payments).
-5. Pilot prep: ≥3 pilot employers (PRD X9).
+1. **Phase 11 kickoff:** notifications (WhatsApp/SMS), Razorpay behind flag (credit top-ups for both products), pilot hardening + load test; tag `v0.2.0-pilot` after.
+2. Owner review of `docs/partner-integration-runbook.md` + `docs/ascend-beta-runbook.md` + `docs/PRESENTATION.md`.
+3. Live-capture proof on a real voice/AI-video session.
+4. Ascend beta dry-run with a closed user cohort (readiness-formula feedback before the voice drop).
+5. Provider procurement (LLM, TTS, Google OAuth, WhatsApp, payments).
+6. Pilot prep: ≥3 pilot employers (PRD X9).
 
 ## 11. Working style notes (how this repo has been run)
 

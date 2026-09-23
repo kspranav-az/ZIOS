@@ -26,14 +26,14 @@
 - Same design system from `AI-Interview-Platform/` (candidate pages in the reference clone become the Ascend design baseline)
 - Same git/docker/phase discipline as M1
 
-## Pre-conditions to start
-
-- [ ] M1 pilot gate passed (X1–X8) and X9/X10 trending to target
-- [ ] M1 retrospectives folded into a detailed M2 phase plan (this file is replaced by per-phase files)
-- [ ] COGS per voice interview proven ≤ ₹30 with the optimization ladder visible (freemium math depends on it)
-
 ## Verification / Validation (outline-level)
 
-- [ ] Detailed M2 phase files written and reviewed before any M2 code
-- [ ] Reuse audit: each M1 engine confirmed product-agnostic or refactored *before* Ascend builds on it
-- [ ] Coding-sandbox security review completed before coding-mode development starts
+- [x] Detailed M2 phase files written and reviewed before any M2 code — `phases/phase-12-implementation-plan.md` (spec, executed as written modulo recorded deviations in its §Validation)
+- [x] Reuse audit: each M1 engine confirmed product-agnostic or refactored *before* Ascend builds on it — written output delivered in the Branch 2 (`phase-12/practice-engine`) merge body: session state machine + turn loop reused via a practice adapter; conductor/judge/evaluation/LLM-gateway reused via ports; reports rendered from `practice_report` (separate tables, shared read shape); speech/recording/notification engines untouched (text mode only this drop)
+- [ ] Coding-sandbox security review completed before coding-mode development starts — n/a to Phase 12 (no coding mode); remains open for the coding-mode phase
+
+## Pre-conditions to start
+
+- [ ] M1 pilot gate passed (X1–X8) and X9/X10 trending to target — **formally open**; recorded exception in the implementation plan: Ascend ships as a closed, invite-only, grant-funded, transactional-email-only beta
+- [x] M1 retrospectives folded into a detailed M2 phase plan (this file is replaced by per-phase files) — `phases/phase-12-implementation-plan.md`, executed branch-by-branch 2026-09-23
+- [ ] COGS per voice interview proven ≤ ₹30 with the optimization ladder visible (freemium math depends on it) — **formally open**; mitigations shipped instead: 3-completed-mocks/day cap, exact per-mock debit, weekly manual `credit_ledger` review checklist (`docs/ascend-beta-runbook.md` §5)

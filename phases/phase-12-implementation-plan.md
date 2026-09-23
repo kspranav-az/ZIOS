@@ -167,6 +167,35 @@ The only refactor that touches proven Phase-10 code. Small, careful, fully re-te
 4. **Tag `phase-12-complete`. Do NOT tag `v0.2.0-pilot`** — that waits for Phase 11's pilot gate.
 5. Owner confirmations collected during execution (D4, D11, grant amount, consent text v1, library pack content) — list them in the final PR for sign-off.
 
+## Validation (2026-09-23)
+
+**Full matrix (all green):** API 358 passed / 2 skipped (65 files) · ascend-web 29 unit + 2/2 E2E · employer-web 102 unit + 12/12 E2E · candidate-web 13 unit + 5/5 E2E · orchestrator 104 passed / 2 skipped, ruff + mypy strict clean · lint + typecheck clean on api, ascend-web (employer/candidate suites re-run on the rebuilt images; counts unchanged from the Phase-10 snapshot).
+
+**Dress rehearsal** — `node scripts/seed-ascend-sandbox.js` against the compose stack, HTTP only, mock LLM. Transcript (condensed; full output reproducible by re-running the script):
+
+1. `POST /cand/auth/otp/request` → 200; OTP read from Mailpit.
+2. `POST /cand/auth/otp/verify` → 200, account created; wallet shows balance **50** (`welcome_grant +50`).
+3. `PATCH /cand/me` → onboarding saved.
+4. `GET /cand/practice/library` → 3 packs × 4 questions, `PRACTICE_CONSENT_TEXT_V1`.
+5. `POST /cand/practice` (hr-screening, text) → 201; consent → 201 (X8 artifact stored); preflight → 200 live, **exact −1 debit** (`practice_start`), balance 49.
+6. Turn loop → wrapup after 4 answers; `GET .../report` → status completed, recommendation 4, 8 scores all with evidence spans, 8 spans, coaching tips each quoting a verbatim transcript span.
+7. `POST /cand/resume` (pasted text) → 201, parsed skills + ATS score 95.
+8. `POST /cand/practice/from-jd` → 201, `source: 'jd'`, resume-informed snapshot; full lifecycle → wrapup (2nd completion).
+9. Third library mock → wrapup (3 completions = daily cap).
+10. `GET /cand/practice/progress` → 3 sessions, 3-entry trend series (pace 25 wpm, 0 fillers each), streak 1, dailyCap 3. `GET /cand/practice/readiness` → **70** (`READINESS_FORMULA_V1`: scoreBlend 80, pace 0, fillers 100, structure 100; sessionsUsed 3 — pace 0 is correct: 25 wpm is below the 100–180 confident range).
+11. `grant-credits.js --holder candidate --email <user> 25` → balance 72; wallet ledger reads `admin_grant +25, practice_start −1 ×3, welcome_grant +50`.
+12. 4th `POST /cand/practice` → **429 `DAILY_CAP_REACHED`** ("the beta allows 3 completed mocks per day").
+
+**Owner confirmations (for sign-off in the final PR):** D4 pricing reuse (text 1 / voice 2) — CONFIRM; D11 cap 3/day + weekly manual ledger review — CONFIRM; welcome grant 50 — CONFIRM; consent text v1 copy — shipped as `PRACTICE_CONSENT_TEXT_V1` (review pending); library pack v1 content (3 packs × 4 questions) — shipped (content review is an owner task); monetization deviation (grants instead of freemium) — approved in writing pre-Phase-12.
+
+**Execution deviations from this plan's letter (all recorded):**
+- Progress/readiness endpoints live at `/cand/practice/progress` and `/cand/practice/readiness` (under the practice controller), not `/cand/progress` / `/cand/readiness` — same contract shapes, one route namespace.
+- Progress page ships an inline-SVG trend chart, not a skill radar (radar needs ≥3 independent axes of real data we don't credibly have yet).
+- Voice-mode practice UI deferred (text-only turn API this drop; already logged in the Branch 3 merge).
+- Resume v1 parsing is paste-text (binary/PDF parsing deferred; already logged in the Branch 4 merge).
+- One direct-to-main chore commit (`c23fb9e`, seed-script rehearsal extension) — recorded in `docs/STATE.md` §7; not repeated.
+
+
 ## Estimated totals
 
 | Branch | Days | Main risk |
