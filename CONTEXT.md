@@ -78,6 +78,12 @@ ZIOS — an AI interview platform (ZeTheta). Monorepo (pnpm workspaces):
   - Avoiding a CreditsModule ↔ CandidateAccountsModule DI cycle: the alert service queries `candidate_account` with direct SQL instead of injecting the module.
   - Practice `advance()` never stamped `completed_at` until Branch 5 — any new status transition that business logic later filters on must set its timestamp explicitly in `updateStatus` extras.
   - `grant-credits.js` needs `DATABASE_URL` inline (55432) when run from a shell whose `.env` is stale.
+- **Phase-12c gotchas (learned the hard way):**
+  - **LLM mock-race (root cause of "Questions from JD not working" in gemini mode):** the mock provider declared a higher `costPer1kOutput` than gemini flash, so the balanced tier's cost-descending order put mock first and gemini was never called — the UI got 201 with deterministic fixture junk in ~34 ms, no error anywhere. Fix: providers declare `fabricated` and the gateway never implicitly selects a fabricated provider while a real one is registered (`LLM_MODE=gemini` failures now surface as 503 `LLM_UNAVAILABLE`). Standing check before any gemini demo: `POST /generation/analyze` must take >~300 ms and return a profile **without** `raw.titleSource`; ~34 ms + `raw.*` = mock answered, routing regressed. Full matrix: `docs/ai-wiring-matrix.md`.
+  - **E2E/CI runs use `LLM_MODE=mock`** (hermetic, deterministic). Gemini mode is real-provider mode — never run the e2e suites against it expecting deterministic output.
+  - **`.env` duplicate variables are dangerous:** compose interpolation is last-wins but dotenv loading is first-wins — duplicate keys silently diverge between the container env and any dotenv consumer. Comment out the old value when adding a new one (we did this for the LiveKit dev → cloud switch).
+  - **LiveKit Cloud is the active dev/validation SFU** (`wss://zios-hckwyqlv.livekit.cloud` in root `.env` + `.env.host`); the compose dev server (`ws://localhost:7880`) is the fallback. Standing check: a voice-token response's `livekit.url` must point at the cloud host.
+  - Port-8000 clash trap: before starting the native orchestrator, `lsof -nP -iTCP:8000` — an env-less `uvicorn` left running answers health checks but lacks LiveKit/MinIO/STT env and fails sessions silently ( happened once; the detached start command lives in `services/ai-orchestrator/.env.host` workflow — `set -a; source .env.host` before `uv run uvicorn`).
 
 ## 6. MediaPipe / platform constraint
 
@@ -126,8 +132,7 @@ Recommended: single **x86** `e2-standard-4` VM running compose unchanged; `VIDEO
 ## 9. Known gaps (full table in docs/STATE.md §5)
 
 - Live LiveKit capture proof pending (unit/integration only — owner signed off; verify on next real voice/video session: `recordings/*.webm` in MinIO + analysis completes).
-- Real-provider validation pending (Gemini/GCP STT adapters ready; GCP STT validated live 2026-09-22; Gemini LLM adapter ready — wire keys when they arrive; TTS quality metrics unmeasurable on mocks).
-- Ascend beta deferrals: voice-mode practice UI (text-only this drop), resume PDF/binary parsing (paste-text v1), real-LLM prompt evals (mock fixtures only) — all recorded in `docs/STATE.md` §5.
+- Real-provider validation: Gemini LLM **validated live 2026-09-23** (JD analyze/propose in `LLM_MODE=gemini` against cloud key, real profiles; mock mode deterministic); GCP STT validated live 2026-09-22; TTS is mock-only by code (no env switch — recorded gap); real-LLM prompt evals still fixtures-only.
 - Phase 11 not started (pilot hardening, notifications, Razorpay behind flag, load test → `v0.2.0-pilot`); owner review of `docs/partner-integration-runbook.md` + `docs/ascend-beta-runbook.md` pending; no WhatsApp/SMS; no real Google OAuth; no production infra.
 
 ## 10. Immediate next steps (docs/STATE.md §8)
