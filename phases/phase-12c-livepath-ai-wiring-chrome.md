@@ -60,6 +60,8 @@ Add `docker-compose.override.yml` to `.gitignore` (it is host-specific; Linux CI
 `docker compose up -d api` (picks up `LIVEKIT_URL` now pointing at cloud). The local `livekit` dev container stays up but unused — harmless.
 **Gate:** `curl -s localhost:8000/healthz` (host orchestrator) → `{"status":"ok"}`; `curl -s localhost:3000/healthz` → ok; orchestrator `/documents/health/extraction` → pypdf.
 
+✅ **DONE 2026-09-23** — all gates green. `services/ai-orchestrator/.env.host` created (git-ignored, verified `git check-ignore`), host orchestrator started from it (`/healthz` ok, extraction=pypdf); `docker-compose.override.yml` created (git-ignored) with `ORCHESTRATOR_URL: http://host.docker.internal:8000` for api; verified inside the container: PID-1 env carries both the override and cloud `LIVEKIT_URL`, and `fetch(host.docker.internal:8000/healthz)` from the container succeeds; orchestrator container kept stopped (no api `depends_on`, so `up -d api` does not resurrect it). Note: api has NO `depends_on` — the plan's caution was verified unnecessary.
+
 ---
 
 ## Step 2 — Live-path re-validation (no code expected; evidence only)
@@ -71,6 +73,12 @@ Add `docker-compose.override.yml` to `.gitignore` (it is host-specific; Linux CI
 5. **Multimodal seed on native arm64:** re-run `node scripts/seed-multimodal-analysis-validation.js` — expect the 150s clip analysis in minutes (vs ~30 min emulated). Both jobs must complete schema-valid.
 **Gate:** recording lands in MinIO (`recordings/*.webm`); analysis artifacts in `analysis/{sessionId}/…`; jobs `completed`.
 **If video still fails:** capture browser console + orchestrator logs; do NOT proceed to Step 3 until the live path is green (everything downstream depends on it).
+
+✅ **DONE 2026-09-23** — all gates green:
+- **2.1 token wiring:** throwaway script (admin OTP → voice kit → invite → consent → `POST /sessions/:id/voice/token`) returned `200` with `livekit.url = wss://zios-hckwyqlv.livekit.cloud` — the full API → host-orchestrator → LiveKit-Cloud signing chain works.
+- **2.2/2.3 journeys:** candidate-web e2e **5/5 passed** (async-video, candidate journey, recovery, strict-video→integrity-flags, voice→fallback) — real chromium, cloud LiveKit URLs, host-orchestrator conductor WS. Also observed: a strict-video recording enqueued analysis automatically.
+- **2.4 failed-job classification:** two distinct causes. (a) The seed-time 11:14Z failures (`ORCHESTRATOR_UNREACHABLE … ENOTFOUND ai-orchestrator`) = the orchestrator container was stopped (docker DNS gone) — transient. (b) Failures at 13:10Z/13:34Z despite correct container env = **two stray host processes** (`node services/api/dist/main`, PIDs 90499/90500, running since 2:52PM) acting as analysis-queue workers with stale env, stealing jobs from Redis (same failure signature: one job failed while a twin completed 113ms later). Killed both; redrive of the failed job **completed** (`attempts=1`). This is the CONTEXT.md stray-process gotcha manifesting as queue theft.
+- **2.5 multimodal seed re-run:** `seed-multimodal-analysis-validation.js` **PASSED** — both jobs (`multimodal_feature_extraction`) completed on the native host orchestrator in < 4 min (vs ~30 min under emulation), schema-valid output with validity flags (`talk_ratio: INVALID(single_speaker_recording)` — honest, not fabricated).
 
 ---
 
@@ -101,6 +109,13 @@ Each run: click Generate, note success/failure + logs. Run B must pass (mock fix
 New doc `docs/ai-wiring-matrix.md`: every AI surface on one page — task name → module → provider + env var → frontend entry point → error path → how verified → status. Rows: `analyze_jd`, `draft_questions`, `resume_parse`, `ats_readiness_check`, `resume_jd_match`, `coaching-tips`, judge ensemble (evaluation), STT (`STT_ADAPTER` mock/gcp), TTS, practice JD kit, async-video transcription, document extraction. This is the permanent artifact so this bug class can't hide again.
 **Gate:** run B (mock) green end-to-end on every row's frontend path (JD propose → regenerate → publish; Ascend: JD mock, resume parse/ATS/match, coaching tips; voice/video conductor TTS + STT fallback); run A either green or its failure precisely classified with a filed fix.
 
+✅ **DONE 2026-09-23** — root cause found, fixed, and both matrix runs green:
+- **3.1 real error captured:** run A (gemini mode, valid cloud key) returned **201 in 34 ms** with a mock-shaped profile (`raw.titleSource`, heuristic skill chunks). No error in any log — silent fabricated output, exactly the bug class this phase exists to kill. Not the key (both `gemini-3.5-flash-lite` and `gemini-3.1-flash-lite` return 200 with the configured key, probed from the container), not the model name.
+- **Root cause (routing):** the mock provider declares a *higher* `costPer1kOutput` (0.002) than gemini flash (0.0003), and the balanced tier orders cost-descending → **mock answered every request first; gemini was never called** in gemini mode.
+- **Fix (commit `07681e9`):** `LlmProvider.fabricated?` contract flag; `MockLlmProvider` sets it; `selectProviders` never implicitly selects a fabricated provider while a real one is registered (explicit `policy.provider` and mock-only mode unchanged). Gemini failures now surface as `503 LLM_UNAVAILABLE`. Tests: fallback spec rewritten with a real secondary provider + two new specs (fabricated never implicitly selected; loud failure). Eval note in commit body.
+- **3.2 matrix re-run:** run A (gemini) → real gemini JD profile (clean skills/responsibilities, no `raw.*` marker); run B (`LLM_MODE=mock`, recreated api) → deterministic fixture 201. Run C not needed (no model-level errors). Suites: api llm-gateway + generation **29 passed / 2 skipped** (provider-verification skips).
+- **3.4 matrix doc:** `docs/ai-wiring-matrix.md` — all 10 gateway tasks + orchestrator STT/TTS/document-extraction surfaces mapped (module → provider/env → frontend entry → error path → verification → status); standing pre-demo checks included. Known gaps recorded: GCP STT adapter unvalidated; TTS mock-only by code (no env switch).
+
 ---
 
 ## Step 4 — Ascend chrome port (code, one concern)
@@ -112,6 +127,8 @@ New doc `docs/ai-wiring-matrix.md`: every AI surface on one page — task name �
 5. `docker compose build ascend-web && docker compose up -d ascend-web` then `pnpm --filter ascend-web test` + full `pnpm --filter ascend-web e2e`.
 **Gate:** 4/4 existing e2e green + new layout test green; visual check against the reference screenshots/side-by-side.
 
+✅ **DONE 2026-09-23** (commit `82d1017`) — the design system's `AppShell`/`Sidebar`/`Topbar` (already ported 1:1 from the reference `RecruiterLayout.jsx` for employer-web) now wrap every authenticated Ascend page via the new `AscendLayout`: sidebar nav Home/Practice/Progress/Resume/Wallet with active-route state, BrandLogo section, logout, wallet chip moved into the topbar `actions` slot. `Topbar`/`AppShell` gained optional `actions` + optional `orgName` (candidates have no org) — employer-web untouched (102/102). Immersive exceptions chrome-free: `/login`, `/onboarding`, `/practice/:sessionId/interview`, `/practice/:sessionId/consent`; `PageShell` kept for those pages (nothing deleted). Six chrome pages dropped their `PageShell` wrapper. New `AscendLayout.test.tsx`: nav renders, active state, `end`-match for Home, logout. **Gate:** ascend-web unit **38/38** (12 files), ascend e2e **4/4** (hermetic `LLM_MODE=mock`; api restored to gemini after), employer-web 102/102, tsc clean (ascend-web + ui). One pre-existing e2e bug fixed: `/score trend/i` matched both the Progress subtitle and the section header (strict-mode violation latent since `426b7f0`) → exact-text assertion.
+
 ---
 
 ## Step 5 — Docs close-out + merge
@@ -121,6 +138,8 @@ New doc `docs/ai-wiring-matrix.md`: every AI surface on one page — task name �
 - `docs/STATE.md`: infra row updated (orchestrator runs native on host for dev; cloud LiveKit in use); gap rows updated from Step 2 evidence.
 - This file: tick all gates with evidence. **No new phase tag** — follow-up on top of `phase-12-complete` + 12b, same as 12b.
 - `git push origin main phase-12c/livepath-wiring-chrome`.
+
+✅ **DONE 2026-09-23** — CONTEXT.md gained the Phase-12c gotcha block (LLM mock-race + standing gemini check, mock-mode-for-e2e convention, `.env` duplicate-variable hazard, LiveKit Cloud as active SFU + token-URL standing check, port-8000 clash trap); known-gaps lines updated (gemini validated live; closed 12b deferrals removed; TTS mock-only recorded). `docs/manual-validation-checklist.md`: Ascend chrome row in §5, token-URL row + pre-demo gemini-matrix row in §6. `docs/STATE.md`: infra note (native host orchestrator + cloud LiveKit + 5/5 token-path re-verify), §5 rows for 12c and real-provider validation. All Step 1–5 gates ticked with evidence above. Branch pushed and merged `--no-ff` to `main` (merge SHA recorded below).
 
 ## Commits (suggested sequence)
 1. `chore(dev): host-orchestrator env template + compose override + gitignore` (non-secret files only — `.env.host` stays local)

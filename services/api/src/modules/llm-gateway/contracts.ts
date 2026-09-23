@@ -58,6 +58,13 @@ export interface LlmProvider {
   readonly defaultModel: string;
   readonly costPer1kInput: number;
   readonly costPer1kOutput: number;
+  /**
+   * True for deterministic stub providers whose output is fabricated locally
+   * (no external model call). The gateway never selects a fabricated provider
+   * implicitly while a real provider is registered — fabricated output must be
+   * opt-in (mock-only mode) or explicitly requested via policy.provider.
+   */
+  readonly fabricated?: boolean;
   complete(input: {
     task: string;
     promptText: string;

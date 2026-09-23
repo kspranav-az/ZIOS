@@ -75,7 +75,7 @@ test('candidate signs up, runs a text practice mock and gets a coaching report',
 
   // --- Progress page: completed mock in history + trend, report link ---
   await page.goto('/progress');
-  await expect(page.getByText(/score trend/i)).toBeVisible();
+  await expect(page.getByText('Score trend', { exact: true })).toBeVisible();
   await expect(page.getByText(/HR Screening/i).first()).toBeVisible();
   await expect(page.getByRole('link', { name: /report/i })).toBeVisible();
 

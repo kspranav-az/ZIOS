@@ -1,5 +1,6 @@
 import { createBrowserRouter, Navigate, Outlet, RouterProvider } from 'react-router-dom';
 import { getToken } from './auth';
+import { AscendLayout } from './components/AscendLayout';
 import { HomePage } from './pages/HomePage';
 import { LoginPage } from './pages/LoginPage';
 import { OnboardingPage } from './pages/OnboardingPage';
@@ -23,15 +24,22 @@ const router = createBrowserRouter([
   {
     element: <RequireAuth />,
     children: [
-      { path: '/', element: <HomePage /> },
+      {
+        // Chrome pages: sidebar + topbar layout. Immersive flows (onboarding,
+        // consent, interview) stay chrome-free below.
+        element: <AscendLayout />,
+        children: [
+          { path: '/', element: <HomePage /> },
+          { path: '/practice', element: <PracticeSetupPage /> },
+          { path: '/resume', element: <ResumePage /> },
+          { path: '/progress', element: <ProgressPage /> },
+          { path: '/wallet', element: <WalletPage /> },
+          { path: '/practice/:sessionId/report', element: <PracticeReportPage /> },
+        ],
+      },
       { path: '/onboarding', element: <OnboardingPage /> },
-      { path: '/practice', element: <PracticeSetupPage /> },
-      { path: '/resume', element: <ResumePage /> },
-      { path: '/progress', element: <ProgressPage /> },
-      { path: '/wallet', element: <WalletPage /> },
       { path: '/practice/:sessionId/consent', element: <PracticeConsentPage /> },
       { path: '/practice/:sessionId/interview', element: <PracticeInterviewPage /> },
-      { path: '/practice/:sessionId/report', element: <PracticeReportPage /> },
     ],
   },
   { path: '*', element: <Navigate to="/" replace /> },

@@ -122,6 +122,7 @@ Each script prints the exact URLs and credentials to open.
 
 - [ ] `node scripts/seed-ascend-sandbox.js` — full dress rehearsal **through the real OTP flow** (validates candidate auth too); it prints credentials + curl commands to replay each step
 - [ ] OTP signup → onboarding (name, target role) → home: wallet chip shows the **50-credit welcome grant**, readiness card renders
+- [ ] **Chrome:** sidebar (Home/Practice/Progress/Resume/Wallet, active-route state) + topbar with wallet chip on every chrome page; consent/interview flows stay fullscreen chrome-free
 - [ ] Practice setup: library pack + JD flow; **Text 1 credit / Voice 2 credits** pricing visible; mode selection honored (voice selectable, not hardcoded)
 - [ ] Consent gate enforced (X8 applies to practice too)
 - [ ] **Text mock:** turn loop → wrap-up → judged report with **coach's corner**, every tip citing a transcript span
@@ -143,6 +144,8 @@ Each script prints the exact URLs and credentials to open.
 - [ ] **Mailpit:** all expected emails — OTP, low-balance alert, invite, reschedule — no duplicates
 - [ ] **Restart resilience:** `docker compose restart api` → in-flight queue jobs recover (DLQ, not loss)
 - [ ] **Erasure:** delete a resume → MinIO object gone; delete candidate data → schema-verified erasure SQL from the beta runbook
+- [ ] **LiveKit token URL:** a voice-token response's `livekit.url` points at the cloud SFU (`wss://zios-hckwyqlv.livekit.cloud`), not the dev server
+- [ ] **Before any gemini-mode demo:** run the Step 3.2 matrix from [phase-12c](../phases/phase-12c-livepath-ai-wiring-chrome.md) — `POST /generation/analyze` returns a real AI profile (>~300 ms, no `raw.titleSource`); standing checks in [ai-wiring-matrix](./ai-wiring-matrix.md)
 
 ---
 

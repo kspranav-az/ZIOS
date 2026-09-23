@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Avatar } from '../Avatar';
 import { Icon } from '../Icon';
 
@@ -11,12 +11,16 @@ export interface TopbarUser {
 
 export interface TopbarProps {
   user: TopbarUser;
-  /** Current organization name, shown in the user block and menu. */
-  orgName: string;
+  /** Current organization name, shown in the user block and menu. Omit for
+   *  org-less apps (e.g. the candidate-facing Ascend shell). */
+  orgName?: string;
   search: string;
   onSearchChange: (value: string) => void;
   onMenuOpen: () => void;
   onLogout: () => void;
+  /** Optional trailing slot rendered before the notifications icon —
+   *  Ascend uses it for the practice-credits wallet chip. */
+  actions?: ReactNode;
 }
 
 /**
@@ -32,6 +36,7 @@ export function Topbar({
   onSearchChange,
   onMenuOpen,
   onLogout,
+  actions,
 }: TopbarProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -82,6 +87,7 @@ export function Topbar({
       </div>
 
       <div className="flex items-center gap-2 sm:gap-4">
+        {actions}
         <button
           type="button"
           aria-label="Notifications"
@@ -112,7 +118,7 @@ export function Topbar({
                 {user.name}
               </span>
               <span className="block text-[10px] text-on-surface-variant">
-                {user.roleLabel} · {orgName}
+                {orgName ? `${user.roleLabel} · ${orgName}` : user.roleLabel}
               </span>
             </span>
             <Avatar
@@ -132,7 +138,7 @@ export function Topbar({
                 <p className="font-label-bold text-label-bold text-primary">{user.name}</p>
                 <p className="text-xs text-on-surface-variant mt-0.5">{user.email}</p>
                 <p className="text-xs text-on-surface-variant mt-1">
-                  {user.roleLabel} · {orgName}
+                  {orgName ? `${user.roleLabel} · ${orgName}` : user.roleLabel}
                 </p>
               </div>
               <button
