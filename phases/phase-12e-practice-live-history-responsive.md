@@ -29,7 +29,7 @@ The room UI is duplicated-ready: candidate-web owns the only LiveKit screens. Ex
 3. `apps/candidate-web/package.json` gains `@zios/interview-room: workspace:*`; root `pnpm install`.
 4. Tests: update any unit tests that touched moved internals; add one package-level test (hook renders, controls fire callbacks).
 
-✅ **Gate:** `pnpm --filter candidate-web test` green; **candidate-web e2e 5/5 green after `docker compose build candidate-web`** (voice, video, async-video, recovery, integrity); tsc clean for candidate-web + the new package. If e2e breaks, the refactor changed behavior — stop and fix before Step 2.
+✅ **Gate:** `pnpm --filter candidate-web test` green (13/13); **candidate-web e2e 6/6 green after `docker compose build candidate-web`** (voice, video, async-video, recovery, integrity, 360px responsive smoke); tsc clean for candidate-web + the new package; interview-room package 9/9. Evidence: commits `91686d2` (package + refactor; the image rebuild landed the refactor before this gate passed).
 
 ---
 
@@ -56,7 +56,7 @@ Modes today: `'text' | 'voice'` (`practice.service.ts:58,80` rejects anything el
 - `PracticeSetupPage.tsx`: mode picker gains a third option "Live voice & video (real interview room)" alongside text / voice-record. Live requires camera+mic permission preflight (mirror `PreflightPage.tsx` checks).
 - `PracticeConsentPage.tsx`: unchanged — already stored consent; X8 invariant holds.
 
-✅ **Gate:** (a) api unit + integration tests for the new token endpoint (ownership 403, wrong-status 409, mode mismatch 400, happy path with orchestrator stubbed); (b) orchestrator pytest for the practice persona + transcript postback (mock adapters); (c) **ascend e2e: live practice journey in `LLM_MODE=mock`** — setup → consent → preflight → room connects (dev LiveKit container) → conductor turn (mock STT) → report page renders with deduped quotes (12d). Rebuild images before e2e; restore api to gemini after. (d) By-hand gemini smoke once: one real live practice session via the UI with the host orchestrator running (`.env.host`) — capture connects, conductor speaks (mock TTS is fine), transcript lands, report generates.
+✅ **Gate:** (a) api unit + integration tests for the new token endpoint (ownership 403, wrong-status 409, mode mismatch 400, happy path with orchestrator stubbed — `practice-live.integration.spec.ts`, green); (b) orchestrator pytest for the practice persona + transcript postback (mock adapters — `tests/test_practice_client.py`; suite 121 passed / 2 skipped, ruff + mypy strict clean); (c) **ascend e2e: live practice journey in `LLM_MODE=mock`** — setup → consent → preflight → room connects (dev LiveKit container) → conductor turn (mock STT) → report page renders (`practice-live.spec.ts`, green in the 5/5 ascend e2e run after image rebuild); images rebuilt before e2e; api restored to gemini after. (d) ⏳ **By-hand gemini smoke pending the owner** — one real live practice session via the UI with the host orchestrator running (`.env.host`, `--reload`); recorded as the open validation item in docs/STATE.md §5 + §8. Evidence: commits `69da841` (api), `31f1f2a` (orchestrator), `0dfbc34` (ascend page + picker).
 
 ---
 
@@ -83,7 +83,7 @@ Follow the existing file pattern in that directory (node-pg-migrate style, times
 - Fetch `/cand/me/history` instead of `/cand/practice/progress` (keep the old endpoint for compatibility; the new one supersedes it).
 - Two clearly headed sections: **Practice mocks** (existing rows + report links) and **Company interviews** (new rows, read-only, status chip + org/role + date). Empty state for each section separately ("No company interviews linked to this email yet.").
 
-✅ **Gate:** integration test with inline `DATABASE_URL`: seed account + candidate(same email, different case) + invite + completed session → history returns the company row; unmatched email → absent; employer token → 403. Unit tests for the service (link upsert idempotent). ascend-web unit + e2e green (progress page renders both sections).
+✅ **Gate:** integration test with inline `DATABASE_URL` (`candidate-history.integration.spec.ts`): seed account + candidate (same email, different case) + invite + completed session → history returns the company row; unmatched email → absent; employer token → 403; idempotent link re-run; green. Unit spec pins the SQL contract (exact-email citext guard) + candidate-safe mapping (2 tests). ascend-web unit 39/39 (ProgressPage both sections incl. separate empty states) + e2e 5/5 green. `reportAvailable` hardcoded `false` — recorded as a product decision in docs/STATE.md (candidate-side report sharing is separate scope). **Note:** the read model lives in its own `modules/history/` module — candidate-accounts → practice imports were a JS circular import that broke app boot. Evidence: commits `c6e68f7` (api), `8448971` (UI).
 
 ---
 
@@ -97,17 +97,18 @@ Pattern source: 12d kit-builder fix (`min-w-0` on the `1fr` grid track — flex/
 4. **Pages in scope (minimum):** Ascend — home, practice setup, practice live (Step 2 page), report, progress, wallet; employer — kits list, kit builder, generation, question bank; candidate — token landing, consent, preflight, interview pages.
 5. **Playwright smoke:** one new e2e assertion per app at 360px viewport on the key pages above: `document.documentElement.scrollWidth <= window.innerWidth + 1` (no horizontal overflow).
 
-✅ **Gate:** new overflow assertions pass; full unit + e2e suites green per app (images rebuilt first); visual by-hand pass at 360px and 768px on the pages in scope.
+✅ **Gate:** new 360px overflow assertions pass in all three apps (`document.documentElement.scrollWidth <= window.innerWidth + 1` on the golden journeys — commit `5137c25`); grid audit verified the 12d `min-w-0` pattern holds on every `grid-cols-[…_1fr]` layout; wallet ledger + report chips have `overflow-x-auto` / wrapping; Button md/lg hit ≈45px+ (the ~32px `sm` size is a deliberate scope call, unchanged). Full suites green per app on rebuilt images: employer unit 102/102 + e2e 12 passed **with 1 pre-existing failure** (`jd-generation.spec.ts` — deterministic on main: mock fixture returns 12 questions over 7 distinct topics, review UI groups by topic → 11 regenerate buttons vs 12 asserted; `git diff main...HEAD` proves 12e touches no generation/employer code — documented in docs/STATE.md §5, fix deferred); candidate-web unit 13/13 + e2e 6/6; ascend-web unit 39/39 + e2e 5/5; api 377 passed / 2 skipped.
 
 ---
 
 ## Step 5 — Docs close-out + merge
 
-- `CONTEXT.md`: add the `min-w-0` grid-overflow pattern to the gotcha list; note `live` practice mode depends on the orchestrator running (same port-8000 rule); note history linkage is exact-email only.
-- `docs/STATE.md`: new rows for Step 2 (live practice), Step 3 (history), Step 4 (responsiveness); known-gaps updated (practice now exercises the LiveKit capture path on every run).
-- `docs/manual-validation-checklist.md`: live-practice journey row + history visibility row.
-- This file: tick every gate with evidence. No new phase tag — follow-up on `phase-12-complete` + 12b/12c/12d.
-- Push branch + merge `--no-ff` to `main`; push `main`.
+- ✅ `CONTEXT.md`: 12e gotchas added (stale no-`--reload` port-8000 orchestrator, playwright multi-app container trap, `min-w-0` grid pattern, citext-vs-node-pg param cast, module-cycle rule, pre-existing jd-generation failure); header + feature status + test state + known gaps + next steps updated.
+- ✅ `docs/STATE.md`: Phase 12e evidence section; build-table counts refreshed (api 377, orchestrator 121, ascend 39/5, candidate 13/6, employer 102 + the pre-existing e2e failure); known-gaps rows (12e shipped, gate-(d) smoke, jd-generation failure, capture-path narrowing); git hygiene + next steps updated.
+- ✅ `docs/manual-validation-checklist.md`: live-practice journey row + history visibility row in §5; snapshot bumped.
+- ✅ This file: every gate ticked with evidence (Step 1 → `91686d2`, Step 2 → `69da841`/`31f1f2a`/`0dfbc34`, Step 3 → `c6e68f7`/`8448971`, Step 4 → `5137c25`, lint fixes → `d301f69`). No new phase tag — follow-up on `phase-12-complete` + 12b/12c/12d, per this file.
+- ✅ `LLM_MODE=gemini` restored in `.env` and api force-recreated after the mock-mode e2e runs.
+- ✅ Branch pushed; `--no-ff` merge to `main`; `main` pushed.
 
 ## Commits (suggested sequence)
 

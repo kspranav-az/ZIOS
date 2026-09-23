@@ -4,7 +4,7 @@
 
 **Rule of the checklist:** register from scratch wherever the *journey* is the thing being validated (auth, consent, state machine, live rooms). Seed wherever the *resulting state* is what matters (completed interviews, reports, analysis artifacts, DLQ rows). Every seeder bypasses OTP, consent, and the live transition — never let a seed substitute for the invariant you are proving (X8, evidence-linked scoring, no auto-reject).
 
-**Snapshot:** 2026-09-23 · `main` @ Phases 00–10 + 14 + 12 + 12b complete.
+**Snapshot:** 2026-09-24 · `main` @ Phases 00–10 + 14 + 12 + 12b + 12c/12d + 12e complete.
 
 ---
 
@@ -127,6 +127,8 @@ Each script prints the exact URLs and credentials to open.
 - [ ] Consent gate enforced (X8 applies to practice too)
 - [ ] **Text mock:** turn loop → wrap-up → judged report with **coach's corner**, every tip citing a transcript span
 - [ ] **Voice mock:** record → stop → transcript lands in the editable box → correct it → submit; report completes; ledger shows exactly `practice_start:-2` (50 → 48)
+- [ ] **Live mock (12e):** mode picker shows **Live voice & video** → consent → preflight (cam+mic) → real LiveKit room joins, AI conductor speaks, camera/mic controls work → leave → report renders with deduped quotes. Requires the orchestrator process up (port-8000 rule in [CONTEXT](../CONTEXT.md) §5)
+- [ ] **History (12e):** Progress page shows **Practice mocks** and **Company interviews** sections; a completed company interview under the same email (any case) appears in the second section; `reportAvailable` stays `false` (reports not shared to the candidate side by design)
 - [ ] **3/day cap:** fourth mock in a day → 429 `DAILY_CAP_REACHED`
 - [ ] **Progress page:** history, pace/filler trend chart, streak
 - [ ] **Resume intelligence:** paste text → parsed profile + ATS card; **upload a PDF** (`.txt`/`.pdf` picker) → extraction → same cards without pasting
