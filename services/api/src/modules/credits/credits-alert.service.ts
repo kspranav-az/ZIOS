@@ -35,11 +35,29 @@ export class CreditsAlertService {
       if (acquired !== 'OK') return;
 
       if (account.holderType === 'candidate') {
-        // TODO(phase-12 branch 5): candidate_account lands in branch 1; wire
-        // the candidate's email here once the table exists.
-        this.logger.warn(
-          `low-balance alert for candidate account ${accountId} skipped: candidate email lookup not wired yet`,
+        // Candidate accounts: email lives in candidate_account (queried
+        // directly to avoid a CreditsModule ↔ CandidateAccountsModule cycle).
+        const candidates = await this.db.query(
+          `SELECT email FROM candidate_account WHERE id = $1`,
+          [account.holderId],
         );
+        const to = (candidates.rows[0] as { email: string } | undefined)?.email;
+        if (!to) {
+          this.logger.warn(
+            `low-balance alert for candidate account ${accountId} skipped: no candidate_account row`,
+          );
+          return;
+        }
+        await this.email.send({
+          to,
+          subject: 'Ascend: your practice credits are running low',
+          text:
+            `Your Ascend practice credit balance is ${balanceAfter}, below the ` +
+            `alert threshold of ${account.lowBalanceThreshold}. Mocks may fail to start ` +
+            `once the balance reaches zero. During the closed beta, reply to this email ` +
+            `and we will top you up.\n\n` +
+            `(This alert is sent at most once per 24 hours.)`,
+        });
         return;
       }
 

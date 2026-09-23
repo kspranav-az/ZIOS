@@ -10,6 +10,8 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import type {
+  CandidateProgressResponse,
+  CandidateReadinessResponse,
   PracticeConsentBody,
   PracticeCreateBody,
   PracticeCreateResponse,
@@ -80,6 +82,18 @@ export class PracticeController {
       resumeText,
     });
     return { session, recoveryToken };
+  }
+
+  /** Practice history + pace/filler trend series + streak (D14). */
+  @Get('progress')
+  async progress(@CurrentCandidate() auth: CandidateAuthContext): Promise<CandidateProgressResponse> {
+    return this.evaluation.getProgress(auth.account.id);
+  }
+
+  /** Readiness score with formula-versioned component breakdown (D15). */
+  @Get('readiness')
+  async readiness(@CurrentCandidate() auth: CandidateAuthContext): Promise<CandidateReadinessResponse> {
+    return this.evaluation.getReadiness(auth.account.id);
   }
 
   @Get(':id')

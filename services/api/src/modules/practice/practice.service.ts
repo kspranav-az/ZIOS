@@ -12,18 +12,18 @@ import type {
 import { TokenService } from '@/common/tokens';
 import { ApiException } from '@/common/errors';
 import { DatabaseService, type Queryable } from '@/modules/database';
-import { CreditsService, assertCanStart, priceForKind } from '@/modules/credits';
+import { CreditsService, CreditsAlertService, assertCanStart, priceForKind } from '@/modules/credits';
 import { INTERVIEWER_AI, type InterviewerAi } from '@/modules/sessions';
 import { transition } from '@/modules/sessions';
 import { LlmGateway } from '@/modules/llm-gateway';
 import { PRACTICE_CONSENT_TEXT_VERSION } from './consent-text';
 import { findPack } from './library';
+import { PRACTICE_DAILY_COMPLETION_CAP } from './readiness';
 import { PracticeEvaluationService } from './practice-evaluation.service';
 import { PracticeSessionRepository, type PracticeSessionRecord } from './practice-session.repository';
 import { PracticeTranscriptRepository } from './practice-transcript.repository';
 
-/** D11 COGS guardrail (beta): max completed mocks per account per day. */
-export const PRACTICE_DAILY_COMPLETION_CAP = 3;
+export { PRACTICE_DAILY_COMPLETION_CAP };
 
 /**
  * Practice session lifecycle (Phase 12, D5): create → consent → preflight →
@@ -40,6 +40,7 @@ export class PracticeService {
     private readonly sessions: PracticeSessionRepository,
     private readonly transcript: PracticeTranscriptRepository,
     private readonly credits: CreditsService,
+    private readonly creditsAlert: CreditsAlertService,
     private readonly evaluation: PracticeEvaluationService,
     @Inject(INTERVIEWER_AI) private readonly conductor: InterviewerAi,
     private readonly llmGateway: LlmGateway,
@@ -175,12 +176,20 @@ export class PracticeService {
     sessionId: string,
     rawRecoveryToken: string,
   ): Promise<{ session: PracticeSessionRecord; turn: SessionTurnResponse }> {
-    const result = await this.db.transaction(async (q) => {
+    const result: {
+      session: PracticeSessionRecord;
+      turn: SessionTurnResponse;
+      balanceAfter: number | null;
+    } = await this.db.transaction(async (q): Promise<{
+      session: PracticeSessionRecord;
+      turn: SessionTurnResponse;
+      balanceAfter: number | null;
+    }> => {
       let session = await this.loadByRecoveryToken(sessionId, rawRecoveryToken, q);
       this.assertOwned(session, accountId);
 
       if (session.status === 'live') {
-        return this.buildNextTurn(q, session);
+        return { ...(await this.buildNextTurn(q, session)), balanceAfter: null };
       }
       // X8 gate runs before the state check so a never-consented session
       // reports the actionable error: no consent artifact → no live
@@ -203,7 +212,7 @@ export class PracticeService {
       // Live transition = charge point (same transaction as the debit).
       const price = priceForKind(session.mode as PracticeMode);
       await assertCanStart((id) => this.credits.getBalance(id, q), session.creditAccountId, price);
-      await this.credits.debit(
+      const charge = await this.credits.debit(
         session.creditAccountId,
         price,
         'practice_start',
@@ -211,8 +220,13 @@ export class PracticeService {
         { metadata: { mode: session.mode, source: session.source } },
       );
       session = await this.advance(q, session, 'live', { startedAt: new Date() });
-      return this.buildNextTurn(q, session);
+      return { ...(await this.buildNextTurn(q, session)), balanceAfter: charge.balanceAfter };
     });
+    const balanceAfter = result.balanceAfter;
+    if (balanceAfter !== null) {
+      // Fire-and-forget alert (≤1/24h watermark inside the service).
+      await this.creditsAlert.maybeAlertLowBalance(result.session.creditAccountId, balanceAfter);
+    }
     if (result.session.status === 'completed') {
       await this.evaluation.evaluateSession(result.session.id);
     }
@@ -344,10 +358,14 @@ export class PracticeService {
     q: Queryable,
     session: PracticeSessionRecord,
     to: string,
-    extras?: { startedAt?: Date },
+    extras?: { startedAt?: Date; completedAt?: Date },
   ): Promise<PracticeSessionRecord> {
     transition(session.status as InterviewSession['status'], to as InterviewSession['status']);
-    const updated = await this.sessions.updateStatus(session.id, to, q, extras);
+    const stamp =
+      to === 'completed' && !extras?.completedAt
+        ? { ...extras, completedAt: new Date() }
+        : extras;
+    const updated = await this.sessions.updateStatus(session.id, to, q, stamp);
     if (!updated) {
       throw new ApiException(404, 'SESSION_NOT_FOUND', 'practice session not found');
     }

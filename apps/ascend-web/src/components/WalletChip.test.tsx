@@ -17,7 +17,11 @@ describe('WalletChip', () => {
   });
 
   it('shows the live credit balance from /cand/wallet', async () => {
-    vi.mocked(fetchWallet).mockResolvedValue({ balance: 49, lowBalanceThreshold: 5 });
+    vi.mocked(fetchWallet).mockResolvedValue({
+      balance: 49,
+      lowBalanceThreshold: 5,
+      ledger: [],
+    });
     render(<WalletChip />);
     expect(await screen.findByTestId('wallet-balance')).toHaveTextContent('49');
   });

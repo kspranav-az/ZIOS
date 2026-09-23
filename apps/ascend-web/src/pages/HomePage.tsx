@@ -1,13 +1,28 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Card } from '@zios/ui';
-import { ApiErrorResponse, fetchMe, logout, type CandidateAccount } from '../api';
+import {
+  ApiErrorResponse,
+  fetchMe,
+  fetchReadiness,
+  logout,
+  type CandidateAccount,
+  type CandidateReadinessResponse,
+} from '../api';
 import { clearToken } from '../auth';
 import { PageShell } from '../components/PageShell';
+
+const READINESS_LABELS: Record<string, string> = {
+  scoreBlend: 'Answer quality',
+  paceScore: 'Pace',
+  fillerScore: 'Filler words',
+  structureScore: 'Structure',
+};
 
 export function HomePage() {
   const navigate = useNavigate();
   const [account, setAccount] = useState<CandidateAccount | null>(null);
+  const [readiness, setReadiness] = useState<CandidateReadinessResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -20,6 +35,11 @@ export function HomePage() {
           return;
         }
         setError(err instanceof Error ? err.message : 'Could not load your profile.');
+      });
+    fetchReadiness()
+      .then(setReadiness)
+      .catch(() => {
+        // Readiness is a bonus tile; a failure here must not block the home page.
       });
   }, [navigate]);
 
@@ -51,6 +71,44 @@ export function HomePage() {
           <Button variant="outline" className="mt-3 w-full" onClick={() => navigate('/resume')}>
             Resume intelligence
           </Button>
+          <Button variant="outline" className="mt-3 w-full" onClick={() => navigate('/progress')}>
+            Progress
+          </Button>
+          <Button variant="outline" className="mt-3 w-full" onClick={() => navigate('/wallet')}>
+            Wallet
+          </Button>
+
+          {readiness && (
+            <Card padding="md" radius="xl" className="mt-6 bg-surface-container-low">
+              <p className="text-title-md text-on-surface">Readiness</p>
+              {readiness.readiness === null ? (
+                <p className="mt-2 text-body-md text-on-surface-variant">
+                  Run a mock to get your first readiness score.
+                </p>
+              ) : (
+                <>
+                  <p className="mt-2 text-headline-md text-on-surface">
+                    {readiness.readiness}
+                    <span className="text-body-md text-on-surface-variant"> / 100</span>
+                  </p>
+                  <ul className="mt-3 space-y-2">
+                    {Object.entries(readiness.components ?? {}).map(([key, value]) => (
+                      <li key={key} className="flex items-center justify-between text-body-sm">
+                        <span className="text-on-surface-variant">
+                          {READINESS_LABELS[key] ?? key}
+                        </span>
+                        <span className="text-on-surface">{value}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-3 text-body-sm text-on-surface-variant">
+                    From your last {readiness.sessionsUsed} judged mock
+                    {readiness.sessionsUsed === 1 ? '' : 's'} · {readiness.formulaVersion}
+                  </p>
+                </>
+              )}
+            </Card>
+          )}
           {error && (
             <p className="mt-4 rounded-lg bg-error-container p-3 text-body-md text-on-error-container">
               {error}

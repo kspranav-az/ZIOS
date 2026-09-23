@@ -1,4 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
+import type { CommunicationMetrics } from '@zios/shared-types';
 import { JUDGE_PORT, computeCommunicationMetrics, type JudgePort } from '@/modules/evaluation';
 import { LlmGateway } from '@/modules/llm-gateway';
 import { DatabaseService } from '@/modules/database';
@@ -7,6 +8,12 @@ import {
   type CoachingTip,
   type PracticeReportRecord,
 } from './practice-report.repository';
+import {
+  computeReadiness,
+  computeStreak,
+  PRACTICE_DAILY_COMPLETION_CAP,
+  READINESS_WINDOW,
+} from './readiness';
 import { PracticeSessionRepository } from './practice-session.repository';
 import { PracticeTranscriptRepository } from './practice-transcript.repository';
 
@@ -210,5 +217,44 @@ export class PracticeEvaluationService {
       transcript,
       coachingTips: report.coachingTips ?? [],
     };
+  }
+
+  /** Progress view: session history, per-metric trends, and the practice streak. */
+  async getProgress(accountId: string) {
+    const history = await this.reports.listHistoryByAccount(accountId);
+    const completed = history
+      .filter((row) => row.status === 'completed' && row.completedAt !== null)
+      .sort((a, b) => (a.completedAt ?? '').localeCompare(b.completedAt ?? ''));
+    const details = await Promise.all(
+      completed.map(async (row) => {
+        const report = await this.reports.findBySessionId(row.id);
+        return {
+          completedAt: row.completedAt as string,
+          overallRecommendation: row.overallRecommendation,
+          paceWpm: report?.communicationMetrics?.paceWpm ?? null,
+          fillerCount: report?.communicationMetrics?.fillerCount ?? null,
+        };
+      }),
+    );
+    const streak = computeStreak(
+      completed.map((row) => (row.completedAt as string).slice(0, 10)),
+    );
+    return {
+      sessions: history,
+      trends: details,
+      streak: { current: streak },
+      dailyCap: PRACTICE_DAILY_COMPLETION_CAP,
+    };
+  }
+
+  /** Readiness view: deterministic formula over the last judged sessions. */
+  async getReadiness(accountId: string) {
+    const inputs = await this.reports.listReadinessInputs(accountId, READINESS_WINDOW);
+    return computeReadiness(
+      inputs.map((row) => ({
+        overallRecommendation: row.overallRecommendation,
+        communicationMetrics: row.communicationMetrics as CommunicationMetrics | null,
+      })),
+    );
   }
 }

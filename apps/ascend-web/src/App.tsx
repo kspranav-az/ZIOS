@@ -7,7 +7,9 @@ import { PracticeConsentPage } from './pages/PracticeConsentPage';
 import { PracticeInterviewPage } from './pages/PracticeInterviewPage';
 import { PracticeReportPage } from './pages/PracticeReportPage';
 import { PracticeSetupPage } from './pages/PracticeSetupPage';
+import { ProgressPage } from './pages/ProgressPage';
 import { ResumePage } from './pages/ResumePage';
+import { WalletPage } from './pages/WalletPage';
 
 function RequireAuth() {
   if (!getToken()) {
@@ -25,6 +27,8 @@ const router = createBrowserRouter([
       { path: '/onboarding', element: <OnboardingPage /> },
       { path: '/practice', element: <PracticeSetupPage /> },
       { path: '/resume', element: <ResumePage /> },
+      { path: '/progress', element: <ProgressPage /> },
+      { path: '/wallet', element: <WalletPage /> },
       { path: '/practice/:sessionId/consent', element: <PracticeConsentPage /> },
       { path: '/practice/:sessionId/interview', element: <PracticeInterviewPage /> },
       { path: '/practice/:sessionId/report', element: <PracticeReportPage /> },
