@@ -186,15 +186,23 @@ export class LlmGateway {
       (a, b) => a.costPer1kOutput - b.costPer1kOutput,
     );
 
+    // Never implicitly select a fabricated (deterministic stub) provider while
+    // a real provider is registered: fabricated output must only be served
+    // when it is the only option (mock mode) or explicitly named via
+    // policy.provider. This is what keeps LLM_MODE=gemini honest — a gemini
+    // failure must surface as an error, not as silently fabricated output.
+    const hasRealProvider = all.some((p) => !p.fabricated);
+    const eligible = hasRealProvider ? all.filter((p) => !p.fabricated) : all;
+
     const tier = policy.tier ?? 'balanced';
-    let ordered = all;
+    let ordered = eligible;
     if (tier === 'quality') {
-      ordered = all.slice().reverse();
+      ordered = eligible.slice().reverse();
     } else if (tier === 'cheap') {
-      ordered = all;
+      ordered = eligible;
     } else {
       // balanced: quality first unless a budget ceiling forces cheap.
-      ordered = all.slice().reverse();
+      ordered = eligible.slice().reverse();
     }
 
     const budgetCeiling = policy.budgetCeiling;

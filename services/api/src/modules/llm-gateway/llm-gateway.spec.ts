@@ -80,20 +80,98 @@ Required skills:
     expect(second.parsed).toEqual(first.parsed);
   });
 
-  it('falls back to a secondary provider when the primary fails', async () => {
+  it('falls back to a secondary real provider when the primary fails', async () => {
     const registry = new PromptRegistry();
     const guardrails = new Guardrails();
     const gateway = new LlmGateway(registry, guardrails);
     gateway.registerProvider(new FailingLlmProvider('primary'));
-    gateway.registerProvider(new MockLlmProvider());
+    gateway.registerProvider({
+      name: 'secondary',
+      defaultModel: 'secondary-model',
+      costPer1kInput: 0,
+      costPer1kOutput: 0,
+      async complete() {
+        return {
+          text: JSON.stringify({
+            title: 'Junior Frontend Engineer',
+            seniority: 'junior',
+            skills: ['React'],
+            niceToHaveSkills: [],
+            responsibilities: [],
+            tools: [],
+            languages: [],
+          }),
+          tokensIn: 1,
+          tokensOut: 1,
+        };
+      },
+    });
 
     const output = await gateway.complete({
       task: 'analyze_jd',
       variables: { jdText: 'Junior Frontend Engineer\n\nSkills: React' },
       policy: { provider: 'primary', fallback: true },
     });
-    expect(output.provider).toBe('mock');
+    expect(output.provider).toBe('secondary');
     expect(output.parsed).toMatchObject({ title: 'Junior Frontend Engineer' });
+  });
+
+  it('never implicitly selects a fabricated provider while a real one is registered', async () => {
+    const registry = new PromptRegistry();
+    const guardrails = new Guardrails();
+    const gateway = new LlmGateway(registry, guardrails);
+    // Deliberately cheaper than the mock so that, without the fabricated
+    // guard, cost-based 'balanced' ordering would pick the mock first
+    // (this is the production gemini-mode wiring that regressed).
+    gateway.registerProvider({
+      name: 'real',
+      defaultModel: 'real-model',
+      costPer1kInput: 0.00001,
+      costPer1kOutput: 0.00001,
+      async complete() {
+        return {
+          text: JSON.stringify({
+            title: 'Real Provider Title',
+            seniority: 'senior',
+            skills: ['Go'],
+            niceToHaveSkills: [],
+            responsibilities: [],
+            tools: [],
+            languages: [],
+          }),
+          tokensIn: 1,
+          tokensOut: 1,
+        };
+      },
+    });
+    gateway.registerProvider(new MockLlmProvider());
+
+    const output = await gateway.complete({
+      task: 'analyze_jd',
+      variables: { jdText: 'Backend Engineer\n\nSkills: Go' },
+    });
+    expect(output.provider).toBe('real');
+    expect(output.parsed).toMatchObject({ title: 'Real Provider Title' });
+  });
+
+  it('fails loudly instead of serving fabricated output when the real provider fails', async () => {
+    const registry = new PromptRegistry();
+    const guardrails = new Guardrails();
+    const gateway = new LlmGateway(registry, guardrails);
+    gateway.registerProvider(new FailingLlmProvider('real-fails'));
+    gateway.registerProvider(new MockLlmProvider());
+
+    let error: ApiException | undefined;
+    try {
+      await gateway.complete({
+        task: 'analyze_jd',
+        variables: { jdText: 'Engineer' },
+      });
+    } catch (caught) {
+      error = caught as ApiException;
+    }
+    const body = error?.getResponse() as { code?: string } | undefined;
+    expect(body?.code).toBe('LLM_UNAVAILABLE');
   });
 
   it('opens a circuit after repeated failures and never fails open', async () => {

@@ -680,6 +680,7 @@ export class MockLlmProvider implements LlmProvider {
   readonly defaultModel = 'mock-fixture-model';
   readonly costPer1kInput = 0.001;
   readonly costPer1kOutput = 0.002;
+  readonly fabricated = true;
 
   async complete(input: {
     task: string;
