@@ -13,7 +13,37 @@ export interface PracticeReportRecord {
   modelRoute: string;
   promptVersions: Record<string, unknown>;
   errorMessage: string | null;
+  coachingTips: CoachingTip[] | null;
+  coachingTipsCost: number;
   createdAt: string;
+}
+
+export interface PracticeScoreRecord {
+  id: string;
+  reportId: string;
+  questionId: string;
+  criterionId: string;
+  criterionText: string;
+  score: number;
+  weight: number;
+  evidenceSpanIds: string[];
+}
+
+export interface PracticeEvidenceSpanRecord {
+  id: string;
+  reportId: string;
+  transcriptId: string | null;
+  questionId: string;
+  start: number;
+  end: number;
+  quoteText: string;
+}
+
+export interface CoachingTip {
+  category: 'pace' | 'fillers' | 'structure' | 'content' | 'confidence';
+  tip: string;
+  quoteText: string;
+  questionId: string | null;
 }
 
 interface ReportRow {
@@ -27,6 +57,8 @@ interface ReportRow {
   model_route: string;
   prompt_versions: Record<string, unknown>;
   error_message: string | null;
+  coaching_tips: CoachingTip[] | null;
+  coaching_tips_cost: string | number;
   created_at: Date;
 }
 
@@ -42,12 +74,15 @@ function mapReport(row: ReportRow): PracticeReportRecord {
     modelRoute: row.model_route,
     promptVersions: row.prompt_versions,
     errorMessage: row.error_message,
+    coachingTips: row.coaching_tips,
+    coachingTipsCost: Number(row.coaching_tips_cost),
     createdAt: row.created_at.toISOString(),
   };
 }
 
 const REPORT_COLUMNS = `id, session_id, account_id, status, overall_recommendation,
-  overall_confidence, communication_metrics, model_route, prompt_versions, error_message, created_at`;
+  overall_confidence, communication_metrics, model_route, prompt_versions, error_message,
+  coaching_tips, coaching_tips_cost, created_at`;
 
 @Injectable()
 export class PracticeReportRepository {
@@ -119,6 +154,25 @@ export class PracticeReportRepository {
     );
   }
 
+  /** Idempotent coaching-tips write; also folds the tips cost into the report cost. */
+  async updateCoachingTips(
+    id: string,
+    tips: CoachingTip[],
+    tipsCost: number,
+    q: Queryable = this.db,
+  ): Promise<void> {
+    await q.query(
+      `UPDATE practice_report SET
+         coaching_tips = $2::jsonb,
+         coaching_tips_cost = $3,
+         cost = cost + $3,
+         prompt_versions = prompt_versions || $4::jsonb,
+         updated_at = now()
+       WHERE id = $1`,
+      [id, JSON.stringify(tips), tipsCost, JSON.stringify({ coachingTips: 'v1.0.0' })],
+    );
+  }
+
   async insertScore(
     input: {
       reportId: string;
@@ -167,35 +221,41 @@ export class PracticeReportRepository {
     return result.rows[0] as { id: string };
   }
 
-  async listScores(reportId: string, q: Queryable = this.db) {
+  async listScores(reportId: string, q: Queryable = this.db): Promise<PracticeScoreRecord[]> {
     const result = await q.query(
-      `SELECT question_id, criterion_id, criterion_text, score, weight, evidence_span_ids
+      `SELECT id, report_id, question_id, criterion_id, criterion_text, score, weight, evidence_span_ids
        FROM practice_report_score WHERE report_id = $1 ORDER BY criterion_id`,
       [reportId],
     );
-    return result.rows as Array<{
-      question_id: string;
-      criterion_id: string;
-      criterion_text: string;
-      score: number;
-      weight: number;
-      evidence_span_ids: string[];
-    }>;
+    return (result.rows as Array<Record<string, unknown>>).map((row) => ({
+      id: row.id as string,
+      reportId: row.report_id as string,
+      questionId: row.question_id as string,
+      criterionId: row.criterion_id as string,
+      criterionText: row.criterion_text as string,
+      score: Number(row.score),
+      weight: Number(row.weight),
+      evidenceSpanIds: row.evidence_span_ids as string[],
+    }));
   }
 
-  async listEvidenceSpans(reportId: string, q: Queryable = this.db) {
+  async listEvidenceSpans(
+    reportId: string,
+    q: Queryable = this.db,
+  ): Promise<PracticeEvidenceSpanRecord[]> {
     const result = await q.query(
-      `SELECT id, transcript_id, question_id, start, "end" AS end, quote_text
+      `SELECT id, report_id, transcript_id, question_id, start, "end" AS end, quote_text
        FROM practice_report_evidence_span WHERE report_id = $1`,
       [reportId],
     );
-    return result.rows as Array<{
-      id: string;
-      transcript_id: string | null;
-      question_id: string;
-      start: number;
-      end: number;
-      quote_text: string;
-    }>;
+    return (result.rows as Array<Record<string, unknown>>).map((row) => ({
+      id: row.id as string,
+      reportId: row.report_id as string,
+      transcriptId: (row.transcript_id as string | null) ?? null,
+      questionId: row.question_id as string,
+      start: Number(row.start),
+      end: Number(row.end),
+      quoteText: row.quote_text as string,
+    }));
   }
 }

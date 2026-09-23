@@ -3,7 +3,21 @@ import type {
   CandidateAccount,
   CandidateAuthResponse,
   CandidateMeResponse,
+  CandidateWalletResponse,
   CandOtpRequestResponse,
+  CoachingTip,
+  EvaluationScore,
+  EvidenceSpan,
+  PracticeConsentBody,
+  PracticeCreateBody,
+  PracticeCreateResponse,
+  PracticeLibraryPack,
+  PracticePreflightResponse,
+  PracticeReport,
+  PracticeSessionDetailResponse,
+  PracticeTurnBody,
+  PracticeTurnResponse,
+  SessionTranscript,
 } from '@zios/shared-types';
 import { getToken } from './auth';
 
@@ -44,6 +58,7 @@ async function request<T>(
   path: string,
   body?: unknown,
   auth = false,
+  extraHeaders?: Record<string, string>,
 ): Promise<T> {
   let res: Response;
   try {
@@ -52,6 +67,7 @@ async function request<T>(
       headers: {
         ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
         ...(auth && getToken() ? { authorization: `Bearer ${getToken()}` } : {}),
+        ...extraHeaders,
       },
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });
@@ -100,3 +116,92 @@ export function patchMe(patch: {
 }
 
 export type { CandidateAccount };
+
+/* ---- practice engine (Phase 12, D5) ---- */
+
+export interface PracticeLibraryResponse {
+  packs: PracticeLibraryPack[];
+  consent: { version: string; text: string };
+}
+
+export interface PracticeReportDetail {
+  report: PracticeReport | null;
+  scores: EvaluationScore[];
+  evidenceSpans: EvidenceSpan[];
+  transcript: SessionTranscript[];
+  coachingTips: CoachingTip[];
+}
+
+export function fetchPracticeLibrary(): Promise<PracticeLibraryResponse> {
+  return request('GET', '/cand/practice/library', undefined, true);
+}
+
+export function createPractice(body: PracticeCreateBody): Promise<PracticeCreateResponse> {
+  return request('POST', '/cand/practice', body, true);
+}
+
+export function fetchPracticeSession(sessionId: string): Promise<PracticeSessionDetailResponse> {
+  return request('GET', `/cand/practice/${sessionId}`, undefined, true);
+}
+
+export function consentPractice(
+  sessionId: string,
+  body: PracticeConsentBody,
+): Promise<{ session: unknown }> {
+  return request('POST', `/cand/practice/${sessionId}/consent`, body, true);
+}
+
+export function preflightPractice(
+  sessionId: string,
+  recoveryToken: string,
+): Promise<PracticePreflightResponse> {
+  return request(
+    'POST',
+    `/cand/practice/${sessionId}/preflight`,
+    {},
+    true,
+    recoveryToken ? { 'x-recovery-token': recoveryToken } : undefined,
+  );
+}
+
+export function submitPracticeTurn(
+  sessionId: string,
+  recoveryToken: string,
+  body: PracticeTurnBody,
+): Promise<PracticeTurnResponse> {
+  return request(
+    'POST',
+    `/cand/practice/${sessionId}/turn`,
+    body,
+    true,
+    recoveryToken ? { 'x-recovery-token': recoveryToken } : undefined,
+  );
+}
+
+export function fetchPracticeReport(sessionId: string): Promise<PracticeReportDetail> {
+  return request('GET', `/cand/practice/${sessionId}/report`, undefined, true);
+}
+
+export function fetchWallet(): Promise<CandidateWalletResponse> {
+  return request('GET', '/cand/wallet', undefined, true);
+}
+
+/* ---- practice recovery token (tab-scoped like the auth token, D12) ---- */
+
+const recoveryKey = (sessionId: string) => `ascend_practice_recovery:${sessionId}`;
+
+export function storePracticeRecovery(sessionId: string, recoveryToken: string): void {
+  sessionStorage.setItem(recoveryKey(sessionId), recoveryToken);
+}
+
+export function loadPracticeRecovery(sessionId: string): string | null {
+  try {
+    return sessionStorage.getItem(recoveryKey(sessionId));
+  } catch {
+    return null;
+  }
+}
+
+export function clearPracticeRecovery(sessionId: string): void {
+  sessionStorage.removeItem(recoveryKey(sessionId));
+}

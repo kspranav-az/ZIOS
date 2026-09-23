@@ -2,7 +2,11 @@ import { Inject, Injectable } from '@nestjs/common';
 import { JUDGE_PORT, computeCommunicationMetrics, type JudgePort } from '@/modules/evaluation';
 import { LlmGateway } from '@/modules/llm-gateway';
 import { DatabaseService } from '@/modules/database';
-import { PracticeReportRepository, type PracticeReportRecord } from './practice-report.repository';
+import {
+  PracticeReportRepository,
+  type CoachingTip,
+  type PracticeReportRecord,
+} from './practice-report.repository';
 import { PracticeSessionRepository } from './practice-session.repository';
 import { PracticeTranscriptRepository } from './practice-transcript.repository';
 
@@ -120,13 +124,68 @@ export class PracticeEvaluationService {
       if (!completed) {
         throw new Error('practice report disappeared after completion');
       }
-      return completed;
+      await this.generateCoachingTips(completed);
+      const withTips = await this.reports.findBySessionId(sessionId);
+      if (!withTips) {
+        throw new Error('practice report disappeared after coaching tips');
+      }
+      return withTips;
     } catch (error) {
       await this.reports.updateFailed(
         report.id,
         error instanceof Error ? error.message : String(error),
       );
       throw error;
+    }
+  }
+
+  /**
+   * Coaching tips (LLM task `coaching_tips` v1.0.0): runs after the judge
+   * report completes. Idempotent — a report that already has tips is returned
+   * untouched (safe to retry). Tips never fail the report: on error the tips
+   * are left null and the completed report stands.
+   */
+  private async generateCoachingTips(report: PracticeReportRecord): Promise<void> {
+    if (report.status !== 'completed' || report.coachingTips !== null) {
+      return;
+    }
+    const session = await this.sessions.findById(report.sessionId);
+    if (!session) return;
+    const spans = await this.reports.listEvidenceSpans(report.id);
+    const scores = await this.reports.listScores(report.id);
+
+    try {
+      const result = await this.llmGateway.complete<{ tips: CoachingTip[] }>({
+        task: 'coaching_tips',
+        variables: {
+          metrics: report.communicationMetrics,
+          scores,
+          evidence: spans.map((span) => ({
+            questionId: span.questionId,
+            quoteText: span.quoteText,
+          })),
+        },
+        // orgId is the candidate account id — pure attribution label (D9).
+        orgId: report.accountId,
+        sessionId: report.sessionId,
+      });
+      const tips = (result.parsed.tips ?? []).filter(
+        (tip) =>
+          typeof tip.tip === 'string' &&
+          tip.tip.length > 0 &&
+          typeof tip.quoteText === 'string' &&
+          spans.some((span) => span.quoteText === tip.quoteText),
+      );
+      if (tips.length === 0) return;
+      const journalEntries = this.llmGateway
+        .getJournal()
+        .filter(
+          (entry) => entry.sessionId === report.sessionId && entry.task === 'coaching_tips',
+        );
+      const tipsCost = journalEntries.reduce((sum, entry) => sum + entry.cost, 0);
+      await this.reports.updateCoachingTips(report.id, tips, tipsCost);
+    } catch {
+      // Coaching is additive by design — a tips failure must not fail the report.
     }
   }
 
@@ -144,6 +203,12 @@ export class PracticeEvaluationService {
       this.reports.listEvidenceSpans(report.id),
       this.transcript.listBySession(sessionId),
     ]);
-    return { report, scores, evidenceSpans, transcript };
+    return {
+      report,
+      scores,
+      evidenceSpans,
+      transcript,
+      coachingTips: report.coachingTips ?? [],
+    };
   }
 }

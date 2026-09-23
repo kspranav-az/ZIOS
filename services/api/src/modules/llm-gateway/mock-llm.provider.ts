@@ -36,7 +36,17 @@ interface FixtureRegistry {
   conductor_next_turn: (variables: Record<string, unknown>) => SessionTurnResponse;
   judge_score: (variables: Record<string, unknown>) => JudgeResult;
   judge_adjudicate: (variables: Record<string, unknown>) => JudgeResult & { rationale: string };
+  coaching_tips: (variables: Record<string, unknown>) => CoachingTipsResult;
 }
+
+type CoachingTip = {
+  category: 'pace' | 'fillers' | 'structure' | 'content' | 'confidence';
+  tip: string;
+  quoteText: string;
+  questionId: string | null;
+};
+
+type CoachingTipsResult = { tips: CoachingTip[] };
 
 function normalizeWhitespace(text: string): string {
   return text
@@ -455,7 +465,51 @@ const FIXTURES: FixtureRegistry = {
   conductor_next_turn: conductorNextTurnFixture,
   judge_score: judgeScoreFixture,
   judge_adjudicate: judgeAdjudicateFixture,
+  coaching_tips: coachingTipsFixture,
 };
+
+/**
+ * Coaching tips fixture (Phase 12, D9): derives 2-3 tips deterministically
+ * from the metrics + scores + evidence the evaluation service passes in, and
+ * always cites a verbatim quote from an evidence span so the Ascend report
+ * page can anchor each tip to a transcript moment.
+ */
+function coachingTipsFixture(variables: Record<string, unknown>): CoachingTipsResult {
+  const metrics = (variables.metrics ?? {}) as Partial<JudgeMetrics>;
+  const evidence = (variables.evidence ?? []) as {
+    questionId: string;
+    quoteText: string;
+  }[];
+  const firstEvidence = evidence[0] ?? { questionId: null, quoteText: '' };
+  const tips: CoachingTip[] = [];
+
+  if ((metrics.fillerCount ?? 0) > 0) {
+    tips.push({
+      category: 'fillers',
+      tip: `You used filler words ${metrics.fillerCount} times. Pause silently instead — a two-second beat reads as thoughtful, not unsure.`,
+      quoteText: firstEvidence.quoteText,
+      questionId: firstEvidence.questionId,
+    });
+  }
+  if ((metrics.paceWpm ?? 0) > 0) {
+    tips.push({
+      category: 'pace',
+      tip:
+        metrics.paceWpm! > 170
+          ? `Your pace ran about ${metrics.paceWpm} words per minute — above the confident range. Slow down on key points so they land.`
+          : `Your pace ran about ${metrics.paceWpm} words per minute — inside the confident range. Keep it steady under pressure.`,
+      quoteText: firstEvidence.quoteText,
+      questionId: firstEvidence.questionId,
+    });
+  }
+  tips.push({
+    category: 'structure',
+    tip: 'Answer with STAR — Situation, Task, Action, Result — and put a number on the Result whenever you honestly can.',
+    quoteText: firstEvidence.quoteText,
+    questionId: firstEvidence.questionId,
+  });
+  return { tips: tips.slice(0, 3) };
+}
 
 /**
  * Fixture-driven mock LLM provider. It ignores the rendered prompt and returns

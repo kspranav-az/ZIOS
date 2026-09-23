@@ -3,6 +3,7 @@ import type {
   CandidateAccount,
   CandidateAuthResponse,
   CandidateMePatchBody,
+  CandidateWalletResponse,
   CandOtpRequestResponse,
 } from '@zios/shared-types';
 import {
@@ -74,6 +75,13 @@ export class CandidateAccountsService {
       throw new ApiException(404, 'ACCOUNT_NOT_FOUND', 'candidate account not found');
     }
     return { account };
+  }
+
+  /** Thin wallet view (M2): candidate credit account balance + alert line. */
+  async getWallet(accountId: string): Promise<CandidateWalletResponse> {
+    const accountIdResolved = await this.credits.ensureAccount('candidate', accountId);
+    const account = await this.credits.getAccount(accountIdResolved);
+    return { balance: account.balance, lowBalanceThreshold: account.lowBalanceThreshold };
   }
 
   async patchMe(accountId: string, body: CandidateMePatchBody): Promise<{ account: CandidateAccount }> {

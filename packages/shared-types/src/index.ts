@@ -191,6 +191,48 @@ export interface PracticeTurnResponse {
 export interface PracticeSessionDetailResponse {
   session: PracticeSession;
   transcript: SessionTranscript[];
+  /** Snapshot question set — lets the UI show progress without a kit fetch. */
+  questions: KitQuestion[];
+}
+
+/** A single coaching tip on a practice report. Tips are evidence-linked: the
+ * quote is verbatim transcript text the tip is grounded in (D9, no ungrounded
+ * coaching — same rule as scoring). */
+export interface CoachingTip {
+  category: 'pace' | 'fillers' | 'structure' | 'content' | 'confidence';
+  tip: string;
+  quoteText: string;
+  questionId: string | null;
+}
+
+export interface PracticeReport {
+  id: string;
+  sessionId: string;
+  accountId: string;
+  status: 'pending' | 'completed' | 'failed';
+  overallRecommendation: number | null;
+  overallConfidence: number | null;
+  communicationMetrics: CommunicationMetrics;
+  modelRoute: string;
+  errorMessage: string | null;
+  createdAt: string;
+}
+
+/** Read model for GET /cand/practice/:id/report (schema_version 'v1' — same
+ * scorecard/evidence shapes as the employer read path). */
+export interface PracticeReportDetailResponse {
+  report: PracticeReport | null;
+  scores: EvaluationScore[];
+  evidenceSpans: EvidenceSpan[];
+  transcript: SessionTranscript[];
+  coachingTips: CoachingTip[];
+}
+
+/** Thin wallet view for candidates (M2). Threshold is the low-balance alert
+ * line on the candidate credit account. */
+export interface CandidateWalletResponse {
+  balance: number;
+  lowBalanceThreshold: number;
 }
 
 export interface OrgInvite {

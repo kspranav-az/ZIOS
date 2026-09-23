@@ -15,6 +15,7 @@ import type {
   PracticeCreateResponse,
   PracticeLibraryPack,
   PracticePreflightResponse,
+  PracticeReportDetailResponse,
   PracticeSessionDetailResponse,
   PracticeTurnBody,
   PracticeTurnResponse,
@@ -122,10 +123,13 @@ export class PracticeController {
   }
 
   @Get(':id/report')
-  async report(@CurrentCandidate() auth: CandidateAuthContext, @Param('id') id: string) {
+  async report(
+    @CurrentCandidate() auth: CandidateAuthContext,
+    @Param('id') id: string,
+  ): Promise<PracticeReportDetailResponse> {
     const detail = await this.evaluation.findDetail(auth.account.id, id);
     if (!detail) {
-      return { report: null, scores: [], evidenceSpans: [], transcript: [] };
+      return { report: null, scores: [], evidenceSpans: [], transcript: [], coachingTips: [] };
     }
     return detail;
   }
