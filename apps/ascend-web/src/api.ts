@@ -3,6 +3,8 @@ import type {
   CandidateAccount,
   CandidateAuthResponse,
   CandidateMeResponse,
+  CandidateProgressResponse,
+  CandidateReadinessResponse,
   CandidateResumeResponse,
   CandidateWalletResponse,
   CandOtpRequestResponse,
@@ -118,7 +120,12 @@ export function patchMe(patch: {
   return request('PATCH', '/cand/me', patch, true);
 }
 
-export type { CandidateAccount };
+export type {
+  CandidateAccount,
+  CandidateProgressResponse,
+  CandidateReadinessResponse,
+  CandidateWalletResponse,
+};
 
 /* ---- practice engine (Phase 12, D5) ---- */
 
@@ -187,6 +194,16 @@ export function fetchPracticeReport(sessionId: string): Promise<PracticeReportDe
 
 export function fetchWallet(): Promise<CandidateWalletResponse> {
   return request('GET', '/cand/wallet', undefined, true);
+}
+
+/* ---- progress + readiness (Phase 12, Branch 5, D14/D15) ---- */
+
+export function fetchProgress(): Promise<CandidateProgressResponse> {
+  return request('GET', '/cand/practice/progress', undefined, true);
+}
+
+export function fetchReadiness(): Promise<CandidateReadinessResponse> {
+  return request('GET', '/cand/practice/readiness', undefined, true);
 }
 
 /* ---- resume intelligence (Phase 12, D10) ---- */

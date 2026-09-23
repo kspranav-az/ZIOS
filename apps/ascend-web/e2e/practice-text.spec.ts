@@ -72,4 +72,22 @@ test('candidate signs up, runs a text practice mock and gets a coaching report',
 
   // Exact debit: text mock = 1 credit → wallet chip shows 49.
   await expect(page.getByTestId('wallet-balance')).toHaveText('49');
+
+  // --- Progress page: completed mock in history + trend, report link ---
+  await page.goto('/progress');
+  await expect(page.getByText(/score trend/i)).toBeVisible();
+  await expect(page.getByText(/HR Screening/i).first()).toBeVisible();
+  await expect(page.getByRole('link', { name: /report/i })).toBeVisible();
+
+  // --- Wallet page: ledger shows welcome grant + practice debit ---
+  await page.goto('/wallet');
+  await expect(page.getByText(/welcome grant/i)).toBeVisible();
+  await expect(page.getByText(/practice mock/i)).toBeVisible();
+  await expect(page.getByText('+50')).toBeVisible();
+  await expect(page.getByText('-1')).toBeVisible();
+
+  // --- Home: readiness card is scored after the judged mock ---
+  await page.goto('/');
+  await expect(page.getByText(/^readiness$/i)).toBeVisible();
+  await expect(page.getByText(/\/ 100/)).toBeVisible();
 });

@@ -77,11 +77,22 @@ export class CandidateAccountsService {
     return { account };
   }
 
-  /** Thin wallet view (M2): candidate credit account balance + alert line. */
+  /** Thin wallet view (M2): candidate credit account balance + alert line + ledger. */
   async getWallet(accountId: string): Promise<CandidateWalletResponse> {
     const accountIdResolved = await this.credits.ensureAccount('candidate', accountId);
     const account = await this.credits.getAccount(accountIdResolved);
-    return { balance: account.balance, lowBalanceThreshold: account.lowBalanceThreshold };
+    const ledger = await this.credits.listLedger(accountIdResolved, 50);
+    return {
+      balance: account.balance,
+      lowBalanceThreshold: account.lowBalanceThreshold,
+      ledger: ledger.map((e) => ({
+        id: e.id,
+        delta: e.delta,
+        balanceAfter: e.balanceAfter,
+        reason: e.reason,
+        createdAt: e.createdAt,
+      })),
+    };
   }
 
   async patchMe(accountId: string, body: CandidateMePatchBody): Promise<{ account: CandidateAccount }> {

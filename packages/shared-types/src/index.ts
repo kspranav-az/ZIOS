@@ -233,6 +233,52 @@ export interface PracticeReportDetailResponse {
 export interface CandidateWalletResponse {
   balance: number;
   lowBalanceThreshold: number;
+  ledger: CandidateWalletLedgerEntry[];
+}
+
+export interface CandidateWalletLedgerEntry {
+  id: string;
+  delta: number;
+  balanceAfter: number;
+  reason: string;
+  createdAt: string;
+}
+
+/* ---- Ascend progress + readiness (Phase 12, Branch 5) ---- */
+
+export interface CandidateProgressSession {
+  id: string;
+  title: string;
+  source: string;
+  status: string;
+  createdAt: string;
+  completedAt: string | null;
+  overallRecommendation: number | null;
+}
+
+export interface CandidateProgressResponse {
+  sessions: CandidateProgressSession[];
+  /** Per-completed-mock trend series, oldest first. */
+  trends: {
+    completedAt: string;
+    overallRecommendation: number | null;
+    paceWpm: number | null;
+    fillerCount: number | null;
+  }[];
+  streak: { current: number };
+  dailyCap: number;
+}
+
+export interface CandidateReadinessResponse {
+  formulaVersion: string;
+  readiness: number | null;
+  components: {
+    scoreBlend: number;
+    paceScore: number;
+    fillerScore: number;
+    structureScore: number;
+  } | null;
+  sessionsUsed: number;
 }
 
 /* ---- Ascend JD + resume intelligence (Phase 12, D10) ---- */

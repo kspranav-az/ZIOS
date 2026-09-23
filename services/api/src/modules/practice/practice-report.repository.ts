@@ -258,4 +258,68 @@ export class PracticeReportRepository {
       quoteText: row.quote_text as string,
     }));
   }
+
+  /** Session history newest-first with each session's judged recommendation. */
+  async listHistoryByAccount(
+    accountId: string,
+    limit = 50,
+    q: Queryable = this.db,
+  ): Promise<
+    Array<{
+      id: string;
+      title: string;
+      source: string;
+      status: string;
+      createdAt: string;
+      completedAt: string | null;
+      overallRecommendation: number | null;
+    }>
+  > {
+    const result = await q.query(
+      `SELECT s.id, s.title, s.source, s.status, s.created_at, s.completed_at,
+              r.overall_recommendation
+       FROM practice_session s
+       LEFT JOIN practice_report r ON r.session_id = s.id
+       WHERE s.account_id = $1
+       ORDER BY s.created_at DESC
+       LIMIT $2`,
+      [accountId, limit],
+    );
+    return (result.rows as Array<Record<string, unknown>>).map((row) => ({
+      id: row.id as string,
+      title: row.title as string,
+      source: row.source as string,
+      status: row.status as string,
+      createdAt: (row.created_at as Date).toISOString(),
+      completedAt: row.completed_at ? (row.completed_at as Date).toISOString() : null,
+      overallRecommendation: row.overall_recommendation
+        ? Number(row.overall_recommendation)
+        : null,
+    }));
+  }
+
+  /** Inputs for READINESS_FORMULA_V1: last N completed + judged sessions. */
+  async listReadinessInputs(
+    accountId: string,
+    limit = 5,
+    q: Queryable = this.db,
+  ): Promise<
+    Array<{ overallRecommendation: number | null; communicationMetrics: unknown }>
+  > {
+    const result = await q.query(
+      `SELECT r.overall_recommendation, r.communication_metrics
+       FROM practice_report r
+       JOIN practice_session s ON s.id = r.session_id
+       WHERE s.account_id = $1 AND s.status = 'completed' AND r.status = 'completed'
+       ORDER BY s.completed_at DESC NULLS LAST
+       LIMIT $2`,
+      [accountId, limit],
+    );
+    return (result.rows as Array<Record<string, unknown>>).map((row) => ({
+      overallRecommendation: row.overall_recommendation
+        ? Number(row.overall_recommendation)
+        : null,
+      communicationMetrics: (row.communication_metrics as unknown) ?? null,
+    }));
+  }
 }
