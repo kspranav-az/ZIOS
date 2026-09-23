@@ -66,10 +66,14 @@ function makeQuestion(topic: string, type: QuestionType): ProposedQuestion {
 }
 
 function makeService({ profile = makeProfile(), bankItems = [] as QuestionBankItem[] } = {}) {
+  // Drafted prompts vary per call, like real providers (gemini / mock fixture
+  // table) — the old constant stub made every draft for a topic identical,
+  // which no real provider does.
+  let draftSeq = 0;
   const llm: LlmGatewayPort = {
     analyzeJd: vi.fn(async () => profile),
     draftQuestions: vi.fn(async (_profile, topic, type, count) =>
-      Array.from({ length: count }, () => makeQuestion(topic, type)),
+      Array.from({ length: count }, () => makeQuestion(`${topic}-${++draftSeq}`, type)),
     ),
   };
   const external: ExternalQuestionSourcePort = {
@@ -170,6 +174,93 @@ describe('GenerationService regenerate', () => {
     expect(regenerated.topic).toBe(original.topic);
     expect(regenerated.type).toBe(original.type);
     expect(after.proposal.questions.length).toBe(before.proposal.questions.length);
+  });
+
+  it('strips adaptive follow-ups from a regenerated non-open-ended question (LLM schema drift)', async () => {
+    const { service, llm } = makeService();
+    const before = await service.analyzeAndPropose('org-1', SAMPLE_JD);
+    vi.mocked(llm.draftQuestions).mockResolvedValueOnce([
+      {
+        ...makeQuestion('Behavioral', 'rating_scale'),
+        followupPolicy: 'adaptive_ai',
+        followupDepthCap: 2,
+      },
+    ]);
+    const targetIndex = 0;
+    const after = await service.regenerateQuestion('org-1', before.id, targetIndex, {
+      type: 'rating_scale',
+    });
+    const regenerated = after.proposal.questions[targetIndex]!;
+    expect(regenerated.type).toBe('rating_scale');
+    expect(regenerated.followupPolicy).toBe('none');
+    expect(regenerated.followupDepthCap).toBeNull();
+  });
+});
+
+describe('GenerationService AI-output sanitization', () => {
+  it('coerces adaptive follow-ups off non-open-ended drafted questions (publish constraint)', async () => {
+    // Simulates real gemini drift: a rating_scale question carrying
+    // followupPolicy 'adaptive_ai' would 500 at publish against
+    // question_adaptive_open_ended_only before this guard existed.
+    const { service, llm } = makeService({
+      profile: makeProfile({ skills: ['Python'], responsibilities: [] }),
+    });
+    vi.mocked(llm.draftQuestions).mockImplementation(async (_p, topic, type, count) =>
+      Array.from({ length: count }, (_, i) => ({
+        ...makeQuestion(`${topic}-${type}-${i}`, type),
+        followupPolicy: 'adaptive_ai',
+        followupDepthCap: 2,
+      })),
+    );
+    const generation = await service.analyzeAndPropose('org-1', SAMPLE_JD);
+    expect(generation.proposal.questions.some((q) => q.type === 'rating_scale')).toBe(true);
+    for (const question of generation.proposal.questions) {
+      if (question.type !== 'open_ended') {
+        expect(question.followupPolicy).toBe('none');
+        expect(question.followupDepthCap).toBeNull();
+        expect(question.followupFixed).toBeNull();
+      }
+    }
+  });
+
+  it('dedupes identical prompts drafted for near-duplicate topics', async () => {
+    const { service, llm } = makeService();
+    // Every topic drafts the exact same prompt (observed live: two similar
+    // responsibilities produced word-for-word identical questions).
+    vi.mocked(llm.draftQuestions).mockImplementation(async (_p, topic) => [
+      { ...makeQuestion(topic, 'open_ended'), prompt: 'Identical drafted prompt.' },
+    ]);
+    const generation = await service.analyzeAndPropose('org-1', SAMPLE_JD);
+    const prompts = generation.proposal.questions.map((q) => q.prompt.trim().toLowerCase());
+    expect(new Set(prompts).size).toBe(prompts.length);
+  });
+
+  it('re-sanitizes stored proposals at publish (pre-fix dirty records, client edits)', async () => {
+    const { service, repository, kits } = makeService();
+    await service.analyzeAndPropose('org-1', SAMPLE_JD);
+    const dirty = {
+      topics: ['Python'],
+      durationEstimateSec: 600,
+      withinCap: true,
+      questions: [
+        {
+          ...makeQuestion('Python', 'rating_scale'),
+          followupPolicy: 'adaptive_ai' as const,
+          followupDepthCap: 2,
+        },
+        makeQuestion('Python', 'open_ended'),
+        { ...makeQuestion('Python', 'open_ended'), prompt: 'Duplicate prompt.' },
+        { ...makeQuestion('Python', 'open_ended'), prompt: 'Duplicate prompt.' },
+      ],
+    };
+    await repository.update('org-1', 'gen-1', { proposal: dirty });
+    await service.publishProposal(user, 'gen-1');
+    const passed = vi.mocked(kits.createFromProposal).mock.calls[0]![1];
+    expect(
+      passed.questions.every((q) => q.followupPolicy !== 'adaptive_ai' || q.type === 'open_ended'),
+    ).toBe(true);
+    const prompts = passed.questions.map((q) => q.prompt.trim().toLowerCase());
+    expect(new Set(prompts).size).toBe(prompts.length);
   });
 });
 

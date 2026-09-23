@@ -200,7 +200,12 @@ export function PracticeReportPage() {
           {detail.transcript
             .filter((row: SessionTranscript) => row.answerText !== null)
             .map((row: SessionTranscript) => {
-              const spans = spansByTranscript.get(row.id) ?? [];
+              // Several judge scores can cite the same moment (observed live: all
+              // eight criteria quoting one identical answer rendered eight
+              // duplicate chips). Show each distinct quote once per turn.
+              const spans = (spansByTranscript.get(row.id) ?? []).filter(
+                (span, idx, all) => all.findIndex((s) => s.quoteText === span.quoteText) === idx,
+              );
               return (
                 <div
                   key={row.id}
