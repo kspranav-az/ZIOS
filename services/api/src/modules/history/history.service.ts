@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { CandidateHistoryResponse } from '@zios/shared-types';
 import { CandidateAccountsService } from '@/modules/candidate-accounts';
-import { PracticeEvaluationService } from '@/modules/practice/practice-evaluation.service';
+import { PracticeEvaluationService } from '@/modules/practice';
 
 /**
  * Read model only — composes the practice progress evaluator with the

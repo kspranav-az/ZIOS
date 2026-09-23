@@ -10,7 +10,7 @@ import { CandidateAccountsService } from './candidate-accounts.service';
 function makeService(rows: Record<string, unknown>[], accountEmail = 'PriyA@X.Test') {
   const queries: string[] = [];
   const db = {
-    query: async (sql: string, params?: unknown[]) => {
+    query: async (sql: string, _params?: unknown[]) => {
       queries.push(sql);
       if (sql.includes('FROM candidate c')) {
         return { rows, rowCount: rows.length } as never;
