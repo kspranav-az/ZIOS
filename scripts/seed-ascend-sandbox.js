@@ -88,6 +88,61 @@ const auth = (token) => ({ authorization: `Bearer ${token}` });
 const show = (label, { status, body }) =>
   console.log(`  ${label} → ${status}\n    ${JSON.stringify(body).slice(0, 400)}`);
 
+const MOCK_ANSWERS = [
+  'I led the checkout migration end to end: legacy monolith was blocking releases, I moved traffic behind feature flags, and failed transactions dropped forty percent in one quarter.',
+  'I rank by customer impact and communicate trade-offs in writing; during an outage I paused feature work and shipped a rollback within the hour.',
+  'I mentor through weekly pairing and design-doc reviews; a documentation drive cut onboarding from three weeks to one.',
+];
+
+/** Answer turns until the conductor wraps up (guarded, mirrors the e2e loop). */
+async function runToWrapup(sessionId, recovery, firstTurn, headers) {
+  let turn = firstTurn;
+  let n = 0;
+  while (turn.type !== 'wrapup' && n < 14) {
+    const submitted = await postJson(
+      `/cand/practice/${sessionId}/turn`,
+      { answer: MOCK_ANSWERS[n % MOCK_ANSWERS.length] },
+      headers,
+    );
+    if (submitted.status !== 200) {
+      show(`POST /cand/practice/${sessionId}/turn`, submitted);
+      throw new Error(`turn ${n + 1} failed`);
+    }
+    turn = submitted.body.turn;
+    n += 1;
+    console.log(`   turn ${n}: ${turn.type}`);
+  }
+  if (turn.type !== 'wrapup') {
+    throw new Error('mock did not wrap up within 14 turns');
+  }
+}
+
+/** Create + consent + preflight a library-pack session (drives one debit). */
+async function startLibraryMock(token, packId) {
+  const created = await postJson('/cand/practice', { packId, mode: 'text' }, auth(token));
+  if (created.status !== 201) {
+    show('POST /cand/practice', created);
+    throw new Error('create practice session failed');
+  }
+  const session = created.body.session;
+  const recovery = created.body.recoveryToken;
+  await postJson(
+    `/cand/practice/${session.id}/consent`,
+    { recordingAllowed: true },
+    auth(token),
+  );
+  const preflight = await postJson(
+    `/cand/practice/${session.id}/preflight`,
+    {},
+    { ...auth(token), 'x-recovery-token': recovery },
+  );
+  if (preflight.status !== 200) {
+    show(`POST /cand/practice/${session.id}/preflight`, preflight);
+    throw new Error('preflight failed');
+  }
+  return { sessionId: session.id, recovery, firstTurn: preflight.body.turn };
+}
+
 async function main() {
   console.log(`\nAscend sandbox — candidate ${email}\n`);
 
@@ -172,6 +227,108 @@ async function main() {
       coachingTips: report.body.coachingTips,
     },
   });
+
+  console.log('11) Upload resume (pasted text → parse + ATS report)');
+  const resumeText =
+    'Priya Sharma\npriya@example.com\n\nSkills:\n- Python\n- PostgreSQL\n\nExperience:\n- Led a team of 5 engineers\n- Cut latency by 40 percent\n';
+  const resume = await postJson(
+    '/cand/resume',
+    {
+      fileName: 'priya.txt',
+      contentBase64: Buffer.from(resumeText).toString('base64'),
+      text: resumeText,
+    },
+    auth(token),
+  );
+  show('POST /cand/resume', {
+    status: resume.status,
+    body: {
+      fileName: resume.body?.fileName,
+      skills: resume.body?.parsed?.skills,
+      atsScore: resume.body?.atsReport?.score,
+    },
+  });
+
+  console.log('12) JD-targeted mock (resume-informed snapshot, source jd)');
+  const fromJd = await postJson(
+    '/cand/practice/from-jd',
+    {
+      jdText:
+        'Backend Engineer — build REST APIs in Python and PostgreSQL, own services end to end, mentor junior engineers, improve latency and reliability.',
+      mode: 'text',
+    },
+    auth(token),
+  );
+  show('POST /cand/practice/from-jd', {
+    status: fromJd.status,
+    body: { id: fromJd.body?.session?.id, source: fromJd.body?.session?.source, title: fromJd.body?.session?.title },
+  });
+  const jdSession = fromJd.body.session;
+  const jdRecovery = fromJd.body.recoveryToken;
+  await postJson(`/cand/practice/${jdSession.id}/consent`, { recordingAllowed: true }, auth(token));
+  const jdPreflight = await postJson(
+    `/cand/practice/${jdSession.id}/preflight`,
+    {},
+    { ...auth(token), 'x-recovery-token': jdRecovery },
+  );
+  await runToWrapup(jdSession.id, jdRecovery, jdPreflight.body.turn, {
+    ...auth(token),
+    'x-recovery-token': jdRecovery,
+  });
+
+  console.log('13) Third library mock → completes the daily cap (3/day, D11)');
+  const third = await startLibraryMock(token, 'hr-screening');
+  await runToWrapup(third.sessionId, third.recovery, third.firstTurn, {
+    ...auth(token),
+    'x-recovery-token': third.recovery,
+  });
+
+  console.log('14) Progress + readiness after three judged mocks (D14/D15)');
+  const progress = await getJson('/cand/practice/progress', auth(token));
+  show('GET /cand/practice/progress', {
+    status: progress.status,
+    body: {
+      sessions: progress.body.sessions?.length,
+      trends: progress.body.trends,
+      streak: progress.body.streak,
+      dailyCap: progress.body.dailyCap,
+    },
+  });
+  show('GET /cand/practice/readiness', await getJson('/cand/practice/readiness', auth(token)));
+
+  console.log('15) Operator top-up (grant-credits.js --holder candidate) + wallet');
+  const grantEnv = {
+    ...process.env,
+    DATABASE_URL:
+      process.env.DATABASE_URL ??
+      'postgresql://interviewos:interviewos_dev@localhost:55432/interviewos',
+  };
+  const { execFileSync } = await import('node:child_process');
+  const scriptPath = new URL('./grant-credits.js', import.meta.url).pathname;
+  const grantOut = execFileSync(
+    process.execPath,
+    [scriptPath, '--holder', 'candidate', '--email', email, '25', 'dress rehearsal top-up'],
+    { env: grantEnv, encoding: 'utf8' },
+  ).trim();
+  console.log(`  grant-credits.js → ${grantOut}`);
+  const walletAfter = await getJson('/cand/wallet', auth(token));
+  show('GET /cand/wallet (ledger)', {
+    status: walletAfter.status,
+    body: {
+      balance: walletAfter.body.balance,
+      ledger: walletAfter.body.ledger?.map((e) => `${e.reason} ${e.delta > 0 ? '+' : ''}${e.delta}`),
+    },
+  });
+
+  console.log('16) Fourth create today → 429 DAILY_CAP_REACHED');
+  const fourth = await postJson('/cand/practice', { packId: 'hr-screening', mode: 'text' }, auth(token));
+  show('POST /cand/practice (4th today)', {
+    status: fourth.status,
+    body: fourth.status === 429 ? fourth.body : fourth.body,
+  });
+  if (fourth.status !== 429) {
+    throw new Error(`expected 429 DAILY_CAP_REACHED, got ${fourth.status}`);
+  }
 
   console.log('\nReplay by hand (bash):');
   console.log(`  TOKEN=${token}`);
