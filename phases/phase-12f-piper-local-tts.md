@@ -33,7 +33,7 @@
    ```
 5. Add `services/ai-orchestrator/models/` to the repo-root `.gitignore`.
 
-✅ **Gate:** `uv run python -c "from piper.voice import PiperVoice; v=PiperVoice.load('models/en_US-lessac-medium.onnx'); print(v.config.sample_rate)"` prints a sample rate (expected 22050). `uv run pytest -q` still green (nothing wired yet).
+✅ **Gate:** `uv run python -c "from piper.voice import PiperVoice; v=PiperVoice.load('models/en_US-lessac-medium.onnx'); print(v.config.sample_rate)"` printed `22050` (commit `e9dc33e` — pyproject + lock + gitignore; model gitignored). `uv run pytest -q` green at 123 passed / 2 skipped before any wiring.
 
 ---
 
@@ -61,7 +61,7 @@ Log the selection with structlog (`tts_adapter_selected`).
 ### 2.3 Wire the router
 In `app/voice/router.py`: module level `_tts_adapter: TtsPort = build_tts_adapter()` (boot-time fail-loud on a bad env value, before any request). Replace `tts=MockTtsAdapter()` in `issue_voice_token` with `tts=_tts_adapter`. Do NOT touch the `MockSttAdapter()` line — STT is out of scope.
 
-✅ **Gate:** `TTS_ADAPTER` unset → `uv run pytest -q` fully green (mock path unchanged). New `tests/test_piper_tts.py` (below) green with the model present.
+✅ **Gate:** `TTS_ADAPTER` unset → `uv run pytest -q` fully green (mock path unchanged, 123 passed / 2 skipped pre-tests). **Plan deviation, recorded:** piper-tts 1.8 has no `synthesize_stream_raw` — the adapter targets the installed `synthesize() -> Iterable[AudioChunk]` API (`audio_int16_bytes` per chunk); the default model path resolves via `parents[2]` (the plan text said `parents[3]`, which would land in `services/` — implementation follows the stated intent: `<orchestrator>/models/`). The mock's "flush as final" branch is unreachable in both adapters (the sentence regex consumes punctuation-less tails); the adapter mirrors mock semantics exactly rather than inventing a divergent `is_final`. Evidence: commit `e6d5e51`.
 
 ---
 
@@ -76,7 +76,7 @@ In `app/voice/router.py`: module level `_tts_adapter: TtsPort = build_tts_adapte
 5. `test_tts_factory_defaults_mock_and_rejects_unknown` — monkeypatch env: unset → `MockTtsAdapter`; `TTS_ADAPTER=piper` + monkeypatched model path → `PiperTtsAdapter`; `TTS_ADAPTER=bogus` → `ValueError`. (Factory tests must not require the real model — monkeypatch `PIPER_MODEL_PATH` for the piper case using the downloaded dev model, skipif absent.)
 6. Keep them fast: total added runtime < 15 s on this machine.
 
-✅ **Gate:** `uv run pytest -q` → full suite green (previous 123 passed / 2 skipped + new tests); `uv run ruff check app tests` clean; `uv run mypy` strict clean.
+✅ **Gate:** `uv run pytest tests/test_piper_tts.py -q` → **8 passed in 5.24s** (all six plan tests present; the plan's punctuation-flush test became `test_piper_tts_synthesizes_punctuationless_text`, pinning that the tail is spoken as one chunk with `is_final=False` — matching the mock, see Step 2 deviation). Full suite **131 passed / 2 skipped**, ruff clean, mypy strict clean (51 files; `piper`/`soxr` added to the ignore-missing-imports set). Evidence: commit `fd048b3`.
 
 ---
 
@@ -88,17 +88,11 @@ In `services/ai-orchestrator/Dockerfile`:
 2. Add `piper-tts` to the image's pip install step (same line block as the other requirements — the image installs from pyproject/requirements, confirm which mechanism the Dockerfile uses and follow it).
 3. Extend the existing sha256-verified model-bake stage (the one that downloads `.task`/`.onnx` files) with the two Piper files from `https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_US/lessac/medium/`, verifying against the sha256 recorded in Step 1.4 (`shasum -a 256`). Copy them into `/opt/piper-models/` and set `ENV PIPER_MODEL_PATH=/opt/piper-models/en_US-lessac-medium.onnx` (and `ESPEAK_DATA_PATH` is NOT needed — espeak-ng defaults suffice; do not add speculative env).
 
-✅ **Gate (detached build — the emulated amd64 build exceeds the 5-min tool cap):**
-```bash
-nohup docker compose build ai-orchestrator > /tmp/piper-build.log 2>&1 &
-# poll: tail -f /tmp/piper-build.log — wait for " DONE" on the final export step
+✅ **Gate (detached build — ran `nohup docker compose build ai-orchestrator > /tmp/piper-build.log 2>&1 &`, polled to completion):** image built (884 MB). Parity probe inside the linux/amd64 image:
 ```
-Then the parity probe:
-```bash
-docker compose run --rm -e TTS_ADAPTER=piper ai-orchestrator \
-  python -c "from app.voice.tts_factory import build_tts_adapter; print(build_tts_adapter().healthcheck())"
+PARITY: {'status': 'healthy', 'provider': 'piper', 'model': '/opt/piper-models/en_US-lessac-medium.onnx', 'sample_rate': 24000, 'source_sample_rate': 22050, 'chunks_seen': 3} chunks: 3
 ```
-Must print `{'status': 'healthy', 'provider': 'piper', 'sample_rate': 24000, ...}`. If the build fails, fix and rebuild — never test a stale image.
+Evidence: commit `a8495b0`.
 
 ---
 
@@ -123,16 +117,18 @@ Must print `{'status': 'healthy', 'provider': 'piper', 'sample_rate': 24000, ...
 4. If the compose orchestrator container is running from Step 4 probing, stop it so the host process owns port 8000 (`docker compose stop ai-orchestrator`).
 5. Compose `.env` keeps **no `TTS_ADAPTER` key** (factory default mock) so CI/e2e stay hermetic — e2e never depends on real synthesis.
 
-✅ **Gate:** probe output meets criteria; `uv run pytest -q` still fully green.
+✅ **Gate:** probe output meets criteria — `PROBE chunks=7 samples=102539 peak=32767 seconds=4.27` (≥1 chunk ✓, peak >100 ✓, 1.5–5 s ✓; evidence line saved). One trap exercised and confirmed harmless: running the probe in a fresh shell **without** `TTS_ADAPTER` silently exercises the mock adapter (peak=0, silence) — always `source .env.host` or set the var explicitly; the suite's factory tests pin the default. The host orchestrator was restarted from `.env.host` (now untracked-but-standard; it picks up `TTS_ADAPTER=piper` — verified via the boot log line `tts_adapter_selected adapter=piper`) and the compose orchestrator container stays stopped so the host process owns port 8000. Note: `.env.host` is untracked in git (checked `git ls-files`), so there is no env-file commit — the plan's suggested commit 3 is satisfied by the file on disk.
 
 ---
 
 ## Step 6 — Docs close-out + merge
 
-- **CONTEXT.md:** (a) new gotcha: the voice room's STT/TTS were hardcoded mocks — 12f adds the `TTS_ADAPTER` factory for TTS; **the voice room STT still ignores `STT_ADAPTER`** (router still constructs `MockSttAdapter()` directly) — record this as a known gap, it explains why real speech was fixture-transcribed in the smoke; (b) gotcha: Piper output rate (22050) ≠ wire rate (24000) — adapter resamples with soxr, wire contract unchanged; (c) test-state table: orchestrator pytest count updated; feature status: TTS row moves from "mock-only by code" to `TTS_ADAPTER=mock|piper` (Piper validated, cloud TTS still a later procurement option).
-- **docs/STATE.md:** new evidence section "Phase 12f — Piper local TTS"; mock-credential table TTS row updated (`TtsPort` → `MockTtsAdapter`/`PiperTtsAdapter`, real handover: Piper validated for low load; cloud neural TTS deferred); known-gaps: remove "TTS is mock-only by code", add the voice-room STT hardcoding row; §8 next steps unchanged otherwise.
-- **Phase file:** tick every gate with evidence (commit hashes + probe output line).
-- Push branch → `git checkout main && git merge --no-ff phase-12f/piper-local-tts` → push `main`. **No new phase tag** (follow-up convention).
+- ✅ **CONTEXT.md:** Phase-12f gotchas (installed Piper API ≠ README — `synthesize()`/`AudioChunk`, no `synthesize_stream_raw`; voice-room STT still hardcoded mock; Piper 22050 vs wire 24000 → adapter resamples with soxr; models never committed); feature status + test state (orchestrator 131) + known gaps (TTS row now validated; room-STT row added) + next steps (smoke take two, room-STT wiring phase).
+- ✅ **docs/STATE.md:** snapshot header; build table orchestrator 131; Phase 12f evidence section; mock-credential TTS row updated; known-gaps rows (12f shipped, room-STT gap, gate-(d) take-two); git hygiene; §8 renumbered with the two new lead items.
+- ✅ **This file:** every gate ticked with commit evidence (`e9dc33e` deps+model, `e6d5e51` adapter+factory+wiring, `fd048b3` tests, `a8495b0` Dockerfile) and the two recorded plan deviations (piper-tts 1.8 API; `parents[2]` path + mock-mirroring `is_final`).
+- ✅ Branch pushed; `--no-ff` merge to `main`; `main` pushed. No new phase tag (follow-up convention).
+
+**Deviation from the suggested commit list:** commit 3 (`chore(env)`) intentionally dropped — `.env.host` is untracked; the file was updated on disk and verified consumed at orchestrator boot (`tts_adapter_selected adapter=piper`).
 
 ## Commits (suggested sequence)
 
