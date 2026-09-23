@@ -234,6 +234,34 @@ describe('GenerationService AI-output sanitization', () => {
     const prompts = generation.proposal.questions.map((q) => q.prompt.trim().toLowerCase());
     expect(new Set(prompts).size).toBe(prompts.length);
   });
+
+  it('re-sanitizes stored proposals at publish (pre-fix dirty records, client edits)', async () => {
+    const { service, repository, kits } = makeService();
+    await service.analyzeAndPropose('org-1', SAMPLE_JD);
+    const dirty = {
+      topics: ['Python'],
+      durationEstimateSec: 600,
+      withinCap: true,
+      questions: [
+        {
+          ...makeQuestion('Python', 'rating_scale'),
+          followupPolicy: 'adaptive_ai' as const,
+          followupDepthCap: 2,
+        },
+        makeQuestion('Python', 'open_ended'),
+        { ...makeQuestion('Python', 'open_ended'), prompt: 'Duplicate prompt.' },
+        { ...makeQuestion('Python', 'open_ended'), prompt: 'Duplicate prompt.' },
+      ],
+    };
+    await repository.update('org-1', 'gen-1', { proposal: dirty });
+    await service.publishProposal(user, 'gen-1');
+    const passed = vi.mocked(kits.createFromProposal).mock.calls[0]![1];
+    expect(
+      passed.questions.every((q) => q.followupPolicy !== 'adaptive_ai' || q.type === 'open_ended'),
+    ).toBe(true);
+    const prompts = passed.questions.map((q) => q.prompt.trim().toLowerCase());
+    expect(new Set(prompts).size).toBe(prompts.length);
+  });
 });
 
 const SAMPLE_JD = `
