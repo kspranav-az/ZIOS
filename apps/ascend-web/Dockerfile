@@ -14,6 +14,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/config/package.json packages/config/package.json
 COPY packages/shared-types/package.json packages/shared-types/package.json
 COPY packages/ui/package.json packages/ui/package.json
+COPY packages/interview-room/package.json packages/interview-room/package.json
 COPY apps/ascend-web/package.json apps/ascend-web/package.json
 
 RUN pnpm install --frozen-lockfile
@@ -22,10 +23,13 @@ RUN pnpm install --frozen-lockfile
 COPY packages/config packages/config
 COPY packages/shared-types packages/shared-types
 COPY packages/ui packages/ui
+COPY packages/interview-room packages/interview-room
 COPY apps/ascend-web apps/ascend-web
 
 ARG VITE_API_URL=http://localhost:3000
+ARG VITE_ORCHESTRATOR_URL=ws://localhost:8000
 ENV VITE_API_URL=$VITE_API_URL
+ENV VITE_ORCHESTRATOR_URL=$VITE_ORCHESTRATOR_URL
 
 RUN pnpm --filter @zios/shared-types build && pnpm --filter ascend-web build
 

@@ -19,6 +19,7 @@
   "dependencies": {
     "@fontsource/plus-jakarta-sans": "^5.2.5",
     "@zios/shared-types": "workspace:*",
+    "@zios/interview-room": "workspace:*",
     "@zios/ui": "workspace:*",
     "livekit-client": "^2.20.1",
     "material-symbols": "^0.45.8",

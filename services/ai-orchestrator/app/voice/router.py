@@ -13,6 +13,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from livekit.api import AccessToken, VideoGrants
 
 from app.conductor_client import ConductorClient
+from app.practice import PracticeConductorClient
 from app.storage import StorageClient
 from app.video.capture import VideoCaptureSession, capture_enabled
 from app.voice.mock_stt import MockSttAdapter
@@ -41,6 +42,9 @@ async def issue_voice_token(session_id: str, body: dict[str, Any]) -> dict[str, 
     # Interview mode reported by the API ("voice" | "video"); video-mode
     # sessions additionally run a LiveKit track capture (Phase 14).
     mode = body.get("mode", "voice")
+    # Live practice (Phase 12e): the turn loop talks to the practice engine's
+    # recovery-token-only conductor routes instead of the company ones.
+    practice = body.get("practice") is True
     room_name = _room_name(session_id)
     token = (
         AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET)
@@ -66,8 +70,9 @@ async def issue_voice_token(session_id: str, body: dict[str, Any]) -> dict[str, 
             recovery_token=recovery_token,
             stt=MockSttAdapter(),
             tts=MockTtsAdapter(),
-            conductor=ConductorClient(),
+            conductor=PracticeConductorClient() if practice else ConductorClient(),
             mode=mode,
+            practice=practice,
         )
     return {
         "sessionId": session_id,

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button, Card } from '@zios/ui';
-import { ApiErrorResponse, fetchProgress, type CandidateProgressResponse } from '../api';
+import { ApiErrorResponse, fetchHistory, type CandidateHistoryResponse } from '../api';
 
 function formatDate(iso: string | null): string {
   if (!iso) return '—';
@@ -64,12 +64,12 @@ function TrendChart({
 
 export function ProgressPage() {
   const navigate = useNavigate();
-  const [progress, setProgress] = useState<CandidateProgressResponse | null>(null);
+  const [history, setHistory] = useState<CandidateHistoryResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchProgress()
-      .then(setProgress)
+    fetchHistory()
+      .then(setHistory)
       .catch((err: unknown) => {
         if (err instanceof ApiErrorResponse && err.statusCode === 401) {
           return;
@@ -78,11 +78,14 @@ export function ProgressPage() {
       });
   }, []);
 
+  const progress = history?.practice ?? null;
+  const company = history?.company ?? [];
+
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col py-8">
       <h1 className="text-headline-sm text-on-surface">Progress</h1>
       <p className="mt-1 text-body-md text-on-surface-variant">
-        Mocks completed, score trend, and your daily streak.
+        Practice mocks, score trend, your daily streak, and company interviews on this email.
       </p>
 
       {error && (
@@ -135,7 +138,7 @@ export function ProgressPage() {
             </Card>
           )}
 
-          <h2 className="mt-8 text-title-md text-on-surface">Session history</h2>
+          <h2 className="mt-8 text-title-md text-on-surface">Practice mocks</h2>
           {progress.sessions.length === 0 ? (
             <div className="mt-3">
               <p className="text-body-md text-on-surface-variant">
@@ -149,14 +152,14 @@ export function ProgressPage() {
             <ul className="mt-3 divide-y divide-outline-variant rounded-xl bg-surface-container-low">
               {progress.sessions.map((s) => (
                 <li key={s.id} className="flex items-center justify-between gap-4 px-4 py-3">
-                  <div>
-                    <p className="text-body-md text-on-surface">{s.title}</p>
+                  <div className="min-w-0">
+                    <p className="truncate text-body-md text-on-surface">{s.title}</p>
                     <p className="text-body-sm text-on-surface-variant">
                       {s.source === 'library' ? 'Library pack' : 'From your JD'} ·{' '}
                       {formatDate(s.completedAt ?? s.createdAt)}
                     </p>
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex shrink-0 items-center gap-3">
                     <span className="text-body-sm text-on-surface-variant">
                       {s.status === 'completed'
                         ? `Score ${s.overallRecommendation ?? '—'}`
@@ -171,6 +174,40 @@ export function ProgressPage() {
                       </Link>
                     )}
                   </div>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <h2 className="mt-10 text-title-md text-on-surface">Company interviews</h2>
+          <p className="mt-1 text-body-sm text-on-surface-variant">
+            Interviews you completed for companies, matched to your account by email.
+          </p>
+          {company.length === 0 ? (
+            <p className="mt-3 text-body-md text-on-surface-variant">
+              No company interviews linked to this email yet.
+            </p>
+          ) : (
+            <ul className="mt-3 divide-y divide-outline-variant rounded-xl bg-surface-container-low">
+              {company.map((c) => (
+                <li key={c.sessionId} className="flex items-center justify-between gap-4 px-4 py-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-body-md text-on-surface">
+                      {c.roleTitle ?? 'Interview'}
+                    </p>
+                    <p className="truncate text-body-sm text-on-surface-variant">
+                      {c.orgName} · {c.mode} · {formatDate(c.completedAt ?? c.startedAt)}
+                    </p>
+                  </div>
+                  <span
+                    className={`shrink-0 rounded-full px-3 py-1 text-label-bold ${
+                      c.status === 'completed'
+                        ? 'bg-primary-container text-on-primary-container'
+                        : 'bg-surface-container-high text-on-surface-variant'
+                    }`}
+                  >
+                    {c.status}
+                  </span>
                 </li>
               ))}
             </ul>

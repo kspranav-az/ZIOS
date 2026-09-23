@@ -2,6 +2,7 @@ import type {
   ApiError,
   CandidateAccount,
   CandidateAuthResponse,
+  CandidateHistoryResponse,
   CandidateMeResponse,
   CandidateProgressResponse,
   CandidateReadinessResponse,
@@ -16,6 +17,7 @@ import type {
   PracticeCreateResponse,
   PracticeFromJdBody,
   PracticeLibraryPack,
+  PracticeLiveTokenResponse,
   PracticePreflightResponse,
   PracticeReport,
   PracticeSessionDetailResponse,
@@ -124,6 +126,7 @@ export function patchMe(patch: {
 
 export type {
   CandidateAccount,
+  CandidateHistoryResponse,
   CandidateProgressResponse,
   CandidateReadinessResponse,
   CandidateWalletResponse,
@@ -205,6 +208,34 @@ export function submitPracticeAudio(
   );
 }
 
+/** Live practice (Phase 12e): LiveKit room token + orchestrator WS. */
+export function getPracticeLiveToken(
+  sessionId: string,
+  recoveryToken: string,
+): Promise<PracticeLiveTokenResponse> {
+  return request(
+    'POST',
+    `/cand/practice/${sessionId}/live/token`,
+    {},
+    true,
+    recoveryToken ? { 'x-recovery-token': recoveryToken } : undefined,
+  );
+}
+
+/** Abandon a live practice session (candidate left the room). */
+export function abandonPractice(
+  sessionId: string,
+  recoveryToken: string,
+): Promise<{ session: unknown }> {
+  return request(
+    'POST',
+    `/cand/practice/${sessionId}/abandon`,
+    {},
+    true,
+    recoveryToken ? { 'x-recovery-token': recoveryToken } : undefined,
+  );
+}
+
 export function fetchPracticeReport(sessionId: string): Promise<PracticeReportDetail> {
   return request('GET', `/cand/practice/${sessionId}/report`, undefined, true);
 }
@@ -217,6 +248,15 @@ export function fetchWallet(): Promise<CandidateWalletResponse> {
 
 export function fetchProgress(): Promise<CandidateProgressResponse> {
   return request('GET', '/cand/practice/progress', undefined, true);
+}
+
+/**
+ * Full interview history (Phase 12e): practice progress + company interviews
+ * linked by exact email match. Supersedes fetchProgress for the Progress
+ * page; the old endpoint stays for compatibility.
+ */
+export function fetchHistory(): Promise<CandidateHistoryResponse> {
+  return request('GET', '/cand/me/history', undefined, true);
 }
 
 export function fetchReadiness(): Promise<CandidateReadinessResponse> {

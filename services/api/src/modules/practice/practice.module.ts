@@ -8,6 +8,7 @@ import { ResumeModule } from '@/modules/resume';
 import { SessionsModule } from '@/modules/sessions';
 import { StorageClient } from '@/modules/storage';
 import { PracticeAudioService } from './practice-audio.service';
+import { PracticeConductorController } from './practice-conductor.controller';
 import { PracticeController } from './practice.controller';
 import { PracticeEvaluationService } from './practice-evaluation.service';
 import { PracticeReportRepository } from './practice-report.repository';
@@ -25,7 +26,7 @@ import { PracticeTranscriptRepository } from './practice-transcript.repository';
     ResumeModule,
     SessionsModule,
   ],
-  controllers: [PracticeController],
+  controllers: [PracticeController, PracticeConductorController],
   providers: [
     PracticeService,
     PracticeAudioService,

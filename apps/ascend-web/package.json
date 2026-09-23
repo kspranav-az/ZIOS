@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@fontsource/plus-jakarta-sans": "^5.2.5",
+    "@zios/interview-room": "workspace:*",
     "@zios/shared-types": "workspace:*",
     "@zios/ui": "workspace:*",
     "material-symbols": "^0.45.8",

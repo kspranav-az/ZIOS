@@ -14,14 +14,16 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/config/package.json packages/config/package.json
 COPY packages/shared-types/package.json packages/shared-types/package.json
 COPY packages/ui/package.json packages/ui/package.json
+COPY packages/interview-room/package.json packages/interview-room/package.json
 COPY apps/candidate-web/package.json apps/candidate-web/package.json
 
 RUN pnpm install --frozen-lockfile
 
-# Sources needed to build candidate-web (config presets, shared types, ui).
+# Sources needed to build candidate-web (config presets, shared types, ui, interview room).
 COPY packages/config packages/config
 COPY packages/shared-types packages/shared-types
 COPY packages/ui packages/ui
+COPY packages/interview-room packages/interview-room
 COPY apps/candidate-web apps/candidate-web
 
 ARG VITE_API_URL=http://localhost:3000

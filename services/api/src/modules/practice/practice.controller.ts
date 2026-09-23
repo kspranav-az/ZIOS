@@ -17,6 +17,7 @@ import type {
   PracticeCreateResponse,
   PracticeFromJdBody,
   PracticeLibraryPack,
+  PracticeLiveTokenResponse,
   PracticePreflightResponse,
   PracticeReportDetailResponse,
   PracticeSessionDetailResponse,
@@ -56,7 +57,10 @@ export class PracticeController {
 
   @Get('library')
   library(): { packs: PracticeLibraryPack[]; consent: { version: string; text: string } } {
-    return { packs: PRACTICE_LIBRARY_PACKS, consent: { version: PRACTICE_CONSENT_TEXT_VERSION, text: PRACTICE_CONSENT_TEXT } };
+    return {
+      packs: PRACTICE_LIBRARY_PACKS,
+      consent: { version: PRACTICE_CONSENT_TEXT_VERSION, text: PRACTICE_CONSENT_TEXT },
+    };
   }
 
   @Post()
@@ -90,13 +94,17 @@ export class PracticeController {
 
   /** Practice history + pace/filler trend series + streak (D14). */
   @Get('progress')
-  async progress(@CurrentCandidate() auth: CandidateAuthContext): Promise<CandidateProgressResponse> {
+  async progress(
+    @CurrentCandidate() auth: CandidateAuthContext,
+  ): Promise<CandidateProgressResponse> {
     return this.evaluation.getProgress(auth.account.id);
   }
 
   /** Readiness score with formula-versioned component breakdown (D15). */
   @Get('readiness')
-  async readiness(@CurrentCandidate() auth: CandidateAuthContext): Promise<CandidateReadinessResponse> {
+  async readiness(
+    @CurrentCandidate() auth: CandidateAuthContext,
+  ): Promise<CandidateReadinessResponse> {
     return this.evaluation.getReadiness(auth.account.id);
   }
 
@@ -143,6 +151,20 @@ export class PracticeController {
     @Body() body: PracticeTurnAudioBody,
   ): Promise<PracticeTurnAudioResponse> {
     return this.audio.transcribeTurn(auth.account.id, id, recoveryToken ?? '', body);
+  }
+
+  /**
+   * Live practice token (Phase 12e): LiveKit room + orchestrator WS for a
+   * 'live'-mode session that already went through preflight. The recovery
+   * token is forwarded to the orchestrator for its conductor calls.
+   */
+  @Post(':id/live/token')
+  async liveToken(
+    @CurrentCandidate() auth: CandidateAuthContext,
+    @Param('id') id: string,
+    @Headers('x-recovery-token') recoveryToken: string,
+  ): Promise<PracticeLiveTokenResponse> {
+    return this.practice.issueLiveToken(auth.account.id, id, recoveryToken ?? '');
   }
 
   @Post(':id/turn')

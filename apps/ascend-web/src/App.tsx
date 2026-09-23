@@ -6,6 +6,7 @@ import { LoginPage } from './pages/LoginPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { PracticeConsentPage } from './pages/PracticeConsentPage';
 import { PracticeInterviewPage } from './pages/PracticeInterviewPage';
+import { PracticeLivePage } from './pages/PracticeLivePage';
 import { PracticeReportPage } from './pages/PracticeReportPage';
 import { PracticeSetupPage } from './pages/PracticeSetupPage';
 import { ProgressPage } from './pages/ProgressPage';
@@ -40,6 +41,7 @@ const router = createBrowserRouter([
       { path: '/onboarding', element: <OnboardingPage /> },
       { path: '/practice/:sessionId/consent', element: <PracticeConsentPage /> },
       { path: '/practice/:sessionId/interview', element: <PracticeInterviewPage /> },
+      { path: '/practice/:sessionId/live', element: <PracticeLivePage /> },
     ],
   },
   { path: '*', element: <Navigate to="/" replace /> },
