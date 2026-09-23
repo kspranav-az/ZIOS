@@ -58,6 +58,10 @@ module = [
     "soundfile.*",
     "onnxruntime",
     "onnxruntime.*",
+    "piper",
+    "piper.*",
+    "soxr",
+    "soxr.*",
 ]
 ignore_missing_imports = true
 
