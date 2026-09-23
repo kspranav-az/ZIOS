@@ -181,6 +181,20 @@ export interface PracticePreflightResponse {
 
 export interface PracticeTurnBody {
   answer?: string;
+  /** Optional recording object name (from POST …/turn-audio) stored on the
+   * transcript row for future audio replay. */
+  recordingRef?: string;
+}
+
+export interface PracticeTurnAudioBody {
+  audioBase64: string;
+  /** Defaults to audio/webm. Allowlisted audio MIME types only. */
+  contentType?: string;
+}
+
+export interface PracticeTurnAudioResponse {
+  transcript: string;
+  objectName: string;
 }
 
 export interface PracticeTurnResponse {
@@ -800,6 +814,10 @@ export interface AnswerData {
     sizeBytes: number;
     durationSec?: number;
     transcript?: string;
+  };
+  /** Voice-practice recording reference (Phase 12b record-transcribe-submit). */
+  practiceRecording?: {
+    objectName: string;
   };
 }
 

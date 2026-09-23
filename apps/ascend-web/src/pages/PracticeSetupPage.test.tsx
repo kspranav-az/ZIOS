@@ -135,4 +135,62 @@ describe('PracticeSetupPage', () => {
       await screen.findByText(/hit today’s practice limit/i),
     ).toBeInTheDocument();
   });
+
+  it('starts a voice session when the Voice mode is selected', async () => {
+    const user = userEvent.setup();
+    vi.mocked(createPractice).mockResolvedValue({
+      session: {
+        id: 'ps-voice',
+        accountId: 'acc-1',
+        mode: 'voice',
+        source: 'library',
+        title: 'HR Screening',
+        status: 'created',
+        consentId: null,
+        createdAt: new Date().toISOString(),
+        startedAt: null,
+        completedAt: null,
+      },
+      recoveryToken: 'rec-voice',
+    });
+    renderSetup();
+
+    await user.click(await screen.findByText('HR Screening'));
+    await user.click(screen.getByRole('button', { name: /^voice/i }));
+    await user.click(screen.getByRole('button', { name: /continue to consent/i }));
+
+    await waitFor(() =>
+      expect(createPractice).toHaveBeenCalledWith({ packId: 'hr-screening', mode: 'voice' }),
+    );
+  });
+
+  it('passes the selected mode into the JD flow', async () => {
+    const user = userEvent.setup();
+    const { createPracticeFromJd } = await import('../api');
+    vi.mocked(createPracticeFromJd).mockResolvedValue({
+      session: {
+        id: 'ps-jd-voice',
+        accountId: 'acc-1',
+        mode: 'voice',
+        source: 'jd',
+        title: 'JD practice',
+        status: 'created',
+        consentId: null,
+        createdAt: new Date().toISOString(),
+        startedAt: null,
+        completedAt: null,
+      },
+      recoveryToken: 'rec-jd-voice',
+    });
+    renderSetup();
+
+    await user.click(await screen.findByRole('button', { name: /^voice/i }));
+    const jdBox = screen.getByLabelText(/job description/i);
+    await user.type(jdBox, 'A'.repeat(60));
+    await user.click(screen.getByRole('button', { name: /build my mock/i }));
+
+    await waitFor(() =>
+      expect(createPracticeFromJd).toHaveBeenCalledWith({ jdText: 'A'.repeat(60), mode: 'voice' }),
+    );
+  });
 });

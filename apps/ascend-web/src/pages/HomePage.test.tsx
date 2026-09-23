@@ -22,8 +22,10 @@ import { HomePage } from './HomePage';
 const account = {
   id: 'cand-1',
   email: 'priya@example.com',
+  phone: null,
   name: 'Priya',
   targetRole: 'Backend Engineer',
+  onboarding: {},
   marketingOptIn: false,
   createdAt: new Date('2026-09-23T05:00:00Z').toISOString(),
 };

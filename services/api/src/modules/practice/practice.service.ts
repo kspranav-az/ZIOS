@@ -237,7 +237,7 @@ export class PracticeService {
     accountId: string,
     sessionId: string,
     rawRecoveryToken: string,
-    body?: { answer?: string },
+    body?: { answer?: string; recordingRef?: string },
   ): Promise<{ session: PracticeSessionRecord; turn: SessionTurnResponse }> {
     const result = await this.db.transaction(async (q) => {
       let session = await this.loadByRecoveryToken(sessionId, rawRecoveryToken, q);
@@ -262,7 +262,12 @@ export class PracticeService {
           };
           return { session, turn };
         }
-        await this.transcript.answer(lastRow.id, answer, q);
+        await this.transcript.answer(
+          lastRow.id,
+          answer,
+          q,
+          body?.recordingRef ? { type: 'open_ended', practiceRecording: { objectName: body.recordingRef } } : undefined,
+        );
       }
       session = (await this.sessions.findById(session.id, q)) as PracticeSessionRecord;
       return this.buildNextTurn(q, session);
@@ -315,6 +320,20 @@ export class PracticeService {
   }
 
   /* ---- internals ---- */
+
+  /** Audio-turn gate (voice practice): recovery-token load + ownership + live. */
+  async loadLiveSession(
+    accountId: string,
+    sessionId: string,
+    rawRecoveryToken: string,
+  ): Promise<PracticeSessionRecord> {
+    const session = await this.loadByRecoveryToken(sessionId, rawRecoveryToken, this.db);
+    this.assertOwned(session, accountId);
+    if (session.status !== 'live') {
+      throw new ApiException(409, 'SESSION_STATE_INVALID', `session is ${session.status}`);
+    }
+    return session;
+  }
 
   private assertOwned(session: PracticeSessionRecord, accountId: string): void {
     if (session.accountId !== accountId) {
