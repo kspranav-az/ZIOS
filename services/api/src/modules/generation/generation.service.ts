@@ -272,8 +272,21 @@ export class GenerationService {
       );
     }
     const replacement = replacements[0]!;
+    // Same schema-drift guard as finalizeProposal: a regenerated non-open-ended
+    // question must not carry adaptive follow-ups into the published kit.
+    const safeReplacement: ProposedQuestion =
+      type === 'open_ended'
+        ? { ...replacement, topic, type }
+        : {
+            ...replacement,
+            topic,
+            type,
+            followupPolicy: 'none',
+            followupFixed: null,
+            followupDepthCap: null,
+          };
     const newQuestions = [...questions];
-    newQuestions[index] = { ...replacement, topic, type };
+    newQuestions[index] = safeReplacement;
 
     const proposal = this.finalizeProposal(newQuestions);
     const updated = await this.repository.update(orgId, generationId, { proposal });
@@ -326,25 +339,43 @@ export class GenerationService {
   }
 
   private finalizeProposal(questions: ProposedQuestion[]): GenerationProposal {
+    // LLM-drafted questions can drift from our schema contract (observed live:
+    // gemini returned a rating_scale question carrying adaptive_ai follow-ups,
+    // which the question_adaptive_open_ended_only DB constraint rejects with a
+    // 500 at publish time). Sanitize at the domain boundary, before persistence.
+    // Identical prompts can also be drafted for two near-duplicate topics —
+    // keep the first occurrence so publish never stores dupes.
+    const seenPrompts = new Set<string>();
+    const unique = questions.filter((q) => {
+      const key = q.prompt.trim().toLowerCase();
+      if (seenPrompts.has(key)) return false;
+      seenPrompts.add(key);
+      return true;
+    });
+
     // Enforce the duration cap by dropping lowest-priority questions from the
     // tail (topics are ordered by priority: skills first, responsibilities next,
-    // fallbacks last).
+    // fallbacks last). Must run AFTER dedupe so the tail-trim never pushes the
+    // proposal below the minimum question count.
     const cap = this.capSeconds();
     let estimate = estimateDuration(
-      questions.map((q) => ({ id: q.prompt, timeLimitSec: q.timeLimitSec })),
+      unique.map((q) => ({ id: q.prompt, timeLimitSec: q.timeLimitSec })),
     );
-    while (questions.length > TARGET_MIN_QUESTIONS && estimate.estimatedSeconds > cap) {
-      questions.pop();
+    while (unique.length > TARGET_MIN_QUESTIONS && estimate.estimatedSeconds > cap) {
+      unique.pop();
       estimate = estimateDuration(
-        questions.map((q) => ({ id: q.prompt, timeLimitSec: q.timeLimitSec })),
+        unique.map((q) => ({ id: q.prompt, timeLimitSec: q.timeLimitSec })),
       );
     }
 
-    const topics = Array.from(new Set(questions.map((q) => q.topic)));
+    const topics = Array.from(new Set(unique.map((q) => q.topic)));
     return {
       topics,
-      questions: questions.map((q) => ({
+      questions: unique.map((q) => ({
         ...q,
+        followupPolicy: q.type === 'open_ended' ? q.followupPolicy : 'none',
+        followupFixed: q.type === 'open_ended' ? q.followupFixed : null,
+        followupDepthCap: q.type === 'open_ended' ? q.followupDepthCap : null,
         rubricLines: normalizeRubricLines(q.rubricLines),
       })),
       durationEstimateSec: estimate.estimatedSeconds,

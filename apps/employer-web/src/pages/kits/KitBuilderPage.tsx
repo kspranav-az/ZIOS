@@ -658,7 +658,7 @@ export function KitBuilderPage() {
       <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-8 items-start">
         <KitSettingsRail kit={kit} disabled={archived} onPatch={patchKit} />
 
-        <section aria-label="Questions">
+        <section aria-label="Questions" className="min-w-0">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-headline-sm text-headline-sm text-primary">
               Questions{' '}
