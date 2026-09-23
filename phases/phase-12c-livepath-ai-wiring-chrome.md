@@ -60,6 +60,8 @@ Add `docker-compose.override.yml` to `.gitignore` (it is host-specific; Linux CI
 `docker compose up -d api` (picks up `LIVEKIT_URL` now pointing at cloud). The local `livekit` dev container stays up but unused — harmless.
 **Gate:** `curl -s localhost:8000/healthz` (host orchestrator) → `{"status":"ok"}`; `curl -s localhost:3000/healthz` → ok; orchestrator `/documents/health/extraction` → pypdf.
 
+✅ **DONE 2026-09-23** — all gates green. `services/ai-orchestrator/.env.host` created (git-ignored, verified `git check-ignore`), host orchestrator started from it (`/healthz` ok, extraction=pypdf); `docker-compose.override.yml` created (git-ignored) with `ORCHESTRATOR_URL: http://host.docker.internal:8000` for api; verified inside the container: PID-1 env carries both the override and cloud `LIVEKIT_URL`, and `fetch(host.docker.internal:8000/healthz)` from the container succeeds; orchestrator container kept stopped (no api `depends_on`, so `up -d api` does not resurrect it). Note: api has NO `depends_on` — the plan's caution was verified unnecessary.
+
 ---
 
 ## Step 2 — Live-path re-validation (no code expected; evidence only)
@@ -71,6 +73,12 @@ Add `docker-compose.override.yml` to `.gitignore` (it is host-specific; Linux CI
 5. **Multimodal seed on native arm64:** re-run `node scripts/seed-multimodal-analysis-validation.js` — expect the 150s clip analysis in minutes (vs ~30 min emulated). Both jobs must complete schema-valid.
 **Gate:** recording lands in MinIO (`recordings/*.webm`); analysis artifacts in `analysis/{sessionId}/…`; jobs `completed`.
 **If video still fails:** capture browser console + orchestrator logs; do NOT proceed to Step 3 until the live path is green (everything downstream depends on it).
+
+✅ **DONE 2026-09-23** — all gates green:
+- **2.1 token wiring:** throwaway script (admin OTP → voice kit → invite → consent → `POST /sessions/:id/voice/token`) returned `200` with `livekit.url = wss://zios-hckwyqlv.livekit.cloud` — the full API → host-orchestrator → LiveKit-Cloud signing chain works.
+- **2.2/2.3 journeys:** candidate-web e2e **5/5 passed** (async-video, candidate journey, recovery, strict-video→integrity-flags, voice→fallback) — real chromium, cloud LiveKit URLs, host-orchestrator conductor WS. Also observed: a strict-video recording enqueued analysis automatically.
+- **2.4 failed-job classification:** two distinct causes. (a) The seed-time 11:14Z failures (`ORCHESTRATOR_UNREACHABLE … ENOTFOUND ai-orchestrator`) = the orchestrator container was stopped (docker DNS gone) — transient. (b) Failures at 13:10Z/13:34Z despite correct container env = **two stray host processes** (`node services/api/dist/main`, PIDs 90499/90500, running since 2:52PM) acting as analysis-queue workers with stale env, stealing jobs from Redis (same failure signature: one job failed while a twin completed 113ms later). Killed both; redrive of the failed job **completed** (`attempts=1`). This is the CONTEXT.md stray-process gotcha manifesting as queue theft.
+- **2.5 multimodal seed re-run:** `seed-multimodal-analysis-validation.js` **PASSED** — both jobs (`multimodal_feature_extraction`) completed on the native host orchestrator in < 4 min (vs ~30 min under emulation), schema-valid output with validity flags (`talk_ratio: INVALID(single_speaker_recording)` — honest, not fabricated).
 
 ---
 
