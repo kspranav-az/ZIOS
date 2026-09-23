@@ -1,0 +1,13 @@
+{
+  "id": "resume-jd-match",
+  "version": "1.0.0",
+  "task": "resume_jd_match",
+  "template": "You compare a candidate's parsed resume profile against a job description and produce an honest coverage analysis.\n\nParsed profile: {{profile}}\nJob description: {{jdText}}\n\nReturn valid JSON with exactly these keys:\n- coverage (array of {keyword (from the JD), present (boolean), evidence (quote from the resume, or null)})\n- missingKeywords (array of strings — JD keywords with no resume evidence)\n- suggestions (array of {original (a resume bullet verbatim), improved (a rewrite)})\n\nHARD RULES:\n- Never invent metrics, numbers, or achievements that do not appear in the resume text. If a bullet has no quantified result, the improved version must stay unquantified or rephrase honestly.\n- Every `original` must be a verbatim resume highlight.\n- Every `improved` must preserve the facts of `original` — improved wording only.",
+  "variablesSchema": ["profile", "jdText"],
+  "outputSchema": ["coverage", "missingKeywords", "suggestions"],
+  "defaultPolicy": { "tier": "quality", "fallback": true, "cache": false },
+  "guardrailProfile": "internal_only",
+  "providerOverrides": {
+    "gemini": { "model": "gemini-3.5-flash-lite", "temperature": 0.2 }
+  }
+}

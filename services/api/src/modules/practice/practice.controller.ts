@@ -13,6 +13,7 @@ import type {
   PracticeConsentBody,
   PracticeCreateBody,
   PracticeCreateResponse,
+  PracticeFromJdBody,
   PracticeLibraryPack,
   PracticePreflightResponse,
   PracticeReportDetailResponse,
@@ -26,6 +27,7 @@ import {
   CurrentCandidate,
   type CandidateAuthContext,
 } from '@/modules/candidate-accounts';
+import { ResumeService } from '@/modules/resume';
 import { PRACTICE_CONSENT_TEXT, PRACTICE_CONSENT_TEXT_VERSION } from './consent-text';
 import { PRACTICE_LIBRARY_PACKS } from './library';
 import { PracticeEvaluationService } from './practice-evaluation.service';
@@ -43,6 +45,7 @@ export class PracticeController {
   constructor(
     private readonly practice: PracticeService,
     private readonly evaluation: PracticeEvaluationService,
+    private readonly resumes: ResumeService,
   ) {}
 
   @Get('library')
@@ -60,6 +63,21 @@ export class PracticeController {
     const { session, recoveryToken } = await this.practice.create(auth.account.id, body, {
       ip,
       userAgent,
+    });
+    return { session, recoveryToken };
+  }
+
+  /** JD-targeted mock (D10): generates the question set, then creates the session. */
+  @Post('from-jd')
+  async createFromJd(
+    @CurrentCandidate() auth: CandidateAuthContext,
+    @Body() body: PracticeFromJdBody,
+  ): Promise<PracticeCreateResponse> {
+    const resumeText = await this.resumes.resumeTextFor(auth.account.id);
+    const { session, recoveryToken } = await this.practice.createFromJd(auth.account.id, {
+      jdText: body?.jdText ?? '',
+      mode: body?.mode ?? 'text',
+      resumeText,
     });
     return { session, recoveryToken };
   }

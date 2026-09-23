@@ -1,0 +1,13 @@
+{
+  "id": "ats-readiness-check",
+  "version": "1.0.0",
+  "task": "ats_readiness_check",
+  "template": "You review a parsed resume profile for applicant-tracking-system (ATS) readiness.\n\nParsed profile: {{profile}}\n\nReturn valid JSON with exactly these keys:\n- score (number 0-100)\n- issues (array of {severity: \"high\" | \"medium\" | \"low\", section (one of: contact, summary, skills, experience, education, formatting), issue, fix (concrete, actionable)})\n\nRules: only flag issues visible in the parsed profile; every fix must be something the candidate can do; do not invent content the candidate should add beyond structural guidance.",
+  "variablesSchema": ["profile"],
+  "outputSchema": ["score", "issues"],
+  "defaultPolicy": { "tier": "quality", "fallback": true, "cache": false },
+  "guardrailProfile": "internal_only",
+  "providerOverrides": {
+    "gemini": { "model": "gemini-3.5-flash-lite", "temperature": 0.2 }
+  }
+}

@@ -1,10 +1,12 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type {
   InterviewSession,
+  KitQuestion,
   KitSnapshot,
   PracticeConsentBody,
   PracticeCreateBody,
   PracticeMode,
+  ProposedQuestion,
   SessionTurnResponse,
 } from '@zios/shared-types';
 import { TokenService } from '@/common/tokens';
@@ -13,6 +15,7 @@ import { DatabaseService, type Queryable } from '@/modules/database';
 import { CreditsService, assertCanStart, priceForKind } from '@/modules/credits';
 import { INTERVIEWER_AI, type InterviewerAi } from '@/modules/sessions';
 import { transition } from '@/modules/sessions';
+import { LlmGateway } from '@/modules/llm-gateway';
 import { PRACTICE_CONSENT_TEXT_VERSION } from './consent-text';
 import { findPack } from './library';
 import { PracticeEvaluationService } from './practice-evaluation.service';
@@ -39,6 +42,7 @@ export class PracticeService {
     private readonly credits: CreditsService,
     private readonly evaluation: PracticeEvaluationService,
     @Inject(INTERVIEWER_AI) private readonly conductor: InterviewerAi,
+    private readonly llmGateway: LlmGateway,
   ) {}
 
   async create(
@@ -53,6 +57,54 @@ export class PracticeService {
     if (body.mode !== 'text' && body.mode !== 'voice') {
       throw new ApiException(400, 'VALIDATION_ERROR', 'mode must be text or voice');
     }
+    void requestMeta; // ip/ua captured at consent time
+    return this.insertNewSession(accountId, body.mode, 'library', pack.title, pack.questions);
+  }
+
+  /**
+   * JD-targeted mock (Phase 12, D10): the practice_kit_from_jd LLM task builds
+   * a question set from the pasted JD (+ the candidate's resume text when one
+   * is stored), which becomes the session snapshot with source 'jd'. The LLM
+   * call runs OUTSIDE the transaction; only the insert is transactional, and
+   * the D11 daily-cap check runs inside it like library sessions.
+   */
+  async createFromJd(
+    accountId: string,
+    body: { jdText: string; mode: PracticeMode; resumeText?: string | null },
+  ): Promise<{ session: PracticeSessionRecord; recoveryToken: string }> {
+    const jdText = typeof body?.jdText === 'string' ? body.jdText.trim() : '';
+    if (jdText.length < 40) {
+      throw new ApiException(400, 'VALIDATION_ERROR', 'jdText must be at least 40 characters');
+    }
+    if (body.mode !== 'text' && body.mode !== 'voice') {
+      throw new ApiException(400, 'VALIDATION_ERROR', 'mode must be text or voice');
+    }
+    const result = await this.llmGateway.complete<{ questions: ProposedQuestion[] }>({
+      task: 'practice_kit_from_jd',
+      variables: {
+        jdText,
+        resumeText: typeof body.resumeText === 'string' ? body.resumeText : '',
+      },
+      // orgId is the candidate account id — pure attribution label (D9).
+      orgId: accountId,
+    });
+    const questions = result.parsed.questions ?? [];
+    if (questions.length === 0) {
+      throw new ApiException(502, 'KIT_GENERATION_FAILED', 'the question generator returned no questions');
+    }
+    const titleLine = jdText.split('\n').map((l) => l.trim()).find((l) => l.length > 0) ?? 'JD practice';
+    const title = `JD practice: ${titleLine.slice(0, 80)}`;
+    return this.insertNewSession(accountId, body.mode, 'jd', title, questions.map(toPracticeKitQuestion));
+  }
+
+  /** Shared insert for create()/createFromJd(): D11 cap check + row + recovery token. */
+  private async insertNewSession(
+    accountId: string,
+    mode: PracticeMode,
+    source: 'library' | 'jd',
+    title: string,
+    questions: KitQuestion[],
+  ): Promise<{ session: PracticeSessionRecord; recoveryToken: string }> {
     return this.db.transaction(async (q) => {
       // D11: refuse to start a new mock once today's completion cap is hit.
       const completedToday = await this.sessions.countCompletedToday(accountId, q);
@@ -68,16 +120,15 @@ export class PracticeService {
       const session = await this.sessions.insert(
         {
           accountId,
-          mode: body.mode,
-          source: 'library',
-          title: pack.title,
-          snapshot: { questions: pack.questions },
+          mode,
+          source,
+          title,
+          snapshot: { questions },
           creditAccountId,
           recoveryTokenHash: TokenService.hash(rawRecovery),
         },
         q,
       );
-      void requestMeta; // ip/ua captured at consent time
       return { session, recoveryToken: rawRecovery };
     });
   }
@@ -377,4 +428,29 @@ export class PracticeService {
     );
     return { session, turn };
   }
+}
+
+/** Map a JD-generated proposed question onto the practice KitQuestion shape. */
+function toPracticeKitQuestion(proposed: ProposedQuestion, index: number): KitQuestion {
+  return {
+    id: `jd-q${index + 1}-${proposed.topic.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}`,
+    kitId: 'practice-jd',
+    topic: proposed.topic,
+    position: String(index + 1),
+    type: proposed.type,
+    prompt: proposed.prompt,
+    options: proposed.options,
+    difficulty: proposed.difficulty,
+    timeLimitSec: proposed.timeLimitSec,
+    timeLimitType: proposed.timeLimitType,
+    mandatory: proposed.mandatory,
+    followupPolicy: proposed.followupPolicy,
+    followupFixed: proposed.followupFixed,
+    followupDepthCap: proposed.followupDepthCap,
+    rubricLines: proposed.rubricLines,
+    source: 'jd_generated',
+    sourceRef: null,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
 }

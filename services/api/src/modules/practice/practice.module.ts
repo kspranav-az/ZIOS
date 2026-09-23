@@ -4,6 +4,7 @@ import { CandidateAccountsModule } from '@/modules/candidate-accounts';
 import { CreditsModule } from '@/modules/credits';
 import { EvaluationModule } from '@/modules/evaluation';
 import { LlmGatewayModule } from '@/modules/llm-gateway';
+import { ResumeModule } from '@/modules/resume';
 import { SessionsModule } from '@/modules/sessions';
 import { PracticeController } from './practice.controller';
 import { PracticeEvaluationService } from './practice-evaluation.service';
@@ -19,6 +20,7 @@ import { PracticeTranscriptRepository } from './practice-transcript.repository';
     CreditsModule,
     EvaluationModule,
     LlmGatewayModule,
+    ResumeModule,
     SessionsModule,
   ],
   controllers: [PracticeController],

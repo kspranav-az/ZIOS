@@ -37,7 +37,33 @@ interface FixtureRegistry {
   judge_score: (variables: Record<string, unknown>) => JudgeResult;
   judge_adjudicate: (variables: Record<string, unknown>) => JudgeResult & { rationale: string };
   coaching_tips: (variables: Record<string, unknown>) => CoachingTipsResult;
+  practice_kit_from_jd: (variables: Record<string, unknown>) => { questions: ProposedQuestion[] };
+  resume_parse: (variables: Record<string, unknown>) => ParsedResumeProfile;
+  ats_readiness_check: (variables: Record<string, unknown>) => AtsReadinessResult;
+  resume_jd_match: (variables: Record<string, unknown>) => ResumeJdMatchResult;
 }
+
+export type ParsedResumeProfile = {
+  name: string | null;
+  email: string | null;
+  phone: string | null;
+  skills: string[];
+  experiences: Array<{ title: string; company: string; duration: string | null; highlights: string[] }>;
+  education: Array<{ degree: string; institution: string; year: string | null }>;
+  certifications: string[];
+  summary: string | null;
+};
+
+export type AtsReadinessResult = {
+  score: number;
+  issues: Array<{ severity: 'high' | 'medium' | 'low'; section: string; issue: string; fix: string }>;
+};
+
+export type ResumeJdMatchResult = {
+  coverage: Array<{ keyword: string; present: boolean; evidence: string | null }>;
+  missingKeywords: string[];
+  suggestions: Array<{ original: string; improved: string }>;
+};
 
 type CoachingTip = {
   category: 'pace' | 'fillers' | 'structure' | 'content' | 'confidence';
@@ -466,6 +492,10 @@ const FIXTURES: FixtureRegistry = {
   judge_score: judgeScoreFixture,
   judge_adjudicate: judgeAdjudicateFixture,
   coaching_tips: coachingTipsFixture,
+  practice_kit_from_jd: practiceKitFromJdFixture,
+  resume_parse: resumeParseFixture,
+  ats_readiness_check: atsReadinessCheckFixture,
+  resume_jd_match: resumeJdMatchFixture,
 };
 
 /**
@@ -509,6 +539,134 @@ function coachingTipsFixture(variables: Record<string, unknown>): CoachingTipsRe
     questionId: firstEvidence.questionId,
   });
   return { tips: tips.slice(0, 3) };
+}
+
+/**
+ * practice_kit_from_jd fixture (Phase 12, D10): builds 4 open-ended questions
+ * targeting the JD — two seeded from the JD title/skills, one gap-probe when a
+ * resume is provided, one behavioral. Deterministic so hermetic tests can
+ * assert question count and rubric lines.
+ */
+function practiceKitFromJdFixture(variables: Record<string, unknown>): {
+  questions: ProposedQuestion[];
+} {
+  const jdText = normalizeWhitespace(String(variables.jdText ?? ''));
+  const resumeText = normalizeWhitespace(String(variables.resumeText ?? ''));
+  const title = extractTitle(jdText) ?? 'this role';
+  const skills = parseList(
+    sectionLines(jdText, ['skills', 'must have', 'requirements', 'required skills']),
+  );
+  const topSkill = skills[0] ?? 'the core stack';
+
+  const make = (
+    index: number,
+    topic: string,
+    prompt: string,
+    rubric: string,
+  ): ProposedQuestion => ({
+    topic,
+    type: 'open_ended' as const,
+    prompt,
+    options: null,
+    difficulty: 'medium' as const,
+    timeLimitSec: 120,
+    timeLimitType: 'soft' as const,
+    mandatory: true,
+    followupPolicy: 'adaptive_ai' as const,
+    followupFixed: null,
+    followupDepthCap: 2,
+    rubricLines: [{ id: `jd-q${index}-r1`, text: rubric, weight: 1 }],
+    source: 'jd_generated' as const,
+    sourceRef: null,
+  });
+
+  const questions: ProposedQuestion[] = [
+    make(1, 'role-fit', `Walk me through your experience with ${topSkill}.`, `Depth: concrete, hands-on detail about ${topSkill}`),
+    make(2, 'role-fit', `What would you build first in this ${title} role, and why?`, 'Judgment: prioritisation reasoning tied to the JD'),
+    make(3, 'behavioral', 'Tell me about a time you delivered under a tight deadline.', 'Structure: clear situation, action, and measurable result'),
+  ];
+  if (resumeText.length > 0) {
+    questions.splice(2, 0, make(3, 'gap-probe', `The JD emphasises ${topSkill}, which is light in your resume — how would you close that gap?`, 'Honesty: acknowledges the gap with a concrete plan'));
+  }
+  return { questions: questions.slice(0, 5).map((q, i) => ({ ...q, rubricLines: q.rubricLines.map((r) => ({ ...r, id: `jd-q${i + 1}-r1` })) })) };
+}
+
+/** resume_parse fixture: deterministic structured profile from the raw text. */
+function resumeParseFixture(variables: Record<string, unknown>): ParsedResumeProfile {
+  const text = normalizeWhitespace(String(variables.resumeText ?? ''));
+  const lines = text.split('\n').map((line) => line.trim()).filter(Boolean);
+  const email = /[\w.+-]+@[\w-]+\.[\w.]+/.exec(text)?.[0] ?? null;
+  const phone = /(\+?\d[\d\s().-]{7,}\d)/.exec(text)?.[1]?.trim() ?? null;
+  const name = lines[0] && !lines[0].includes('@') ? lines[0] : null;
+  const skills = parseList(sectionLines(text, ['skills', 'technical skills', 'competencies']));
+  const highlightLines = lines.filter(
+    (line) => line.startsWith('-') || line.startsWith('•') || /^(led|built|designed|delivered|improved|migrated)/i.test(line),
+  );
+  return {
+    name,
+    email,
+    phone,
+    skills,
+    experiences: [
+      {
+        title: extractTitle(text) ?? 'Candidate',
+        company: 'see resume',
+        duration: null,
+        highlights: highlightLines.map((line) => line.replace(/^[-•]\s*/, '')).slice(0, 8),
+      },
+    ],
+    education: [],
+    certifications: [],
+    summary: name ? `${name} — see resume for full history.` : null,
+  };
+}
+
+/** ats_readiness_check fixture: flags deterministic, always-fixable issues. */
+function atsReadinessCheckFixture(variables: Record<string, unknown>): AtsReadinessResult {
+  const profile = (variables.profile ?? {}) as Partial<ParsedResumeProfile>;
+  const issues: AtsReadinessResult['issues'] = [];
+  let score = 100;
+  if (!profile.email) {
+    issues.push({ severity: 'high', section: 'contact', issue: 'No email address detected.', fix: 'Add a professional email address to the header.' });
+    score -= 25;
+  }
+  if (!profile.summary) {
+    issues.push({ severity: 'medium', section: 'summary', issue: 'No summary line.', fix: 'Add one sentence naming your role, years of experience, and specialty.' });
+    score -= 10;
+  }
+  if ((profile.skills ?? []).length < 5) {
+    issues.push({ severity: 'medium', section: 'skills', issue: 'Fewer than five skills detected.', fix: 'Add a dedicated skills section with the tools you have used professionally.' });
+    score -= 10;
+  }
+  const bullets = profile.experiences?.flatMap((e) => e.highlights ?? []) ?? [];
+  if (bullets.some((b) => !/\d/.test(b))) {
+    issues.push({ severity: 'low', section: 'experience', issue: 'Some bullets have no quantified outcome.', fix: 'Where honest, add numbers (team size, %, time saved) to each bullet.' });
+    score -= 5;
+  }
+  return { score: Math.max(0, score), issues };
+}
+
+/**
+ * resume_jd_match fixture: coverage is computed by keyword-presence in the
+ * resume text; suggestions rewrite only verbs, preserving facts and numbers —
+ * the honesty validation in the API additionally rejects fabricated metrics.
+ */
+function resumeJdMatchFixture(variables: Record<string, unknown>): ResumeJdMatchResult {
+  const jdText = normalizeWhitespace(String(variables.jdText ?? '')).toLowerCase();
+  const profile = (variables.profile ?? {}) as Partial<ParsedResumeProfile>;
+  const resumeText = JSON.stringify(profile).toLowerCase();
+  const skills = parseList(sectionLines(jdText, ['skills', 'must have', 'requirements', 'required skills']));
+  const coverage = skills.slice(0, 10).map((skill) => {
+    const present = resumeText.includes(skill.toLowerCase());
+    return { keyword: skill, present, evidence: present ? skill : null };
+  });
+  const missingKeywords = coverage.filter((c) => !c.present).map((c) => c.keyword);
+  const bullets = profile.experiences?.flatMap((e) => e.highlights ?? []) ?? [];
+  const suggestions = bullets.slice(0, 3).map((original) => ({
+    original,
+    improved: original.replace(/^responsible for/i, 'Owned').replace(/^worked on/i, 'Delivered'),
+  }));
+  return { coverage, missingKeywords, suggestions };
 }
 
 /**

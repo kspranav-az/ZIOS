@@ -3,6 +3,7 @@ import type {
   CandidateAccount,
   CandidateAuthResponse,
   CandidateMeResponse,
+  CandidateResumeResponse,
   CandidateWalletResponse,
   CandOtpRequestResponse,
   CoachingTip,
@@ -11,12 +12,14 @@ import type {
   PracticeConsentBody,
   PracticeCreateBody,
   PracticeCreateResponse,
+  PracticeFromJdBody,
   PracticeLibraryPack,
   PracticePreflightResponse,
   PracticeReport,
   PracticeSessionDetailResponse,
   PracticeTurnBody,
   PracticeTurnResponse,
+  ResumeJdMatchResponse,
   SessionTranscript,
 } from '@zios/shared-types';
 import { getToken } from './auth';
@@ -184,6 +187,32 @@ export function fetchPracticeReport(sessionId: string): Promise<PracticeReportDe
 
 export function fetchWallet(): Promise<CandidateWalletResponse> {
   return request('GET', '/cand/wallet', undefined, true);
+}
+
+/* ---- resume intelligence (Phase 12, D10) ---- */
+
+export function uploadResume(body: {
+  fileName: string;
+  contentBase64: string;
+  text?: string;
+}): Promise<CandidateResumeResponse> {
+  return request('POST', '/cand/resume', body, true);
+}
+
+export function fetchResume(): Promise<CandidateResumeResponse> {
+  return request('GET', '/cand/resume', undefined, true);
+}
+
+export function deleteResume(): Promise<{ ok: true }> {
+  return request('DELETE', '/cand/resume', undefined, true);
+}
+
+export function matchResume(jdText: string): Promise<ResumeJdMatchResponse> {
+  return request('POST', '/cand/resume/match', { jdText }, true);
+}
+
+export function createPracticeFromJd(body: PracticeFromJdBody): Promise<PracticeCreateResponse> {
+  return request('POST', '/cand/practice/from-jd', body, true);
 }
 
 /* ---- practice recovery token (tab-scoped like the auth token, D12) ---- */
