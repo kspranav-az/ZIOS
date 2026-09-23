@@ -10,7 +10,6 @@ import {
   storePracticeRecovery,
   type PracticeLibraryResponse,
 } from '../api';
-import { PageShell } from '../components/PageShell';
 
 /** Pack picker or JD paste → creates the session and routes to consent. */
 export function PracticeSetupPage() {
@@ -30,10 +29,7 @@ export function PracticeSetupPage() {
       );
   }, []);
 
-  const routeToConsent = (
-    session: { id: string },
-    recoveryToken: string,
-  ) => {
+  const routeToConsent = (session: { id: string }, recoveryToken: string) => {
     storePracticeRecovery(session.id, recoveryToken);
     navigate(`/practice/${session.id}/consent`, { state: { session, consent: library?.consent } });
   };
@@ -76,122 +72,126 @@ export function PracticeSetupPage() {
   };
 
   return (
-    <PageShell>
-      <div className="mx-auto w-full max-w-3xl">
-        <h1 className="text-headline-sm text-on-surface">Practice mock interview</h1>
-        <p className="mt-1 text-body-md text-on-surface-variant">
-          Pick a starter pack. Text mock 1 credit · voice mock 2 credits.
+    <div className="mx-auto w-full max-w-3xl">
+      <h1 className="text-headline-sm text-on-surface">Practice mock interview</h1>
+      <p className="mt-1 text-body-md text-on-surface-variant">
+        Pick a starter pack. Text mock 1 credit · voice mock 2 credits.
+      </p>
+
+      {error && (
+        <p className="mt-4 rounded-lg bg-error-container p-3 text-body-md text-on-error-container">
+          {error}
         </p>
+      )}
 
-        {error && (
-          <p className="mt-4 rounded-lg bg-error-container p-3 text-body-md text-on-error-container">
-            {error}
-          </p>
-        )}
-
-        <div className="mt-6 space-y-3">
-          {(library?.packs ?? []).map((pack) => {
-            const selected = packId === pack.id;
-            return (
-              <button
-                key={pack.id}
-                type="button"
-                onClick={() => setPackId(pack.id)}
-                className={`flex w-full items-start gap-3 rounded-xl border p-4 text-left transition-colors ${
-                  selected
-                    ? 'border-primary bg-primary-container/30'
-                    : 'border-outline-variant bg-surface-container-low hover:bg-surface-container'
+      <div className="mt-6 space-y-3">
+        {(library?.packs ?? []).map((pack) => {
+          const selected = packId === pack.id;
+          return (
+            <button
+              key={pack.id}
+              type="button"
+              onClick={() => setPackId(pack.id)}
+              className={`flex w-full items-start gap-3 rounded-xl border p-4 text-left transition-colors ${
+                selected
+                  ? 'border-primary bg-primary-container/30'
+                  : 'border-outline-variant bg-surface-container-low hover:bg-surface-container'
+              }`}
+            >
+              <span
+                className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
+                  selected ? 'border-primary bg-primary text-on-primary' : 'border-outline-variant'
                 }`}
               >
-                <span
-                  className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
-                    selected ? 'border-primary bg-primary text-on-primary' : 'border-outline-variant'
-                  }`}
-                >
-                  {selected && <Icon name="check" className="text-sm" />}
+                {selected && <Icon name="check" className="text-sm" />}
+              </span>
+              <span>
+                <span className="block font-bold text-on-surface">{pack.title}</span>
+                <span className="mt-1 block text-body-md text-on-surface-variant">
+                  {pack.description} · {pack.questions.length} questions
                 </span>
-                <span>
-                  <span className="block font-bold text-on-surface">{pack.title}</span>
-                  <span className="mt-1 block text-body-md text-on-surface-variant">
-                    {pack.description} · {pack.questions.length} questions
-                  </span>
-                </span>
-              </button>
-            );
-          })}
-        </div>
-
-        <Card padding="lg" radius="2xl" className="mt-8">
-          <h2 className="text-title-md text-on-surface">Or target a real job description</h2>
-          <p className="mt-1 text-body-sm text-on-surface-variant">
-            Paste a JD and we will generate questions for it — if you have a resume on file, one
-            question will probe the biggest gap.
-          </p>
-          <label htmlFor="jd-paste" className="sr-only">
-            Job description
-          </label>
-          <textarea
-            id="jd-paste"
-            rows={6}
-            className="mt-3 w-full resize-y rounded-xl border border-outline-variant bg-white p-4 text-body-md text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
-            placeholder="Paste the full job description…"
-            value={jdText}
-            onChange={(e) => setJdText(e.target.value)}
-          />
-          <div className="mt-3 flex items-center justify-between">
-            <p className="text-body-sm text-on-surface-variant">
-              {mode === 'voice' ? 'Voice mode · 2 credits' : 'Text mode · 1 credit'}
-            </p>
-            <Button
-              variant="outline"
-              onClick={() => void handleFromJd()}
-              loading={loading}
-              disabled={jdText.trim().length < 40}
-              icon="auto_awesome"
-            >
-              Build my mock
-            </Button>
-          </div>
-        </Card>
-
-        <div className="mt-6">
-          <p className="text-label-bold uppercase tracking-wide text-on-surface-variant">Mode</p>
-          <div className="mt-2 flex flex-wrap gap-3">
-            <button
-              type="button"
-              onClick={() => setMode('text')}
-              className={`rounded-xl border px-4 py-3 text-left transition-colors ${
-                mode === 'text'
-                  ? 'border-primary bg-primary-container/30'
-                  : 'border-outline-variant bg-surface-container-low hover:bg-surface-container'
-              }`}
-            >
-              <span className="block font-bold text-on-surface">Text</span>
-              <span className="block text-body-sm text-on-surface-variant">1 credit</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setMode('voice')}
-              className={`rounded-xl border px-4 py-3 text-left transition-colors ${
-                mode === 'voice'
-                  ? 'border-primary bg-primary-container/30'
-                  : 'border-outline-variant bg-surface-container-low hover:bg-surface-container'
-              }`}
-            >
-              <span className="block font-bold text-on-surface">Voice</span>
-              <span className="block text-body-sm text-on-surface-variant">
-                Record your answer · 2 credits
               </span>
             </button>
-          </div>
-        </div>
+          );
+        })}
+      </div>
 
-        <div className="mt-8 flex justify-end">
-          <Button size="lg" disabled={!packId || loading} loading={loading} onClick={() => void handleStart()} icon="play_arrow">
-            Continue to consent
+      <Card padding="lg" radius="2xl" className="mt-8">
+        <h2 className="text-title-md text-on-surface">Or target a real job description</h2>
+        <p className="mt-1 text-body-sm text-on-surface-variant">
+          Paste a JD and we will generate questions for it — if you have a resume on file, one
+          question will probe the biggest gap.
+        </p>
+        <label htmlFor="jd-paste" className="sr-only">
+          Job description
+        </label>
+        <textarea
+          id="jd-paste"
+          rows={6}
+          className="mt-3 w-full resize-y rounded-xl border border-outline-variant bg-white p-4 text-body-md text-on-surface outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
+          placeholder="Paste the full job description…"
+          value={jdText}
+          onChange={(e) => setJdText(e.target.value)}
+        />
+        <div className="mt-3 flex items-center justify-between">
+          <p className="text-body-sm text-on-surface-variant">
+            {mode === 'voice' ? 'Voice mode · 2 credits' : 'Text mode · 1 credit'}
+          </p>
+          <Button
+            variant="outline"
+            onClick={() => void handleFromJd()}
+            loading={loading}
+            disabled={jdText.trim().length < 40}
+            icon="auto_awesome"
+          >
+            Build my mock
           </Button>
         </div>
+      </Card>
+
+      <div className="mt-6">
+        <p className="text-label-bold uppercase tracking-wide text-on-surface-variant">Mode</p>
+        <div className="mt-2 flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={() => setMode('text')}
+            className={`rounded-xl border px-4 py-3 text-left transition-colors ${
+              mode === 'text'
+                ? 'border-primary bg-primary-container/30'
+                : 'border-outline-variant bg-surface-container-low hover:bg-surface-container'
+            }`}
+          >
+            <span className="block font-bold text-on-surface">Text</span>
+            <span className="block text-body-sm text-on-surface-variant">1 credit</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode('voice')}
+            className={`rounded-xl border px-4 py-3 text-left transition-colors ${
+              mode === 'voice'
+                ? 'border-primary bg-primary-container/30'
+                : 'border-outline-variant bg-surface-container-low hover:bg-surface-container'
+            }`}
+          >
+            <span className="block font-bold text-on-surface">Voice</span>
+            <span className="block text-body-sm text-on-surface-variant">
+              Record your answer · 2 credits
+            </span>
+          </button>
+        </div>
       </div>
-    </PageShell>
+
+      <div className="mt-8 flex justify-end">
+        <Button
+          size="lg"
+          disabled={!packId || loading}
+          loading={loading}
+          onClick={() => void handleStart()}
+          icon="play_arrow"
+        >
+          Continue to consent
+        </Button>
+      </div>
+    </div>
   );
 }
