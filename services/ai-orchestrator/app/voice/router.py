@@ -143,6 +143,10 @@ async def voice_stream(websocket: WebSocket, session_id: str) -> None:
     active_queue: asyncio.Queue[bytes | None] | None = None
     # Chunks that arrive outside an active turn belong to the upcoming one.
     pre_buffer: list[bytes] = []
+    # An end_turn that arrives before its turn's queue exists (the client
+    # sends start_turn + end_turn back-to-back) must latch, not drop —
+    # otherwise the bootstrap turn waits for audio that will never come.
+    end_latched = False
     disconnected = asyncio.Event()
 
     # Video-mode sessions additionally capture the candidate's LiveKit tracks
@@ -168,7 +172,7 @@ async def voice_stream(websocket: WebSocket, session_id: str) -> None:
             capture = None
 
     async def _receive() -> None:
-        nonlocal active_queue
+        nonlocal active_queue, end_latched
         try:
             while True:
                 message = await websocket.receive_text()
@@ -188,6 +192,8 @@ async def voice_stream(websocket: WebSocket, session_id: str) -> None:
                 elif msg_type == "end_turn":
                     if active_queue is not None:
                         active_queue.put_nowait(None)
+                    else:
+                        end_latched = True
                 elif msg_type == "barge_in":
                     service.state.is_ai_speaking = False
                 elif msg_type == "fallback_to_text":
@@ -204,6 +210,7 @@ async def voice_stream(websocket: WebSocket, session_id: str) -> None:
                 active_queue.put_nowait(None)
 
     receive_task = asyncio.create_task(_receive())
+    disconnect_task = asyncio.create_task(disconnected.wait())
 
     async def _turn_gen(queue: asyncio.Queue[bytes | None]) -> AsyncIterator[bytes]:
         while True:
@@ -217,7 +224,7 @@ async def voice_stream(websocket: WebSocket, session_id: str) -> None:
             # Wait for the candidate to be ready (or for the socket to die).
             get_task = asyncio.create_task(start_signals.get())
             done, _ = await asyncio.wait(
-                {get_task, asyncio.create_task(disconnected.wait())},
+                {get_task, disconnect_task},
                 return_when=asyncio.FIRST_COMPLETED,
             )
             if get_task not in done:
@@ -231,6 +238,11 @@ async def voice_stream(websocket: WebSocket, session_id: str) -> None:
             for buffered in pre_buffer:
                 turn_queue.put_nowait(buffered)
             pre_buffer.clear()
+            if end_latched:
+                # The client already closed this turn (bootstrap or a very
+                # fast answer); close the generator right after the buffer.
+                end_latched = False
+                turn_queue.put_nowait(None)
 
             async for event in service.process_turn(_turn_gen(turn_queue)):
                 await websocket.send_text(json.dumps(event, default=_json_default))
@@ -252,6 +264,7 @@ async def voice_stream(websocket: WebSocket, session_id: str) -> None:
             pass
     finally:
         receive_task.cancel()
+        disconnect_task.cancel()
         try:
             await receive_task
         except asyncio.CancelledError:
