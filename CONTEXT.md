@@ -100,6 +100,7 @@ ZIOS — an AI interview platform (ZeTheta). Monorepo (pnpm workspaces):
   - **Model files are never committed:** `services/ai-orchestrator/models/` is gitignored; the image bakes the sha256-pinned copy. `PIPER_MODEL_PATH` overrides the location (set in `.env.host`, which is untracked).
   - **Per-word TTS synthesis sounds "high pitched":** the mock's `SENTENCE_RE` (`[^.!?]+[.!?]*`) matches a bare word mid-stream — harmless for silence fixtures, but a real TTS engine must buffer through a real terminator (`[^.!?]+[.!?]+`) and flush the remainder at stream end; isolated single words get rising, staccato intonation. Mock chunking semantics are a silence artifact, not a contract to copy.
   - **Nest's default JSON body limit is 100 kb:** any base64-audio endpoint (e.g. `POST /cand/practice/:id/turn-audio`) 413s with "request entity too large" on real recordings. `main.ts` sets `useBodyParser('json', { limit: '15mb' })` (app typed `NestExpressApplication` for it).
+  - **Cache-first PWA shells go stale after every redeploy:** Ascend's sw.js was cache-first for all same-origin GETs and its content was deployment-invariant, so the SW never re-installed and served an old index.html referencing deleted hashed assets (blank page). Rule: shell/navigations network-first, content-hashed `/assets/` cache-first, nginx `no-cache` on `index.html`/`sw.js`. After any such fix, affected users must unregister the old SW once (DevTools → Application → Service Workers).
 
 ## 6. MediaPipe / platform constraint
 
