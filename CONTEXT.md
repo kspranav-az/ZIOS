@@ -98,6 +98,8 @@ ZIOS — an AI interview platform (ZeTheta). Monorepo (pnpm workspaces):
   - **The voice room ignores `STT_ADAPTER`:** `app/voice/router.py` constructs `MockSttAdapter()` directly for room sessions (pre-12f it hardcoded the TTS too). Only the analysis pipeline uses the STT factory today. Wiring room STT to the factory (incl. streaming GCP STT) is its own phase.
   - **Piper rate ≠ wire rate:** lessac voices are 22050 Hz; the shared playback contract is 24000 Hz. The adapter resamples with soxr (`librosa`'s dependency) — do not change the frontend rate or the mock's 24000; resample at the adapter boundary.
   - **Model files are never committed:** `services/ai-orchestrator/models/` is gitignored; the image bakes the sha256-pinned copy. `PIPER_MODEL_PATH` overrides the location (set in `.env.host`, which is untracked).
+  - **Per-word TTS synthesis sounds "high pitched":** the mock's `SENTENCE_RE` (`[^.!?]+[.!?]*`) matches a bare word mid-stream — harmless for silence fixtures, but a real TTS engine must buffer through a real terminator (`[^.!?]+[.!?]+`) and flush the remainder at stream end; isolated single words get rising, staccato intonation. Mock chunking semantics are a silence artifact, not a contract to copy.
+  - **Nest's default JSON body limit is 100 kb:** any base64-audio endpoint (e.g. `POST /cand/practice/:id/turn-audio`) 413s with "request entity too large" on real recordings. `main.ts` sets `useBodyParser('json', { limit: '15mb' })` (app typed `NestExpressApplication` for it).
 
 ## 6. MediaPipe / platform constraint
 
