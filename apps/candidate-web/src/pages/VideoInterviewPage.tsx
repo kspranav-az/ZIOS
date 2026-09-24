@@ -7,6 +7,7 @@ import {
   connectRoomSession,
   openOrchestratorSocket,
   type ConnectionQuality,
+  type OrchestratorConnection,
   type RoomSession,
 } from '@zios/interview-room';
 import type { IntegrityEventBody } from '@zios/shared-types';
@@ -50,12 +51,14 @@ export function VideoInterviewPage() {
   const [aiText, setAiText] = useState('');
   const [isListening, setIsListening] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  /** Socket liveness — drives the reconnect overlay (not the mic state). */
+  const [roomActive, setRoomActive] = useState(false);
   const [connectionQuality, setConnectionQuality] = useState<ConnectionQuality>('unknown');
   const [fallbackLoading, setFallbackLoading] = useState(false);
   const [flagCount, setFlagCount] = useState(0);
 
   const sessionRef = useRef<RoomSession | null>(null);
-  const wsRef = useRef<WebSocket | null>(null);
+  const connRef = useRef<OrchestratorConnection | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const videoElementRef = useRef<HTMLVideoElement | null>(null);
   const snapshotTimerRef = useRef<number | null>(null);
@@ -168,7 +171,7 @@ export function VideoInterviewPage() {
         );
 
         const wsUrl = `${ORCHESTRATOR_BASE.replace(/^http/, 'ws')}${orchestrator.wsUrl}`;
-        wsRef.current = openOrchestratorSocket(wsUrl, {
+        const conn = openOrchestratorSocket(wsUrl, {
           audioContext: audioContextRef,
           onCaption: setCaption,
           onAiText: setAiText,
@@ -176,11 +179,28 @@ export function VideoInterviewPage() {
           onBargeIn: () => setAiText(''),
           onOpen: () => {
             setConnecting(false);
-            setIsListening(true);
+            setRoomActive(true);
+            // Elicit the first question: an empty bootstrap turn makes the
+            // conductor re-present the current question with TTS.
+            conn.sendStartTurn();
+            conn.sendEndTurn();
           },
-          onClose: () => setIsListening(false),
+          onAwaitingAnswer: () => {
+            void conn.mic.start().then((live) => {
+              if (live) setIsListening(true);
+            });
+          },
+          onInterviewComplete: () => {
+            setIsListening(false);
+            navigate('/complete', { replace: true });
+          },
+          onClose: () => {
+            setIsListening(false);
+            setRoomActive(false);
+          },
           onTransportError: () => setError('Video connection error. Please try again.'),
         });
+        connRef.current = conn;
       } catch (err) {
         setConnecting(false);
         setError(
@@ -196,7 +216,8 @@ export function VideoInterviewPage() {
     return () => {
       cancelled = true;
       if (snapshotTimerRef.current) window.clearInterval(snapshotTimerRef.current);
-      wsRef.current?.close();
+      connRef.current?.mic.stop();
+      connRef.current?.close();
       void sessionRef.current?.disconnect();
       void audioContextRef.current?.close();
     };
@@ -208,10 +229,20 @@ export function VideoInterviewPage() {
     if (audioTrack.isMuted) {
       void audioTrack.unmute();
       setIsMuted(false);
+      if (isListening) void connRef.current?.mic.start();
     } else {
       void audioTrack.mute();
       setIsMuted(true);
+      connRef.current?.mic.stop();
     }
+  };
+
+  const handleSendAnswer = () => {
+    const conn = connRef.current;
+    if (!conn) return;
+    conn.mic.stop();
+    setIsListening(false);
+    conn.sendEndTurn();
   };
 
   const handleToggleCamera = () => {
@@ -278,7 +309,7 @@ export function VideoInterviewPage() {
               muted
               className="aspect-video w-full object-cover"
             />
-            {!isListening && (
+            {!roomActive && (
               <div className="absolute inset-0 flex items-center justify-center bg-black/40">
                 <p className="text-body-md text-white">Reconnecting…</p>
               </div>
@@ -309,6 +340,11 @@ export function VideoInterviewPage() {
               <Button variant="outline" onClick={handleToggleCamera} icon="videocam">
                 Camera
               </Button>
+              {isListening && (
+                <Button variant="primary" onClick={handleSendAnswer} icon="send">
+                  Send answer
+                </Button>
+              )}
             </div>
             <Button
               variant="outline"

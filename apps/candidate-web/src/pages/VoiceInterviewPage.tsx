@@ -7,6 +7,7 @@ import {
   connectRoomSession,
   openOrchestratorSocket,
   type ConnectionQuality,
+  type OrchestratorConnection,
   type RoomSession,
 } from '@zios/interview-room';
 import { ApiErrorResponse, fallbackToText, getVoiceToken } from '../api';
@@ -33,7 +34,7 @@ export function VoiceInterviewPage() {
   const [fallbackLoading, setFallbackLoading] = useState(false);
 
   const sessionRef = useRef<RoomSession | null>(null);
-  const wsRef = useRef<WebSocket | null>(null);
+  const connRef = useRef<OrchestratorConnection | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
 
   const session = contextSession;
@@ -75,7 +76,7 @@ export function VoiceInterviewPage() {
         sessionRef.current = roomSession;
 
         const wsUrl = `${ORCHESTRATOR_BASE.replace(/^http/, 'ws')}${orchestrator.wsUrl}`;
-        wsRef.current = openOrchestratorSocket(wsUrl, {
+        const conn = openOrchestratorSocket(wsUrl, {
           audioContext: audioContextRef,
           onCaption: setCaption,
           onAiText: setAiText,
@@ -83,11 +84,24 @@ export function VoiceInterviewPage() {
           onBargeIn: () => setAiText(''),
           onOpen: () => {
             setConnecting(false);
-            setIsListening(true);
+            // Elicit the first question: an empty bootstrap turn makes the
+            // conductor re-present the current question with TTS.
+            conn.sendStartTurn();
+            conn.sendEndTurn();
+          },
+          onAwaitingAnswer: () => {
+            void conn.mic.start().then((live) => {
+              if (live) setIsListening(true);
+            });
+          },
+          onInterviewComplete: () => {
+            setIsListening(false);
+            navigate('/complete', { replace: true });
           },
           onClose: () => setIsListening(false),
           onTransportError: () => setError('Voice connection error. Please try again.'),
         });
+        connRef.current = conn;
       } catch (err) {
         setConnecting(false);
         setError(
@@ -102,7 +116,8 @@ export function VoiceInterviewPage() {
 
     return () => {
       cancelled = true;
-      wsRef.current?.close();
+      connRef.current?.mic.stop();
+      connRef.current?.close();
       void sessionRef.current?.disconnect();
       void audioContextRef.current?.close();
     };
@@ -114,10 +129,20 @@ export function VoiceInterviewPage() {
     if (track.isMuted) {
       void track.unmute();
       setIsMuted(false);
+      if (isListening) void connRef.current?.mic.start();
     } else {
       void track.mute();
       setIsMuted(true);
+      connRef.current?.mic.stop();
     }
+  };
+
+  const handleSendAnswer = () => {
+    const conn = connRef.current;
+    if (!conn) return;
+    conn.mic.stop();
+    setIsListening(false);
+    conn.sendEndTurn();
   };
 
   const handleFallback = async () => {
@@ -183,6 +208,11 @@ export function VoiceInterviewPage() {
             <Button variant="outline" onClick={handleToggleMute} icon={isMuted ? 'mic_off' : 'mic'}>
               {isMuted ? 'Unmute' : 'Mute'}
             </Button>
+            {isListening && (
+              <Button variant="primary" onClick={handleSendAnswer} icon="send">
+                Send answer
+              </Button>
+            )}
             <Button
               variant="outline"
               onClick={handleFallback}

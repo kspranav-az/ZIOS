@@ -1,6 +1,8 @@
+import { createMicCapture, type MicCapture } from './mic-capture';
+import type { TurnEvent } from './types';
 import type { AudioContextHolder } from './tts-audio';
 import { playTtsAudio } from './tts-audio';
-import type { TurnEvent } from './types';
+import { createTtsPlayer } from './tts-player';
 
 export interface TurnEventHandlers {
   /** STT partial/final transcripts (live captions). */
@@ -13,12 +15,42 @@ export interface TurnEventHandlers {
   onBargeIn: () => void;
   /** Page-owned AudioContext holder for TTS playback (created lazily). */
   audioContext?: AudioContextHolder;
-  /** Socket open + interview bootstrap sequence sent. */
+  /**
+   * The AI finished a turn and the room is ready for the candidate's answer.
+   * Fires only after all queued TTS audio has actually played out, so opening
+   * the mic here never captures the interviewer's own speech.
+   */
+  onAwaitingAnswer?: () => void;
+  /** The conductor completed the interview; the server closes the socket. */
+  onInterviewComplete?: () => void;
+  /** Socket open (no bootstrap is sent — the page drives the turn flow). */
   onOpen?: () => void;
   /** Socket closed (agent ended or connection dropped). */
   onClose?: () => void;
   /** Socket transport error (before any close event). */
   onTransportError?: () => void;
+}
+
+/** Client-to-orchestrator control messages (see orchestrator voice router). */
+export type OrchestratorMessage =
+  | { type: 'start_turn' }
+  | { type: 'audio_chunk'; data: string }
+  | { type: 'end_turn' }
+  | { type: 'barge_in' };
+
+/** Handle returned by openOrchestratorSocket — the page drives the turns. */
+export interface OrchestratorConnection {
+  /** Signal the start of a candidate turn; then stream mic chunks and endTurn. */
+  sendStartTurn(): void;
+  /** One hex PCM16 mono 16kHz mic frame. */
+  sendAudioChunk(hexPcm16: string): void;
+  /** Candidate finished speaking; the orchestrator transcribes and answers. */
+  sendEndTurn(): void;
+  /** Interrupt the agent's current speech. */
+  sendBargeIn(): void;
+  close(): void;
+  /** Mic helper bound to this connection's chunk sender. */
+  mic: MicCapture;
 }
 
 /**
@@ -55,27 +87,74 @@ export function dispatchTurnEvent(payload: TurnEvent, handlers: TurnEventHandler
 }
 
 /**
- * Open the orchestrator interview socket and send the bootstrap sequence that
- * triggers the first AI question (start_turn + one dummy audio chunk to wake
- * the mock STT pipeline + end_turn). Behavior mirrored from the original
- * candidate-web voice/video pages — do not change without updating both.
+ * Open the orchestrator interview socket for a multi-turn voice room.
+ *
+ * Protocol: the page calls sendStartTurn when the candidate is ready to speak
+ * (on open, to elicit the first question, and on each onAwaitingAnswer), the
+ * mic streams hex PCM16 frames, and sendEndTurn closes the candidate turn.
+ * tts_audio chunks are queued on a sequential player; onAwaitingAnswer fires
+ * only when playback has drained.
  */
-export function openOrchestratorSocket(wsUrl: string, handlers: TurnEventHandlers): WebSocket {
+export function openOrchestratorSocket(
+  wsUrl: string,
+  handlers: TurnEventHandlers,
+): OrchestratorConnection {
   const ws = new WebSocket(wsUrl);
-  ws.onopen = () => {
-    ws.send(JSON.stringify({ type: 'start_turn' }));
-    ws.send(JSON.stringify({ type: 'audio_chunk', data: '00'.repeat(320) }));
-    ws.send(JSON.stringify({ type: 'end_turn' }));
-    handlers.onOpen?.();
+  const player = createTtsPlayer(handlers.audioContext);
+  let closed = false;
+
+  const send = (message: OrchestratorMessage) => {
+    if (!closed && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(message));
+    }
   };
+
+  const mic = createMicCapture({
+    onChunk: (hex) => send({ type: 'audio_chunk', data: hex }),
+    onError: handlers.onError,
+  });
+
+  ws.onopen = () => handlers.onOpen?.();
   ws.onmessage = (event: MessageEvent) => {
+    let payload: TurnEvent;
     try {
-      dispatchTurnEvent(JSON.parse(event.data as string) as TurnEvent, handlers);
+      payload = JSON.parse(event.data as string) as TurnEvent;
     } catch {
       // Ignore malformed frames; the orchestrator contract is versioned.
+      return;
+    }
+    if (payload.type === 'tts_audio') {
+      player.enqueue(payload.audio_base64);
+      return;
+    }
+    if (payload.type === 'awaiting_answer') {
+      player.whenIdle(() => handlers.onAwaitingAnswer?.());
+      return;
+    }
+    if (payload.type === 'interview_complete') {
+      handlers.onInterviewComplete?.();
+      return;
+    }
+    try {
+      dispatchTurnEvent(payload, handlers);
+    } catch {
+      // Dispatch is best-effort; malformed payloads must not kill the room.
     }
   };
   ws.onerror = () => handlers.onTransportError?.();
-  ws.onclose = () => handlers.onClose?.();
-  return ws;
+  ws.onclose = () => {
+    closed = true;
+    mic.stop();
+    player.discard();
+    handlers.onClose?.();
+  };
+
+  return {
+    sendStartTurn: () => send({ type: 'start_turn' }),
+    sendAudioChunk: (hexPcm16) => send({ type: 'audio_chunk', data: hexPcm16 }),
+    sendEndTurn: () => send({ type: 'end_turn' }),
+    sendBargeIn: () => send({ type: 'barge_in' }),
+    close: () => ws.close(),
+    mic,
+  };
 }
