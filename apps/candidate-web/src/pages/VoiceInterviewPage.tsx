@@ -90,6 +90,8 @@ export function VoiceInterviewPage() {
             conn.sendEndTurn();
           },
           onAwaitingAnswer: () => {
+            // Open the next turn, then the mic — the AI finished speaking.
+            conn.sendStartTurn();
             void conn.mic.start().then((live) => {
               if (live) setIsListening(true);
             });

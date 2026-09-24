@@ -98,7 +98,8 @@ export function PracticeLivePage() {
             conn.sendEndTurn();
           },
           onAwaitingAnswer: () => {
-            // AI finished speaking — open the mic and listen for the answer.
+            // Open the next turn, then the mic — the AI finished speaking.
+            conn.sendStartTurn();
             void conn.mic.start().then((live) => {
               if (live) setIsListening(true);
             });
