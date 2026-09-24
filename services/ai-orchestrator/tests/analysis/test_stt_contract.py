@@ -153,6 +153,23 @@ def test_gcp_uses_language_hint_and_config() -> None:
     assert "projects/test-project/locations/us/recognizers/_" == request.recognizer
 
 
+def test_gcp_bare_language_hint_gets_default_region() -> None:
+    """Regression (seen live 2026-09-24): the voice room hints bare "en",
+    and v2's latest_long model rejects it with 400 "language not supported
+    in location global". Bare ISO-639 codes must expand to a region."""
+    client = _FakeSpeechClient()
+    adapter = GoogleCloudSttAdapter(project_id="test-project", client=client)
+    import asyncio
+
+    asyncio.run(adapter.transcribe_with_timestamps(b"\x00" * 320, 16000, "en"))
+    assert list(client.requests[0].config.language_codes) == ["en-US"]
+
+    client2 = _FakeSpeechClient()
+    adapter2 = GoogleCloudSttAdapter(project_id="test-project", client=client2)
+    asyncio.run(adapter2.transcribe_with_timestamps(b"\x00" * 320, 16000, None))
+    assert list(client2.requests[0].config.language_codes) == ["en-US"]
+
+
 def test_factory_builds_mock_by_default() -> None:
     from app.analysis.config import load_settings
     from app.analysis.stt.factory import build_stt_adapter

@@ -108,6 +108,9 @@ ZIOS — an AI interview platform (ZeTheta). Monorepo (pnpm workspaces):
   - **GCP STT emits no partials** (it buffers the turn, then one `Recognize` call, capped at 60 s internally): live captions land at turn end, only the mock adapter streams `stt_partial`. Don't build UI that depends on room partials when `STT_ADAPTER=gcp`.
   - **`awaiting_answer` fires client-side only after queued TTS actually plays out** (`tts-player.ts` chains AudioBufferSources; `whenIdle` gates the mic). Otherwise the mic would capture the interviewer's own speech — classic echo/self-transcription bug.
   - First turn bootstrap: the page sends `start_turn` + `end_turn` with no audio; the conductor re-presents the current question (empty answer is a re-ask, not a recorded answer). Never fabricate a dummy transcript client-side.
+  - **GCP v2 rejects bare language codes:** the room service hints `"en"`, but `latest_long` in `global` 400s on `"en"` ("language not supported") — the adapter expands bare ISO-639 hints to `<code>-US`; regional hints (`en-IN`) and `GCP_STT_CONFIG` `language_codes` pass through untouched.
+  - **Backchannels are swallowed in the UI:** the orchestrator's `backchannel` event was designed as a spoken interjection, but nothing TTS-voices it — appending "(got it)" to the interviewer bubble read as a glitch. The dispatch drops it.
+  - **Camera fallback is explicit:** `connectRoomSession` requests camera only when a `videoElement` is passed (voice rooms are mic-only now); a camera failure degrades to mic-only and fires `onCameraWarning` — a silently black tile was indistinguishable from a bug (and the overlay rule above once covered it anyway).
 
 ## 6. MediaPipe / platform constraint
 

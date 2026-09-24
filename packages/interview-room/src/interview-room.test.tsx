@@ -28,14 +28,13 @@ describe('dispatchTurnEvent', () => {
     expect(h.onCaption).toHaveBeenNthCalledWith(2, 'hello world');
   });
 
-  it('routes ai_text verbatim and backchannel as a functional append', () => {
+  it('routes ai_text verbatim and swallows backchannels (never voiced by TTS)', () => {
     const onAiText = vi.fn<(text: string | ((prev: string) => string)) => void>();
     const h = makeHandlers({ onAiText });
     dispatchTurnEvent({ type: 'ai_text', text: 'Tell me' }, h);
     dispatchTurnEvent({ type: 'backchannel', text: 'right' }, h);
-    const functional = onAiText.mock.calls[1]![0] as (prev: string) => string;
-    expect(functional('Tell me')).toBe('Tell me (right)');
-    expect(functional('')).toBe('right');
+    expect(onAiText).toHaveBeenCalledTimes(1);
+    expect(onAiText).toHaveBeenCalledWith('Tell me');
   });
 
   it('formats orchestrator errors as "<code>: <message>"', () => {

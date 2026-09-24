@@ -70,7 +70,9 @@ export function dispatchTurnEvent(payload: TurnEvent, handlers: TurnEventHandler
       playTtsAudio(payload.audio_base64, handlers.audioContext);
       break;
     case 'backchannel':
-      handlers.onAiText((prev) => (prev ? `${prev} (${payload.text})` : payload.text));
+      // Spoken-interjection event; the TTS pipeline never voices it, so
+      // appending "(got it)" to the interviewer line reads as a glitch.
+      // Swallow it — the bubble keeps the actual question text.
       break;
     case 'telemetry':
       // Telemetry is reported by the orchestrator; UI can surface a debug summary later.

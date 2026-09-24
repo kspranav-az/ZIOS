@@ -56,6 +56,7 @@ export function VideoInterviewPage() {
   const [connectionQuality, setConnectionQuality] = useState<ConnectionQuality>('unknown');
   const [fallbackLoading, setFallbackLoading] = useState(false);
   const [flagCount, setFlagCount] = useState(0);
+  const [cameraWarning, setCameraWarning] = useState<string | null>(null);
 
   const sessionRef = useRef<RoomSession | null>(null);
   const connRef = useRef<OrchestratorConnection | null>(null);
@@ -158,6 +159,7 @@ export function VideoInterviewPage() {
           token: livekit.token,
           videoElement: videoElementRef.current,
           onConnectionQuality: (quality) => setConnectionQuality(quality),
+          onCameraWarning: setCameraWarning,
         });
         if (cancelled) {
           void roomSession.disconnect();
@@ -302,6 +304,12 @@ export function VideoInterviewPage() {
 
         <Card padding="lg" radius="2xl">
           <InterviewerBubble text={aiText} />
+
+          {cameraWarning && (
+            <p className="mb-4 rounded-lg bg-warning-container p-3 text-body-md text-on-warning-container">
+              {cameraWarning}
+            </p>
+          )}
 
           <div className="relative overflow-hidden rounded-xl bg-surface-container-low">
             <video

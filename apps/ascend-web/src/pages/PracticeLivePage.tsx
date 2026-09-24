@@ -45,7 +45,10 @@ export function PracticeLivePage() {
   const [aiText, setAiText] = useState('');
   const [isListening, setIsListening] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  /** Socket liveness — drives the processing overlay (not the mic state). */
+  const [roomActive, setRoomActive] = useState(false);
   const [connectionQuality, setConnectionQuality] = useState<ConnectionQuality>('unknown');
+  const [cameraWarning, setCameraWarning] = useState<string | null>(null);
   const [leaving, setLeaving] = useState(false);
 
   const sessionRef = useRef<RoomSession | null>(null);
@@ -76,6 +79,7 @@ export function PracticeLivePage() {
           token: livekit.token,
           videoElement: videoElementRef.current,
           onConnectionQuality: (quality) => setConnectionQuality(quality),
+          onCameraWarning: setCameraWarning,
         });
         if (cancelled) {
           void roomSession.disconnect();
@@ -92,6 +96,7 @@ export function PracticeLivePage() {
           onBargeIn: () => setAiText(''),
           onOpen: () => {
             setConnecting(false);
+            setRoomActive(true);
             // Elicit the first question: an empty bootstrap turn makes the
             // conductor re-present the current question with TTS.
             conn.sendStartTurn();
@@ -111,6 +116,7 @@ export function PracticeLivePage() {
           },
           onClose: () => {
             setIsListening(false);
+            setRoomActive(false);
             // Hand the mock back to the text conductor UI for the remaining
             // questions (unless completion already routed to the report).
             if (!finishedRef.current) {
@@ -233,6 +239,12 @@ export function PracticeLivePage() {
           <ConnectionBadge quality={connectionQuality} />
         </div>
 
+        {cameraWarning && (
+          <p className="mb-4 rounded-lg bg-warning-container p-3 text-body-md text-on-warning-container">
+            {cameraWarning}
+          </p>
+        )}
+
         <Card padding="lg" radius="2xl">
           <InterviewerBubble text={aiText} />
 
@@ -244,7 +256,7 @@ export function PracticeLivePage() {
               muted
               className="aspect-video w-full object-cover"
             />
-            {!isListening && (
+            {!roomActive && (
               <div className="absolute inset-0 flex items-center justify-center bg-black/40">
                 <p className="text-body-md text-white">Processing…</p>
               </div>

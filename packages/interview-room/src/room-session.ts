@@ -16,6 +16,12 @@ export interface ConnectRoomSessionOptions {
   /** When provided, the camera track is attached to this element after connect. */
   videoElement?: HTMLVideoElement | null;
   onConnectionQuality?: (quality: ConnectionQuality) => void;
+  /**
+   * Camera unavailable (denied, in use by another app, or no device): the
+   * room continues audio-only. Surface this to the candidate — a silently
+   * black video tile reads as a bug.
+   */
+  onCameraWarning?: (message: string) => void;
 }
 
 export interface RoomSession {
@@ -52,16 +58,41 @@ export async function connectRoomSession(
   });
 
   await room.connect(opts.url, opts.token);
-  await room.localParticipant.enableCameraAndMicrophone();
+  let cameraFailed = false;
+  const wantsCamera = Boolean(opts.videoElement);
+  try {
+    if (wantsCamera) {
+      await room.localParticipant.enableCameraAndMicrophone();
+    } else {
+      // Voice-only rooms must not require a camera — requesting one here
+      // would fail the whole connect on a camera-less or denied setup.
+      await room.localParticipant.setMicrophoneEnabled(true);
+    }
+  } catch {
+    try {
+      await room.localParticipant.setMicrophoneEnabled(true);
+    } catch {
+      // Mic failure surfaces via the orchestrator/socket error path.
+    }
+    if (wantsCamera) {
+      cameraFailed = true;
+      // Fall back to mic-only so the interview still runs; warn loudly —
+      // a silently black video tile reads as a bug.
+      opts.onCameraWarning?.(
+        'Camera unavailable — continuing with audio only. Check the browser camera permission.',
+      );
+    }
+  }
 
   const localAudioTrack =
     (room.localParticipant.getTrackPublication(Track.Source.Microphone)?.audioTrack as
       | LocalAudioTrack
       | undefined) ?? null;
-  const localVideoTrack =
-    (room.localParticipant.getTrackPublication(Track.Source.Camera)?.videoTrack as
-      | LocalVideoTrack
-      | undefined) ?? null;
+  const localVideoTrack = cameraFailed
+    ? null
+    : ((room.localParticipant.getTrackPublication(Track.Source.Camera)?.videoTrack as
+        | LocalVideoTrack
+        | undefined) ?? null);
   if (localVideoTrack && opts.videoElement) {
     localVideoTrack.attach(opts.videoElement);
   }

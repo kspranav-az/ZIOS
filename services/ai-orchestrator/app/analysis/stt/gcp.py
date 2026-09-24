@@ -138,7 +138,14 @@ class GoogleCloudSttAdapter(SttPort):
 
         language_codes = self._config.get("language_codes")
         if not isinstance(language_codes, list) or not language_codes:
-            language_codes = [language_hint] if language_hint else list(DEFAULT_LANGUAGE_CODES)
+            # The room service hints a bare ISO-639 code ("en"); v2's
+            # latest_long model rejects unqualified codes ("400 The language
+            # \"en\" is not supported ... in location \"global\""), so expand
+            # to a default region. A regional hint ("en-IN") passes through.
+            hint = language_hint if language_hint and "-" in language_hint else None
+            if hint is None and language_hint:
+                hint = f"{language_hint}-US"
+            language_codes = [hint] if hint else list(DEFAULT_LANGUAGE_CODES)
 
         config = RecognitionConfig(
             # The SttPort contract is raw PCM16 mono, which v2 auto-detect
