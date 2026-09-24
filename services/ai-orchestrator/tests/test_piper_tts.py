@@ -32,11 +32,11 @@ async def _text_stream(words: list[str]) -> AsyncIterator[str]:
 async def test_piper_tts_contract_chunks_and_text() -> None:
     adapter = PiperTtsAdapter()
     chunks = [c async for c in adapter.synthesize_stream(_text_stream(["Hello", "world."]))]
-    assert len(chunks) >= 1
+    # Sentence buffering: one chunk per terminated sentence, not per word.
+    assert len(chunks) == 1
     assert all(len(c.audio_bytes) > 0 and len(c.audio_bytes) % 2 == 0 for c in chunks)
-    full_text = " ".join(c.text for c in chunks).strip()
-    assert "Hello" in full_text
-    assert "world" in full_text
+    assert "Hello" in chunks[0].text
+    assert "world" in chunks[0].text
 
 
 @pytest.mark.asyncio
@@ -51,13 +51,15 @@ async def test_piper_tts_outputs_pcm16_mono_non_silence() -> None:
 
 
 @pytest.mark.asyncio
-async def test_piper_tts_synthesizes_punctuationless_text() -> None:
-    """No terminal punctuation: the whole fragment is still spoken (the
-    sentence regex consumes the tail), matching MockTtsAdapter semantics."""
+async def test_piper_tts_flushes_punctuationless_remainder_as_final() -> None:
+    """No terminal punctuation anywhere: the buffered remainder is flushed
+    at stream end as the final chunk (unlike the mock, whose eager regex
+    never leaves a remainder — real TTS must not drop trailing text)."""
     adapter = PiperTtsAdapter()
     chunks = [c async for c in adapter.synthesize_stream(_text_stream(["tell me more"]))]
     assert len(chunks) == 1
     assert chunks[0].text == "tell me more"
+    assert chunks[0].is_final is True
     assert len(chunks[0].audio_bytes) > 0
 
 

@@ -6,15 +6,20 @@ implementation. Piper emits int16 mono PCM at the voice's sample rate
 contract rate (24000 Hz, see ``app.voice.mock_tts``) with soxr so the
 WebSocket contract and all frontend playback code stay untouched.
 
-Sentence buffering mirrors ``MockTtsAdapter`` exactly: fragments are
-buffered and synthesized per sentence, with a trailing punctuation-less
-fragment flushed as the final chunk.
+Sentence buffering deliberately diverges from ``MockTtsAdapter``: the mock
+matches ``[^.!?]+[.!?]*``, which also matches a bare word mid-stream —
+harmless for synthetic silence, but a real TTS engine synthesizes each match
+separately and isolated single words get rising, staccato intonation (found
+live as the "high pitched" conductor voice). Piper buffers until a real
+sentence terminator and flushes any remainder at stream end as the final
+chunk.
 """
 
 from __future__ import annotations
 
 import asyncio
 import os
+import re
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
@@ -24,7 +29,6 @@ import soxr
 import structlog
 from piper.voice import PiperVoice
 
-from app.voice.mock_tts import SENTENCE_RE
 from app.voice.models import TtsChunk
 from app.voice.ports import TtsPort
 
@@ -32,6 +36,14 @@ logger = structlog.get_logger()
 
 # The shared interview-room playback contract (packages/interview-room).
 WIRE_SAMPLE_RATE = 24000
+
+# A sentence is text THROUGH a terminator. The mock adapter matches
+# [^.!?]+[.!?]*, which also matches a bare word mid-stream — harmless for
+# synthetic silence, but a real TTS engine synthesizes each match separately
+# and isolated single words get rising, staccato intonation (found live as
+# the "high pitched" conductor voice). Piper therefore buffers until a real
+# terminator and flushes the remainder at stream end.
+SENTENCE_END_RE = re.compile(r"[^.!?]+[.!?]+")
 
 _DEFAULT_MODEL = "en_US-lessac-medium.onnx"
 
@@ -86,7 +98,7 @@ class PiperTtsAdapter(TtsPort):
         async for text in text_stream:
             buffered += text
             while True:
-                match = SENTENCE_RE.match(buffered)
+                match = SENTENCE_END_RE.match(buffered)
                 if not match:
                     break
                 sentence = match.group(0).strip()
