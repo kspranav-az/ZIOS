@@ -167,3 +167,44 @@ async def test_tts_audio_payload_is_real_base64() -> None:
         assert len(decoded) > 0
         assert len(decoded) % 2 == 0  # PCM16
         assert set(decoded) == {0}, "mock silence must decode back to silence"
+
+
+@pytest.mark.asyncio
+async def test_service_marks_interview_complete_from_conductor_status() -> None:
+    """Both conductor flavors return {session, turn}; a completed session must
+    flip state.interview_complete so the WS stream closes the room instead of
+    looping for another turn."""
+    conductor = FakeConductor(
+        turns=[
+            {
+                "session": {"id": "s1", "status": "completed"},
+                "turn": {"type": "wrapup", "text": "Thank you for your time.", "questionId": None},
+            }
+        ]
+    )
+    service = VoiceSessionService(
+        session_id="s1",
+        room_name="voice-s1",
+        recovery_token="rt",
+        stt=MockSttAdapter(fixture="short"),
+        tts=MockTtsAdapter(chunk_ms=1),
+        conductor=conductor,
+    )
+    events = [e async for e in service.process_turn(_audio())]
+    assert service.state.interview_complete is True
+    assert any(e["type"] == "ai_text" for e in events)
+
+
+@pytest.mark.asyncio
+async def test_service_keeps_room_open_while_session_live() -> None:
+    conductor = FakeConductor()  # default turn has no session key (older shape)
+    service = VoiceSessionService(
+        session_id="s1",
+        room_name="voice-s1",
+        recovery_token="rt",
+        stt=MockSttAdapter(fixture="short"),
+        tts=MockTtsAdapter(chunk_ms=1),
+        conductor=conductor,
+    )
+    _ = [e async for e in service.process_turn(_audio())]
+    assert service.state.interview_complete is False

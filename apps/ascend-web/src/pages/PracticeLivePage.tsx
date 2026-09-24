@@ -7,6 +7,7 @@ import {
   connectRoomSession,
   openOrchestratorSocket,
   type ConnectionQuality,
+  type OrchestratorConnection,
   type RoomSession,
 } from '@zios/interview-room';
 import {
@@ -48,7 +49,7 @@ export function PracticeLivePage() {
   const [leaving, setLeaving] = useState(false);
 
   const sessionRef = useRef<RoomSession | null>(null);
-  const wsRef = useRef<WebSocket | null>(null);
+  const connRef = useRef<OrchestratorConnection | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const videoElementRef = useRef<HTMLVideoElement | null>(null);
   /** Set once we navigate away (poll → report / close → text handoff). */
@@ -83,7 +84,7 @@ export function PracticeLivePage() {
         sessionRef.current = roomSession;
 
         const wsUrl = `${ORCHESTRATOR_BASE.replace(/^http/, 'ws')}${orchestrator.wsUrl}`;
-        wsRef.current = openOrchestratorSocket(wsUrl, {
+        const conn = openOrchestratorSocket(wsUrl, {
           audioContext: audioContextRef,
           onCaption: setCaption,
           onAiText: setAiText,
@@ -91,13 +92,26 @@ export function PracticeLivePage() {
           onBargeIn: () => setAiText(''),
           onOpen: () => {
             setConnecting(false);
-            setIsListening(true);
+            // Elicit the first question: an empty bootstrap turn makes the
+            // conductor re-present the current question with TTS.
+            conn.sendStartTurn();
+            conn.sendEndTurn();
+          },
+          onAwaitingAnswer: () => {
+            // AI finished speaking — open the mic and listen for the answer.
+            void conn.mic.start().then((live) => {
+              if (live) setIsListening(true);
+            });
+          },
+          onInterviewComplete: () => {
+            finishedRef.current = true;
+            clearPracticeRecovery(sessionId);
+            navigate(`/practice/${sessionId}/report`, { replace: true });
           },
           onClose: () => {
             setIsListening(false);
-            // The orchestrator runs one turn per socket. Hand the mock back
-            // to the text conductor UI for the remaining questions (unless
-            // the completion poll already routed to the report).
+            // Hand the mock back to the text conductor UI for the remaining
+            // questions (unless completion already routed to the report).
             if (!finishedRef.current) {
               finishedRef.current = true;
               navigate(`/practice/${sessionId}/interview?room=done`, { replace: true });
@@ -105,6 +119,7 @@ export function PracticeLivePage() {
           },
           onTransportError: () => setError('Live room connection error. Please try again.'),
         });
+        connRef.current = conn;
       } catch (err) {
         setConnecting(false);
         setError(
@@ -119,7 +134,8 @@ export function PracticeLivePage() {
 
     return () => {
       cancelled = true;
-      wsRef.current?.close();
+      connRef.current?.mic.stop();
+      connRef.current?.close();
       void sessionRef.current?.disconnect();
       void audioContextRef.current?.close();
     };
@@ -154,10 +170,22 @@ export function PracticeLivePage() {
     if (track.isMuted) {
       void track.unmute();
       setIsMuted(false);
+      // Resume streaming the answer if the room is waiting for one.
+      if (isListening) void connRef.current?.mic.start();
     } else {
       void track.mute();
       setIsMuted(true);
+      connRef.current?.mic.stop();
     }
+  };
+
+  const handleSendAnswer = () => {
+    const conn = connRef.current;
+    if (!conn) return;
+    conn.mic.stop();
+    setIsListening(false);
+    // Close the candidate turn; the orchestrator transcribes and replies.
+    conn.sendEndTurn();
   };
 
   const handleLeave = async () => {
@@ -238,6 +266,11 @@ export function PracticeLivePage() {
             <Button variant="outline" onClick={handleToggleMute} icon={isMuted ? 'mic_off' : 'mic'}>
               {isMuted ? 'Unmute' : 'Mute'}
             </Button>
+            {isListening && (
+              <Button variant="primary" onClick={handleSendAnswer} icon="send">
+                Send answer
+              </Button>
+            )}
             <Button
               variant="outline"
               onClick={() => void handleLeave()}

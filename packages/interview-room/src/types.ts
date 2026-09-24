@@ -7,4 +7,6 @@ export type TurnEvent =
   | { type: 'backchannel'; text: string }
   | { type: 'telemetry'; telemetry: Record<string, unknown> }
   | { type: 'barge_in'; turn_index: number }
+  | { type: 'awaiting_answer' }
+  | { type: 'interview_complete' }
   | { type: 'error'; code: string; message: string };

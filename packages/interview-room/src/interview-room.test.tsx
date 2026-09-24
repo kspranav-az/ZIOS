@@ -4,6 +4,7 @@ import { ConnectionBadge } from './components/ConnectionBadge';
 import { InterviewerBubble } from './components/InterviewerBubble';
 import { dispatchTurnEvent, openOrchestratorSocket } from './orchestrator-socket';
 import type { TurnEventHandlers } from './orchestrator-socket';
+import { floatToPcm16Hex } from './mic-capture';
 
 afterEach(cleanup);
 
@@ -85,19 +86,19 @@ class MockWebSocket {
 }
 
 describe('openOrchestratorSocket', () => {
-  it('sends the bootstrap sequence (start_turn, audio_chunk, end_turn) on open', () => {
+  it('opens without a bootstrap; the page drives turns via the controller', () => {
     vi.stubGlobal('WebSocket', MockWebSocket);
     const h = makeHandlers({ onOpen: vi.fn() });
-    openOrchestratorSocket('ws://orch/voice/sessions/s1/stream', h);
+    const conn = openOrchestratorSocket('ws://orch/voice/sessions/s1/stream', h);
     const mock = MockWebSocket.last!;
     expect(mock.url).toBe('ws://orch/voice/sessions/s1/stream');
     mock.emitOpen();
-    expect(mock.sent.map((s: string) => JSON.parse(s).type)).toEqual([
-      'start_turn',
-      'audio_chunk',
-      'end_turn',
-    ]);
+    expect(mock.sent).toEqual([]);
     expect(h.onOpen).toHaveBeenCalledOnce();
+    // The page elicits the first question and closes candidate turns explicitly.
+    conn.sendStartTurn();
+    conn.sendEndTurn();
+    expect(mock.sent.map((s: string) => JSON.parse(s).type)).toEqual(['start_turn', 'end_turn']);
     vi.unstubAllGlobals();
   });
 
@@ -112,6 +113,39 @@ describe('openOrchestratorSocket', () => {
     mock.emitClose();
     expect(onClose).toHaveBeenCalledOnce();
     vi.unstubAllGlobals();
+  });
+
+  it('fires onAwaitingAnswer only after queued tts_audio has played out', () => {
+    vi.stubGlobal('WebSocket', MockWebSocket);
+    const onAwaitingAnswer = vi.fn();
+    openOrchestratorSocket('ws://x', makeHandlers({ onAwaitingAnswer }));
+    const mock = MockWebSocket.last!;
+    // jsdom has no AudioContext: playback is best-effort no-op, so the room
+    // must still open the mic instead of deadlocking.
+    mock.emitMessage({ type: 'tts_audio', audio_base64: 'AAAA', text: 'hi' });
+    mock.emitMessage({ type: 'awaiting_answer' });
+    expect(onAwaitingAnswer).toHaveBeenCalledOnce();
+    vi.unstubAllGlobals();
+  });
+
+  it('routes interview_complete to its handler', () => {
+    vi.stubGlobal('WebSocket', MockWebSocket);
+    const onInterviewComplete = vi.fn();
+    openOrchestratorSocket('ws://x', makeHandlers({ onInterviewComplete }));
+    const mock = MockWebSocket.last!;
+    mock.emitMessage({ type: 'interview_complete' });
+    expect(onInterviewComplete).toHaveBeenCalledOnce();
+    vi.unstubAllGlobals();
+  });
+});
+
+describe('floatToPcm16Hex', () => {
+  it('encodes silence as zero bytes', () => {
+    expect(floatToPcm16Hex(new Float32Array(4))).toBe('00'.repeat(8));
+  });
+
+  it('encodes full-scale samples as int16 LE hex', () => {
+    expect(floatToPcm16Hex(new Float32Array([1, -1]))).toBe('ff7f0080');
   });
 });
 
