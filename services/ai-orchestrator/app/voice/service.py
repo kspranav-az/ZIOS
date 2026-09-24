@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import time
 from collections.abc import AsyncIterator
 from typing import Any
@@ -234,7 +235,11 @@ class VoiceSessionService:
                 else:
                     yield {
                         "type": "tts_audio",
-                        "audio_base64": chunk.audio_bytes.hex(),
+                        # The field name is the contract: real base64. (Hex
+                        # here base64-decoded on the client into a 100%-nonzero
+                        # garbage buzz — the "high pitched sound" present since
+                        # the mock era; CONTEXT.md §5 Phase-12f gotchas.)
+                        "audio_base64": base64.b64encode(chunk.audio_bytes).decode("ascii"),
                         "text": chunk.text,
                     }
             self.state.is_ai_speaking = False
