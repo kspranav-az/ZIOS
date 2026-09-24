@@ -12,11 +12,12 @@ import structlog
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from livekit.api import AccessToken, VideoGrants
 
+from app.analysis.config import load_settings
+from app.analysis.stt.factory import build_stt_adapter
 from app.conductor_client import ConductorClient
 from app.practice import PracticeConductorClient
 from app.storage import StorageClient
 from app.video.capture import VideoCaptureSession, capture_enabled
-from app.voice.mock_stt import MockSttAdapter
 from app.voice.models import TurnTelemetry
 from app.voice.service import VoiceSessionService
 from app.voice.tts_factory import build_tts_adapter
@@ -30,8 +31,10 @@ LIVEKIT_API_SECRET = os.environ.get("LIVEKIT_API_SECRET", "secret")
 
 _orchestrator_tokens: dict[str, str] = {}
 _sessions: dict[str, VoiceSessionService] = {}
-# TTS adapter is process-wide and selected at boot: a bad TTS_ADAPTER value
-# must fail loudly before any request, not mid-interview.
+# Adapters are process-wide and selected at boot: a bad STT_ADAPTER or
+# TTS_ADAPTER value must fail loudly before any request, not mid-interview.
+# STT_ADAPTER=mock (the default) keeps CI/e2e hermetic; host dev runs gcp.
+_stt_adapter = build_stt_adapter(load_settings())
 _tts_adapter = build_tts_adapter()
 
 
@@ -85,7 +88,7 @@ async def issue_voice_token(session_id: str, body: dict[str, Any]) -> dict[str, 
             session_id=session_id,
             room_name=room_name,
             recovery_token=recovery_token,
-            stt=MockSttAdapter(),
+            stt=_stt_adapter,
             tts=_tts_adapter,
             conductor=PracticeConductorClient() if practice else ConductorClient(),
             mode=mode,
@@ -109,13 +112,22 @@ async def issue_voice_token(session_id: str, body: dict[str, Any]) -> dict[str, 
 async def voice_stream(websocket: WebSocket, session_id: str) -> None:
     """WebSocket control channel for a voice interview.
 
-    The client sends JSON messages:
-      {"type": "start_turn"}        -> begin listening for audio
-      {"type": "audio_chunk", "data": "base64"}
+    The socket is multi-turn: it stays open for the whole interview and
+    processes one turn per client "start_turn". The client drives the
+    cadence — it starts a turn when the candidate is ready to speak (after
+    the ``awaiting_answer`` event) and ends it with ``end_turn``:
+
+      {"type": "start_turn"}        -> begin a candidate turn (record + send audio)
+      {"type": "audio_chunk", "data": "hex PCM16 mono 16kHz"}
+      {"type": "end_turn"}          -> candidate finished speaking
       {"type": "barge_in"}           -> interrupt current AI speech
       {"type": "fallback_to_text", "reason": "optional"}
 
-    The server sends JSON events from VoiceSessionService.process_turn.
+    Server events per turn: stt_partial*, stt_final, ai_text, tts_audio*,
+    backchannel*, telemetry — then either ``awaiting_answer`` (room stays
+    open for the next turn) or ``interview_complete`` followed by close.
+    (* partials/backchannels come from streaming adapters; the GCP STT
+    adapter emits a single final per turn.)
     """
     await websocket.accept()
     service = _sessions.get(session_id)
@@ -123,8 +135,15 @@ async def voice_stream(websocket: WebSocket, session_id: str) -> None:
         await websocket.close(code=4001, reason="session not initialized")
         return
 
-    audio_queue: asyncio.Queue[bytes | None] = asyncio.Queue()
-    audio_buffer = bytearray()
+    audio_buffer = bytearray()  # full-session recording (X8 persist path)
+    # Client readiness signals: one pending start_turn at a time; a
+    # start_turn that arrives mid-turn is dropped (the client must wait for
+    # awaiting_answer).
+    start_signals: asyncio.Queue[None] = asyncio.Queue(maxsize=1)
+    active_queue: asyncio.Queue[bytes | None] | None = None
+    # Chunks that arrive outside an active turn belong to the upcoming one.
+    pre_buffer: list[bytes] = []
+    disconnected = asyncio.Event()
 
     # Video-mode sessions additionally capture the candidate's LiveKit tracks
     # (Phase 14). Capture is fail-safe: any error is logged and the interview
@@ -149,41 +168,78 @@ async def voice_stream(websocket: WebSocket, session_id: str) -> None:
             capture = None
 
     async def _receive() -> None:
+        nonlocal active_queue
         try:
             while True:
                 message = await websocket.receive_text()
                 payload = json.loads(message)
                 msg_type = payload.get("type")
-                if msg_type == "audio_chunk":
+                if msg_type == "start_turn":
+                    if start_signals.empty():
+                        start_signals.put_nowait(None)
+                elif msg_type == "audio_chunk":
                     data = payload.get("data", "")
                     chunk = bytes.fromhex(data)
                     audio_buffer.extend(chunk)
-                    audio_queue.put_nowait(chunk)
+                    if active_queue is not None:
+                        active_queue.put_nowait(chunk)
+                    else:
+                        pre_buffer.append(chunk)
                 elif msg_type == "end_turn":
-                    audio_queue.put_nowait(None)
+                    if active_queue is not None:
+                        active_queue.put_nowait(None)
                 elif msg_type == "barge_in":
                     service.state.is_ai_speaking = False
                 elif msg_type == "fallback_to_text":
                     result = await service.fallback_to_text(payload.get("reason"))
                     await websocket.send_json({"type": "fallback_result", "payload": result})
         except WebSocketDisconnect:
-            await audio_queue.put(None)
+            pass
         except Exception as exc:
             logger.warning("voice_receive_error", session_id=session_id, error=str(exc))
-            await audio_queue.put(None)
+        finally:
+            disconnected.set()
+            if active_queue is not None:
+                # Unblock the in-flight turn generator so the stream can end.
+                active_queue.put_nowait(None)
 
     receive_task = asyncio.create_task(_receive())
 
-    async def _audio_gen() -> AsyncIterator[bytes]:
+    async def _turn_gen(queue: asyncio.Queue[bytes | None]) -> AsyncIterator[bytes]:
         while True:
-            chunk = await audio_queue.get()
+            chunk = await queue.get()
             if chunk is None:
                 return
             yield chunk
 
     try:
-        async for event in service.process_turn(_audio_gen()):
-            await websocket.send_text(json.dumps(event, default=_json_default))
+        while True:
+            # Wait for the candidate to be ready (or for the socket to die).
+            get_task = asyncio.create_task(start_signals.get())
+            done, _ = await asyncio.wait(
+                {get_task, asyncio.create_task(disconnected.wait())},
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if get_task not in done:
+                get_task.cancel()
+                break
+            if disconnected.is_set():
+                break
+
+            turn_queue: asyncio.Queue[bytes | None] = asyncio.Queue()
+            active_queue = turn_queue
+            for buffered in pre_buffer:
+                turn_queue.put_nowait(buffered)
+            pre_buffer.clear()
+
+            async for event in service.process_turn(_turn_gen(turn_queue)):
+                await websocket.send_text(json.dumps(event, default=_json_default))
+            active_queue = None
+
+            if service.state.interview_complete:
+                await websocket.send_json({"type": "interview_complete"})
+                break
+            await websocket.send_json({"type": "awaiting_answer"})
     except WebSocketDisconnect:
         pass
     except Exception as exc:

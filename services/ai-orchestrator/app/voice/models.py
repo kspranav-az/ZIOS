@@ -85,6 +85,9 @@ class VoiceSessionState:
     room_name: str
     turn_index: int = 0
     is_ai_speaking: bool = False
+    # Set when the conductor response reports session.status == "completed";
+    # the WS stream uses it to close the room after the wrap-up turn.
+    interview_complete: bool = False
     current_tts_task: object | None = None
     degradation_rung: Literal["tts_text", "stt_text", "ai_pause", None] = None
     transcript_buffer: list[dict[str, object]] = field(default_factory=list)

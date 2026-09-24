@@ -218,6 +218,11 @@ class VoiceSessionService:
 
         turn = conductor_response.get("turn", {})
         ai_text = turn.get("text", "")
+        # Both conductor flavors (company /sessions/:id/turn and practice
+        # /cand/practice/conductor/:id/turn) return {session, turn}; the
+        # stream layer closes the room once the session is completed.
+        if conductor_response.get("session", {}).get("status") == "completed":
+            self.state.interview_complete = True
         yield {"type": "ai_text", "text": ai_text, "intent": intent.value}
 
         # TTS streaming with first-audio latency measurement.
