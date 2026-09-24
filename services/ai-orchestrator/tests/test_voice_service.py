@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 from collections.abc import AsyncIterator
 from typing import Any
@@ -140,3 +141,29 @@ async def test_service_events_are_json_serializable(tts: MockTtsAdapter) -> None
     wire = telemetry_event["telemetry"]
     assert wire["totalTurnMs"] > 0
     assert "total_turn_ms" not in wire
+
+
+@pytest.mark.asyncio
+async def test_tts_audio_payload_is_real_base64() -> None:
+    """Regression: the field named audio_base64 used to carry HEX. atob() on
+    the client turned hex-of-anything into 100%-nonzero garbage bytes — an
+    ever-present harsh buzz ("the high pitched sound") that also masked real
+    Piper speech as pure noise. The mock's chunks are digital silence, so a
+    correct encoding MUST round-trip back to all-zero bytes.
+    """
+    service = VoiceSessionService(
+        session_id="s1",
+        room_name="voice-s1",
+        recovery_token="rt",
+        stt=MockSttAdapter(fixture="short"),
+        tts=MockTtsAdapter(chunk_ms=1),
+        conductor=FakeConductor(),
+    )
+    events = [e async for e in service.process_turn(_audio())]
+    audio_events = [e for e in events if e["type"] == "tts_audio"]
+    assert audio_events, "expected at least one tts_audio event"
+    for event in audio_events:
+        decoded = base64.b64decode(event["audio_base64"], validate=True)
+        assert len(decoded) > 0
+        assert len(decoded) % 2 == 0  # PCM16
+        assert set(decoded) == {0}, "mock silence must decode back to silence"
