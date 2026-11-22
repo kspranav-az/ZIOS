@@ -41,7 +41,6 @@ export function PracticeLivePage() {
   const navigate = useNavigate();
   const [connecting, setConnecting] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [caption, setCaption] = useState('');
   const [aiText, setAiText] = useState('');
   const [isListening, setIsListening] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
@@ -90,7 +89,9 @@ export function PracticeLivePage() {
         const wsUrl = `${ORCHESTRATOR_BASE.replace(/^http/, 'ws')}${orchestrator.wsUrl}`;
         const conn = openOrchestratorSocket(wsUrl, {
           audioContext: audioContextRef,
-          onCaption: setCaption,
+          // Captions are intentionally not rendered in the UI (debug aid only);
+          // keep the handler wired so the socket contract stays intact.
+          onCaption: () => {},
           onAiText: setAiText,
           onError: setError,
           onBargeIn: () => setAiText(''),
@@ -262,12 +263,6 @@ export function PracticeLivePage() {
               </div>
             )}
           </div>
-
-          {caption && (
-            <p className="mt-4 rounded-lg bg-surface-container p-3 text-body-md text-on-surface">
-              “{caption}”
-            </p>
-          )}
 
           {error && (
             <p className="mt-4 rounded-lg bg-error-container p-3 text-body-md text-on-error-container">

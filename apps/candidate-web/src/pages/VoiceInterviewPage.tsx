@@ -26,7 +26,6 @@ export function VoiceInterviewPage() {
   const [recoveredRecoveryToken, setRecoveredRecoveryToken] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [caption, setCaption] = useState('');
   const [aiText, setAiText] = useState('');
   const [isListening, setIsListening] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
@@ -78,7 +77,9 @@ export function VoiceInterviewPage() {
         const wsUrl = `${ORCHESTRATOR_BASE.replace(/^http/, 'ws')}${orchestrator.wsUrl}`;
         const conn = openOrchestratorSocket(wsUrl, {
           audioContext: audioContextRef,
-          onCaption: setCaption,
+          // Captions are intentionally not rendered in the UI (debug aid only);
+          // keep the handler wired so the socket contract stays intact.
+          onCaption: () => {},
           onAiText: setAiText,
           onError: setError,
           onBargeIn: () => setAiText(''),
@@ -197,7 +198,6 @@ export function VoiceInterviewPage() {
             <p className="text-body-md text-on-surface-variant">
               {isListening ? 'Listening…' : 'Processing…'}
             </p>
-            {caption && <p className="mt-2 text-body-lg text-on-surface">“{caption}”</p>}
           </div>
 
           {error && (
