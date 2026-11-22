@@ -11,7 +11,7 @@ export type {
   OrchestratorMessage,
   TurnEventHandlers,
 } from './orchestrator-socket';
-export { connectRoomSession } from './room-session';
+export { connectRoomSession, CameraRequiredError } from './room-session';
 export type { ConnectionQuality, ConnectRoomSessionOptions, RoomSession } from './room-session';
 export { ConnectionBadge } from './components/ConnectionBadge';
 export { InterviewerBubble } from './components/InterviewerBubble';

@@ -10,6 +10,16 @@ import {
 
 export type ConnectionQuality = 'good' | 'poor' | 'unknown';
 
+/** Thrown when a video-mode room cannot obtain a camera and requireCamera is set. */
+export class CameraRequiredError extends Error {
+  constructor() {
+    super(
+      'A working camera is required for this interview — check the browser camera permission and that no other app is using the camera.',
+    );
+    this.name = 'CameraRequiredError';
+  }
+}
+
 export interface ConnectRoomSessionOptions {
   url: string;
   token: string;
@@ -22,6 +32,13 @@ export interface ConnectRoomSessionOptions {
    * black video tile reads as a bug.
    */
   onCameraWarning?: (message: string) => void;
+  /**
+   * Video-mode rooms only: when true, a camera failure (denied, in use by
+   * another app, no device) rejects the connect instead of falling back to
+   * mic-only — video-mode integrity snapshots need a real camera track.
+   * Voice rooms leave this false.
+   */
+  requireCamera?: boolean;
 }
 
 export interface RoomSession {
@@ -76,6 +93,10 @@ export async function connectRoomSession(
     }
     if (wantsCamera) {
       cameraFailed = true;
+      if (opts.requireCamera) {
+        await room.disconnect();
+        throw new CameraRequiredError();
+      }
       // Fall back to mic-only so the interview still runs; warn loudly —
       // a silently black video tile reads as a bug.
       opts.onCameraWarning?.(

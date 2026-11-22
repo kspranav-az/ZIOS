@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Button, Card } from '@zios/ui';
 import {
+  CameraRequiredError,
   ConnectionBadge,
   InterviewerBubble,
   connectRoomSession,
@@ -41,6 +42,8 @@ export function PracticeLivePage() {
   const navigate = useNavigate();
   const [connecting, setConnecting] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  /** Bumped by the Retry button to re-run the connect effect. */
+  const [connectAttempt, setConnectAttempt] = useState(0);
   const [aiText, setAiText] = useState('');
   const [isListening, setIsListening] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
@@ -65,6 +68,16 @@ export function PracticeLivePage() {
 
     async function startLive() {
       try {
+        // Live practice is a video room — probe the camera before preflight
+        // charges credits, so a denied/in-use camera fails fast here instead
+        // of joining an audio-only room with a black video tile.
+        try {
+          const probe = await navigator.mediaDevices.getUserMedia({ video: true });
+          probe.getTracks().forEach((track) => track.stop());
+        } catch {
+          throw new CameraRequiredError();
+        }
+
         // Preflight is idempotent: on 'live' sessions it returns the current
         // turn without double-charging; here it performs the initial
         // consent-gated live transition + credit debit.
@@ -77,6 +90,7 @@ export function PracticeLivePage() {
           url: livekit.url,
           token: livekit.token,
           videoElement: videoElementRef.current,
+          requireCamera: true,
           onConnectionQuality: (quality) => setConnectionQuality(quality),
           onCameraWarning: setCameraWarning,
         });
@@ -131,7 +145,7 @@ export function PracticeLivePage() {
       } catch (err) {
         setConnecting(false);
         setError(
-          err instanceof ApiErrorResponse
+          err instanceof CameraRequiredError || err instanceof ApiErrorResponse
             ? err.message
             : 'Could not start the live room. Please try again.',
         );
@@ -148,7 +162,7 @@ export function PracticeLivePage() {
       void audioContextRef.current?.close();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- session-scoped one-shot connect
-  }, [sessionId, recoveryToken]);
+  }, [sessionId, recoveryToken, connectAttempt]);
 
   // Completion poll: the orchestrator drives turns through the practice
   // conductor routes; when questions wrap up the session becomes 'completed'
@@ -265,9 +279,21 @@ export function PracticeLivePage() {
           </div>
 
           {error && (
-            <p className="mt-4 rounded-lg bg-error-container p-3 text-body-md text-on-error-container">
-              {error}
-            </p>
+            <div className="mt-4 rounded-lg bg-error-container p-3">
+              <p className="text-body-md text-on-error-container">{error}</p>
+              {!sessionRef.current && (
+                <Button
+                  className="mt-3"
+                  onClick={() => {
+                    setError(null);
+                    setConnecting(true);
+                    setConnectAttempt((n) => n + 1);
+                  }}
+                >
+                  Retry
+                </Button>
+              )}
+            </div>
           )}
 
           <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
