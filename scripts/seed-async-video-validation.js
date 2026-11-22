@@ -142,13 +142,13 @@ async function main() {
   console.log(`   admin: ${adminEmail}`);
 
   console.log('1b. Seeding credits for admin org...');
-  await dbQuery(
-    `UPDATE credit_account SET balance = balance + $1 WHERE holder_type = 'org' AND holder_id = $2`,
-    [1000, orgId],
-  );
-  await dbQuery(
-    `UPDATE org SET credits_balance = credits_balance + $1 WHERE id = $2`,
-    [1000, orgId],
+  // Via POST /credits/admin/topup so the grant produces an admin_grant
+  // credit_ledger row (plans/admin-credit-topup.md) — never raw-UPDATE.
+  // postJson throws on non-2xx, so a failure here aborts the seed.
+  await postJson(
+    '/credits/admin/topup',
+    { amount: 1000, note: 'seed-async-video-validation' },
+    { authorization: `Bearer ${adminToken}` },
   );
   console.log(`   credited 1000 to org ${orgId}`);
 
