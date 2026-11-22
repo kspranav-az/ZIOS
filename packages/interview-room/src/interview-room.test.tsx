@@ -1,10 +1,12 @@
 import { cleanup, render, screen } from '@testing-library/react';
+import { Room } from 'livekit-client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ConnectionBadge } from './components/ConnectionBadge';
 import { InterviewerBubble } from './components/InterviewerBubble';
 import { dispatchTurnEvent, openOrchestratorSocket } from './orchestrator-socket';
 import type { TurnEventHandlers } from './orchestrator-socket';
 import { floatToPcm16Hex } from './mic-capture';
+import { CameraRequiredError, connectRoomSession } from './room-session';
 
 afterEach(cleanup);
 
@@ -135,6 +137,70 @@ describe('openOrchestratorSocket', () => {
     mock.emitMessage({ type: 'interview_complete' });
     expect(onInterviewComplete).toHaveBeenCalledOnce();
     vi.unstubAllGlobals();
+  });
+});
+
+vi.mock('livekit-client', () => {
+  class MockRoom {
+    static last: MockRoom | null = null;
+    localParticipant = {
+      enableCameraAndMicrophone: vi.fn(),
+      setMicrophoneEnabled: vi.fn(),
+      getTrackPublication: vi.fn().mockReturnValue(undefined),
+    };
+    on = vi.fn();
+    connect = vi.fn().mockResolvedValue(undefined);
+    disconnect = vi.fn().mockResolvedValue(undefined);
+    constructor() {
+      MockRoom.last = this;
+    }
+  }
+  return {
+    Room: MockRoom,
+    RoomEvent: { TrackSubscribed: 'TrackSubscribed', ConnectionQualityChanged: 'ConnectionQualityChanged' },
+    Track: { Kind: { Audio: 'audio' }, Source: { Microphone: 'mic', Camera: 'camera' } },
+  };
+});
+
+type MockedRoom = {
+  localParticipant: {
+    enableCameraAndMicrophone: ReturnType<typeof vi.fn>;
+    setMicrophoneEnabled: ReturnType<typeof vi.fn>;
+  };
+  disconnect: ReturnType<typeof vi.fn>;
+};
+
+describe('connectRoomSession requireCamera', () => {
+  function lastRoom(): MockedRoom {
+    return (Room as unknown as { last: MockedRoom | null }).last!;
+  }
+
+  it('rejects with CameraRequiredError when camera fails and requireCamera is true', async () => {
+    const promise = connectRoomSession({
+      url: 'wss://x',
+      token: 't',
+      videoElement: document.createElement('video'),
+      requireCamera: true,
+    });
+    lastRoom().localParticipant.enableCameraAndMicrophone.mockRejectedValue(new Error('denied'));
+    await expect(promise).rejects.toBeInstanceOf(CameraRequiredError);
+    expect(lastRoom().disconnect).toHaveBeenCalled();
+  });
+
+  it('warns and continues mic-only when camera fails without requireCamera', async () => {
+    const onCameraWarning = vi.fn();
+    const promise = connectRoomSession({
+      url: 'wss://x',
+      token: 't',
+      videoElement: document.createElement('video'),
+      onCameraWarning,
+    });
+    const room = lastRoom();
+    room.localParticipant.enableCameraAndMicrophone.mockRejectedValue(new Error('denied'));
+    const session = await promise;
+    expect(onCameraWarning).toHaveBeenCalledWith(expect.stringContaining('Camera unavailable'));
+    expect(session.localVideoTrack).toBeNull();
+    expect(room.localParticipant.setMicrophoneEnabled).toHaveBeenCalledWith(true);
   });
 });
 

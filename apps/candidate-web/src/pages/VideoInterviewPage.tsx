@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Card } from '@zios/ui';
 import {
+  CameraRequiredError,
   ConnectionBadge,
   InterviewerBubble,
   connectRoomSession,
@@ -47,7 +48,8 @@ export function VideoInterviewPage() {
   const [recoveredRecoveryToken, setRecoveredRecoveryToken] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [caption, setCaption] = useState('');
+  /** Bumped by the Retry button to re-run the connect effect. */
+  const [connectAttempt, setConnectAttempt] = useState(0);
   const [aiText, setAiText] = useState('');
   const [isListening, setIsListening] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
@@ -150,6 +152,16 @@ export function VideoInterviewPage() {
 
     async function startVideo() {
       try {
+        // Video mode requires a camera — probe before joining so the
+        // permission prompt has clear context and a failure exits here
+        // instead of an audio-only room with black snapshots.
+        try {
+          const probe = await navigator.mediaDevices.getUserMedia({ video: true });
+          probe.getTracks().forEach((track) => track.stop());
+        } catch {
+          throw new CameraRequiredError();
+        }
+
         const tokenResponse = await getVoiceToken(sid, token);
         if (cancelled) return;
 
@@ -158,6 +170,7 @@ export function VideoInterviewPage() {
           url: livekit.url,
           token: livekit.token,
           videoElement: videoElementRef.current,
+          requireCamera: true,
           onConnectionQuality: (quality) => setConnectionQuality(quality),
           onCameraWarning: setCameraWarning,
         });
@@ -175,7 +188,9 @@ export function VideoInterviewPage() {
         const wsUrl = `${ORCHESTRATOR_BASE.replace(/^http/, 'ws')}${orchestrator.wsUrl}`;
         const conn = openOrchestratorSocket(wsUrl, {
           audioContext: audioContextRef,
-          onCaption: setCaption,
+          // Captions are intentionally not rendered in the UI (debug aid only);
+          // keep the handler wired so the socket contract stays intact.
+          onCaption: () => {},
           onAiText: setAiText,
           onError: setError,
           onBargeIn: () => setAiText(''),
@@ -208,7 +223,7 @@ export function VideoInterviewPage() {
       } catch (err) {
         setConnecting(false);
         setError(
-          err instanceof ApiErrorResponse
+          err instanceof CameraRequiredError || err instanceof ApiErrorResponse
             ? err.message
             : 'Could not start video interview. Please try again.',
         );
@@ -225,7 +240,7 @@ export function VideoInterviewPage() {
       void sessionRef.current?.disconnect();
       void audioContextRef.current?.close();
     };
-  }, [sessionId, recoveryToken, captureAndSendSnapshot]);
+  }, [sessionId, recoveryToken, captureAndSendSnapshot, connectAttempt]);
 
   const handleToggleMute = () => {
     const audioTrack = sessionRef.current?.localAudioTrack;
@@ -326,16 +341,22 @@ export function VideoInterviewPage() {
             )}
           </div>
 
-          {caption && (
-            <p className="mt-4 rounded-lg bg-surface-container p-3 text-body-md text-on-surface">
-              “{caption}”
-            </p>
-          )}
-
           {error && (
-            <p className="mt-4 rounded-lg bg-error-container p-3 text-body-md text-on-error-container">
-              {error}
-            </p>
+            <div className="mt-4 rounded-lg bg-error-container p-3">
+              <p className="text-body-md text-on-error-container">{error}</p>
+              {!sessionRef.current && (
+                <Button
+                  className="mt-3"
+                  onClick={() => {
+                    setError(null);
+                    setConnecting(true);
+                    setConnectAttempt((n) => n + 1);
+                  }}
+                >
+                  Retry
+                </Button>
+              )}
+            </div>
           )}
 
           <div className="mt-6 flex flex-wrap items-center justify-between gap-3">

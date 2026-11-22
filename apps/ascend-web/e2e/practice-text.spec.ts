@@ -58,7 +58,13 @@ test('candidate signs up, runs a text practice mock and gets a coaching report',
     if (page.url().includes('/report')) break;
     const textarea = page.getByLabel(/your answer/i);
     await expect(textarea).toBeVisible({ timeout: 30_000 });
-    await textarea.fill(answers[turn % answers.length]!);
+    // The final submit navigates to the report — race the fill against that
+    // navigation so we don't hold a disabled textarea mid-transition.
+    const navigated = await Promise.race([
+      page.waitForURL(/\/report$/, { timeout: 30_000 }).then(() => true),
+      textarea.fill(answers[turn % answers.length]!).then(() => false),
+    ]).catch(() => page.url().includes('/report'));
+    if (navigated === true || page.url().includes('/report')) break;
     await page.getByRole('button', { name: /submit answer/i }).click();
     await page.waitForTimeout(500);
   }

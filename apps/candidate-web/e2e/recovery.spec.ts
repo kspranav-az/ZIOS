@@ -43,9 +43,17 @@ test('reload restores answer draft and interview continues to completion', async
   await page.getByLabel(/Your answer/i).fill('I handle deadlines by prioritising.');
   await page.getByRole('button', { name: /Submit answer/i }).click();
 
-  await expect(page.getByText(/Give a concrete example/i)).toBeVisible();
-  await page.getByLabel(/Your answer/i).fill('Concrete example after reload.');
-  await page.getByRole('button', { name: /Submit answer/i }).click();
+  // The follow-up is LLM-judged on the real-adapter stack and may not appear.
+  const followUp = page.getByText(/Give a concrete example/i);
+  const thanked = page.getByRole('heading', { name: /Thank you/i });
+  const followUpShown = await Promise.race([
+    thanked.waitFor({ state: 'visible', timeout: 30_000 }).then(() => false),
+    followUp.waitFor({ state: 'visible', timeout: 30_000 }).then(() => true),
+  ]);
+  if (followUpShown) {
+    await page.getByLabel(/Your answer/i).fill('Concrete example after reload.');
+    await page.getByRole('button', { name: /Submit answer/i }).click();
+  }
 
   await expect(page.getByRole('heading', { name: /Thank you/i })).toBeVisible();
 });

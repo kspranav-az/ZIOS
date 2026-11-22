@@ -164,7 +164,7 @@ describe('PracticeInterviewPage', () => {
       });
     });
 
-    it('records, transcribes into the editable box, and submits with the recording ref', async () => {
+    it('records, transcribes silently, and auto-submits with the recording ref', async () => {
       const user = userEvent.setup();
       vi.mocked(submitPracticeAudio).mockResolvedValue({
         transcript: 'I led the migration and cut failed transactions forty percent.',
@@ -180,20 +180,15 @@ describe('PracticeInterviewPage', () => {
       expect(FakeMediaRecorder.instances[0]?.state).toBe('recording');
       await user.click(screen.getByRole('button', { name: /^stop$/i }));
 
-      // Transcript lands in the editable textarea.
-      const box = await screen.findByLabelText(/your answer/i);
-      await waitFor(() =>
-        expect(box).toHaveValue('I led the migration and cut failed transactions forty percent.'),
-      );
-      expect(screen.getByText(/recording attached/i)).toBeInTheDocument();
-
-      await user.click(screen.getByRole('button', { name: /submit answer/i }));
+      // D2: the transcript is never displayed — it goes straight to submit.
       await waitFor(() =>
         expect(submitPracticeTurn).toHaveBeenCalledWith('ps-1', 'rec-1', {
           answer: 'I led the migration and cut failed transactions forty percent.',
           recordingRef: 'practice-recordings/ps-1/abc/checksum.webm',
         }),
       );
+      expect(screen.queryByLabelText(/your answer/i)).not.toBeInTheDocument();
+      expect(await screen.findByText('Why this role?')).toBeInTheDocument();
     });
 
     it('shows a friendly error when the mic is denied and falls back to typing', async () => {
@@ -211,6 +206,36 @@ describe('PracticeInterviewPage', () => {
       // Typing still works.
       await user.type(screen.getByLabelText(/your answer/i), 'Typed fallback.');
       expect(screen.getByLabelText(/your answer/i)).toHaveValue('Typed fallback.');
+    });
+
+    it('reveals the textarea when transcription itself fails', async () => {
+      const user = userEvent.setup();
+      vi.mocked(submitPracticeAudio).mockRejectedValue(new Error('orchestrator down'));
+      renderInterview('rec-1');
+
+      await user.click(await screen.findByRole('button', { name: /^record$/i }));
+      await user.click(screen.getByRole('button', { name: /^stop$/i }));
+
+      expect(await screen.findByText(/type your answer below/i)).toBeInTheDocument();
+      await user.type(screen.getByLabelText(/your answer/i), 'Typed after failure.');
+      expect(screen.getByLabelText(/your answer/i)).toHaveValue('Typed after failure.');
+      expect(submitPracticeTurn).not.toHaveBeenCalled();
+    });
+
+    it('surfaces the typed fallback when the transcript comes back empty', async () => {
+      const user = userEvent.setup();
+      vi.mocked(submitPracticeAudio).mockResolvedValue({
+        transcript: '',
+        objectName: 'practice-recordings/ps-1/abc/checksum.webm',
+      });
+      renderInterview('rec-1');
+
+      await user.click(await screen.findByRole('button', { name: /^record$/i }));
+      await user.click(screen.getByRole('button', { name: /^stop$/i }));
+
+      expect(await screen.findByText(/could not hear anything/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/your answer/i)).toBeInTheDocument();
+      expect(submitPracticeTurn).not.toHaveBeenCalled();
     });
   });
 });

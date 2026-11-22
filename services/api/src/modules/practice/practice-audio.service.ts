@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common';
-import { randomUUID } from 'node:crypto';
 import type { PracticeTurnAudioBody, PracticeTurnAudioResponse } from '@zios/shared-types';
 import { ApiException } from '@/common/errors';
 import { StorageClient } from '@/modules/storage';
@@ -71,12 +70,11 @@ export class PracticeAudioService {
       throw new ApiException(400, 'VALIDATION_ERROR', 'audio exceeds the 25 MB limit');
     }
 
-    // uploadRecording suffixes .webm and tags video/webm — cosmetic only; the
-    // orchestrator sniffs bytes with ffmpeg, and the checksum keeps the key unique.
-    const uploaded = await this.storage.uploadRecording(
-      `practice-recordings/${sessionId}/${randomUUID()}`,
-      audio,
-    );
+    // uploadRecording keys the object by content checksum with a .webm suffix
+    // — the same plainName we hand to /video/transcribe below. (The path must
+    // NOT include a per-call unique id: the transcribe lookup would miss and
+    // silently return an empty transcript with real STT adapters.)
+    const uploaded = await this.storage.uploadRecording(`practice-recordings/${sessionId}`, audio);
     const plainName = `${`practice-recordings/${sessionId}`}/${uploaded.checksum}.webm`;
 
     const params = new URLSearchParams({ object_name: plainName });

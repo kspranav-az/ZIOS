@@ -19,7 +19,7 @@ const MAX_RESUME_BYTES = 1_000_000;
  * tab/newline/CR) mean the buffer is not plain text. PDFs and office formats
  * both trip this, so callers decide by file name first.
  */
-function looksLikePlainText(buffer: Buffer): boolean {
+export function looksLikePlainText(buffer: Buffer): boolean {
   if (buffer.includes(0)) return false;
   // eslint-disable-next-line no-control-regex
   return !/[\x01-\x08\x0B\x0C\x0E-\x1F]/.test(buffer.toString('utf8'));

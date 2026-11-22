@@ -15,6 +15,8 @@ import type {
   PracticeConsentBody,
   PracticeCreateBody,
   PracticeCreateResponse,
+  PracticeExtractJdBody,
+  PracticeExtractJdResponse,
   PracticeFromJdBody,
   PracticeLibraryPack,
   PracticeLiveTokenResponse,
@@ -27,17 +29,21 @@ import type {
   PracticeTurnResponse,
 } from '@zios/shared-types';
 import { Public } from '@/common/decorators';
+import { ApiException } from '@/common/errors';
 import {
   CandidateAuthGuard,
   CurrentCandidate,
   type CandidateAuthContext,
 } from '@/modules/candidate-accounts';
-import { ResumeService } from '@/modules/resume';
+import { DocumentExtractionClient, ResumeService, looksLikePlainText } from '@/modules/resume';
 import { PRACTICE_CONSENT_TEXT, PRACTICE_CONSENT_TEXT_VERSION } from './consent-text';
 import { PRACTICE_LIBRARY_PACKS } from './library';
 import { PracticeAudioService } from './practice-audio.service';
 import { PracticeEvaluationService } from './practice-evaluation.service';
 import { PracticeService } from './practice.service';
+
+/** Same ceiling as resume upload — JDs are text documents, not media. */
+const MAX_JD_BYTES = 1_000_000;
 
 /**
  * Practice engine routes (Phase 12, D5). @Public + CandidateAuthGuard like
@@ -53,6 +59,7 @@ export class PracticeController {
     private readonly evaluation: PracticeEvaluationService,
     private readonly resumes: ResumeService,
     private readonly audio: PracticeAudioService,
+    private readonly extraction: DocumentExtractionClient,
   ) {}
 
   @Get('library')
@@ -90,6 +97,68 @@ export class PracticeController {
       resumeText,
     });
     return { session, recoveryToken };
+  }
+
+  /**
+   * JD file upload for practice setup (D6): extract plain text from a
+   * .pdf/.txt JD so the candidate can review/edit it before starting a
+   * JD-targeted mock. Reuses the resume extraction port — no new capability.
+   * Nothing is stored; the text goes straight back to the client.
+   */
+  @Post('extract-jd')
+  @HttpCode(200)
+  async extractJd(@Body() body: PracticeExtractJdBody): Promise<PracticeExtractJdResponse> {
+    const fileName =
+      typeof body?.fileName === 'string' && body.fileName.trim() ? body.fileName.trim() : null;
+    if (!fileName) {
+      throw new ApiException(400, 'VALIDATION_ERROR', 'fileName is required');
+    }
+    const lower = fileName.toLowerCase();
+    const isPdf = lower.endsWith('.pdf');
+    const isTxt = lower.endsWith('.txt');
+    if (!isPdf && !isTxt) {
+      throw new ApiException(
+        400,
+        'VALIDATION_ERROR',
+        'unsupported file type — upload a .txt or .pdf JD',
+      );
+    }
+    if (typeof body?.contentBase64 !== 'string' || body.contentBase64.length === 0) {
+      throw new ApiException(400, 'VALIDATION_ERROR', 'contentBase64 is required');
+    }
+    let buffer: Buffer;
+    try {
+      buffer = Buffer.from(body.contentBase64, 'base64');
+    } catch {
+      throw new ApiException(400, 'VALIDATION_ERROR', 'contentBase64 is not valid base64');
+    }
+    if (buffer.length === 0 || buffer.length > MAX_JD_BYTES) {
+      throw new ApiException(413, 'JD_TOO_LARGE', 'JD must be between 1 byte and 1 MB');
+    }
+
+    if (isTxt) {
+      if (!looksLikePlainText(buffer)) {
+        throw new ApiException(
+          422,
+          'TEXT_REQUIRED',
+          'unsupported file type — upload a .txt or .pdf JD, or paste the plain text',
+        );
+      }
+      return { text: buffer.toString('utf8') };
+    }
+    try {
+      const { text } = await this.extraction.extract(body.contentBase64, 'application/pdf');
+      return { text };
+    } catch (cause) {
+      if (cause instanceof ApiException && cause.getStatus() === 502) {
+        throw new ApiException(
+          422,
+          'TEXT_REQUIRED',
+          'could not extract text from this PDF — it may be corrupt or a scanned image. Paste the plain text instead.',
+        );
+      }
+      throw cause;
+    }
   }
 
   /** Practice history + pace/filler trend series + streak (D14). */

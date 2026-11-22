@@ -68,6 +68,9 @@ export function PracticeInterviewPage() {
   const [loading, setLoading] = useState(false);
   const [initializing, setInitializing] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  /** Narrow screens: transcript collapses to the last exchange + a toggle. */
+  const [showFullTranscript, setShowFullTranscript] = useState(false);
+  const transcriptRef = useRef<HTMLDivElement | null>(null);
 
   const recoveryToken = loadPracticeRecovery(sessionId);
 
@@ -109,22 +112,27 @@ export function PracticeInterviewPage() {
     recover().finally(() => setInitializing(false));
   }, [recover, recoveryToken]);
 
-  const handleSubmit = async () => {
-    if (!recoveryToken) return;
-    const text = answer.trim();
-    if (!text) return;
+  // Auto-scroll the wide-screen transcript pane to the latest exchange.
+  useEffect(() => {
+    const el = transcriptRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [history.length]);
+
+  const submitAnswer = async (text: string, ref: string | null) => {
+    if (!recoveryToken || !text) return;
     setLoading(true);
     setError(null);
     try {
       const response = await submitPracticeTurn(sessionId, recoveryToken, {
         answer: text,
-        ...(recordingRef ? { recordingRef } : {}),
+        ...(ref ? { recordingRef: ref } : {}),
       });
       if (turn) {
         setHistory((prev) => [...prev, { prompt: turn.text, answer: text }]);
       }
       setAnswer('');
       setRecordingRef(null);
+      setRecorderError(null);
       if (response.turn.type === 'wrapup') {
         clearPracticeRecovery(sessionId);
         navigate(`/practice/${sessionId}/report`, { replace: true });
@@ -140,6 +148,12 @@ export function PracticeInterviewPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSubmit = () => {
+    const text = answer.trim();
+    if (!text) return;
+    void submitAnswer(text, recordingRef);
   };
 
   /* ---- voice recorder (Phase 12b: record → transcribe → submit) ---- */
@@ -188,9 +202,18 @@ export function PracticeInterviewPage() {
         audioBase64,
         contentType: blob.type || 'audio/webm',
       });
-      setAnswer(result.transcript);
-      setRecordingRef(result.objectName);
       setRecorderState('idle');
+      // D2: the transcript is never shown for editing — submit immediately
+      // with the recording ref so scoring keeps the audio evidence link.
+      // An empty transcript (inaudible/noise-only recording) must surface the
+      // typed fallback instead of silently doing nothing.
+      if (!result.transcript.trim()) {
+        setRecorderError(
+          'We could not hear anything in that recording. Check your microphone and try again, or type your answer below.',
+        );
+        return;
+      }
+      void submitAnswer(result.transcript, result.objectName);
     } catch (err) {
       setRecorderState('idle');
       setRecorderError(
@@ -226,9 +249,22 @@ export function PracticeInterviewPage() {
     );
   }
 
+  const renderHistoryItem = (item: HistoryItem, index: number) => (
+    <Card key={index} padding="md" radius="xl" className="bg-surface-container-low">
+      <p className="font-bold text-on-surface">{item.prompt}</p>
+      {item.answer && (
+        <p className="mt-2 whitespace-pre-wrap text-body-md text-on-surface-variant">
+          {item.answer}
+        </p>
+      )}
+    </Card>
+  );
+
+  const lastExchange = history[history.length - 1];
+
   return (
     <PageShell>
-      <div className="mx-auto w-full max-w-3xl">
+      <div className="mx-auto w-full max-w-6xl px-4">
         <div className="mb-4 flex items-center justify-between">
           <h1 className="text-headline-sm text-on-surface">Practice mock</h1>
           <span className="rounded-full bg-surface-container px-3 py-1 text-label-bold text-on-surface-variant">
@@ -237,111 +273,147 @@ export function PracticeInterviewPage() {
           </span>
         </div>
 
-        {history.length > 0 && (
-          <div className="mb-6 space-y-3">
-            {history.map((item, index) => (
-              <Card key={index} padding="md" radius="xl" className="bg-surface-container-low">
-                <p className="font-bold text-on-surface">{item.prompt}</p>
-                {item.answer && (
-                  <p className="mt-2 whitespace-pre-wrap text-body-md text-on-surface-variant">
-                    {item.answer}
+        <div className="lg:grid lg:grid-cols-12 lg:gap-6">
+          <div className="lg:col-span-5 lg:sticky lg:top-6 lg:self-start">
+            {turn && (
+              <Card padding="lg" radius="2xl">
+                <div className="mb-4 flex items-start gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-container">
+                    <Icon name="smart_toy" className="text-xl text-on-primary" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold uppercase tracking-wide text-on-surface-variant">
+                      {turn.type === 'followup' ? 'Follow-up' : 'Question'}
+                    </p>
+                    <p className="mt-1 text-body-lg text-on-surface">{turn.text}</p>
+                  </div>
+                </div>
+
+                {sessionMode === 'voice' && (
+                  <div className="mb-4 rounded-xl border border-outline-variant bg-surface-container-low p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-body-md font-bold text-on-surface">Answer by voice</p>
+                        <p className="text-body-sm text-on-surface-variant">
+                          {recorderState === 'recording'
+                            ? 'Recording… speak your answer, then stop.'
+                            : recorderState === 'transcribing'
+                              ? 'Transcribing your answer…'
+                              : loading
+                                ? 'Submitting your answer…'
+                                : 'Record your answer — we transcribe it and submit it for you.'}
+                        </p>
+                      </div>
+                      {recorderState === 'idle' && !loading && (
+                        <Button variant="outline" icon="mic" onClick={() => void startRecording()}>
+                          Record
+                        </Button>
+                      )}
+                      {recorderState === 'recording' && (
+                        <Button variant="outline" icon="stop" onClick={() => void stopRecording()}>
+                          Stop
+                        </Button>
+                      )}
+                      {(recorderState === 'transcribing' || loading) && (
+                        <Icon name="progress_activity" className="animate-spin text-2xl text-primary" />
+                      )}
+                    </div>
+                    {recorderError && (
+                      <p className="mt-3 rounded-lg bg-error-container p-3 text-body-sm text-on-error-container">
+                        {recorderError}
+                      </p>
+                    )}
+                    {recorderError && (
+                      <p className="mt-3 text-body-sm text-on-surface-variant">
+                        Type your answer below and submit it instead.
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {(sessionMode !== 'voice' || recorderError !== null) && (
+                  <>
+                    <label htmlFor="practice-answer" className="sr-only">
+                      Your answer
+                    </label>
+                    <textarea
+                      id="practice-answer"
+                      rows={6}
+                      className="w-full resize-y rounded-xl border border-outline-variant bg-white p-4 text-body-md text-on-surface outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/10"
+                      placeholder={
+                        sessionMode === 'voice'
+                          ? 'Type your answer here…'
+                          : 'Type your answer here…'
+                      }
+                      value={answer}
+                      onChange={(e) => setAnswer(e.target.value)}
+                      disabled={loading || recorderState === 'transcribing'}
+                    />
+                  </>
+                )}
+
+                {error && (
+                  <p className="mt-4 rounded-lg bg-error-container p-3 text-body-md text-on-error-container">
+                    {error}
                   </p>
                 )}
+
+                <div className="mt-4 flex justify-end">
+                  <Button
+                    size="lg"
+                    onClick={handleSubmit}
+                    loading={loading}
+                    disabled={answer.trim().length === 0}
+                    icon="send"
+                  >
+                    Submit answer
+                  </Button>
+                </div>
               </Card>
-            ))}
+            )}
           </div>
-        )}
 
-        {turn && (
-          <Card padding="lg" radius="2xl">
-            <div className="mb-4 flex items-start gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-container">
-                <Icon name="smart_toy" className="text-xl text-on-primary" />
-              </div>
-              <div>
-                <p className="text-sm font-bold uppercase tracking-wide text-on-surface-variant">
-                  {turn.type === 'followup' ? 'Follow-up' : 'Question'}
+          <div className="mt-6 lg:col-span-7 lg:mt-0">
+            {history.length === 0 ? (
+              <Card padding="md" radius="xl" className="hidden bg-surface-container-lowest lg:block">
+                <p className="text-body-md text-on-surface-variant">
+                  Your previous questions and answers will appear here as the mock progresses.
                 </p>
-                <p className="mt-1 text-body-lg text-on-surface">{turn.text}</p>
-              </div>
-            </div>
-
-            {sessionMode === 'voice' && (
-              <div className="mb-4 rounded-xl border border-outline-variant bg-surface-container-low p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-body-md font-bold text-on-surface">Answer by voice</p>
-                    <p className="text-body-sm text-on-surface-variant">
-                      {recorderState === 'recording'
-                        ? 'Recording… speak your answer, then stop.'
-                        : recorderState === 'transcribing'
-                          ? 'Transcribing your answer…'
-                          : 'Record your answer — we transcribe it and you can edit before submitting.'}
-                    </p>
+              </Card>
+            ) : (
+              <>
+                {/* Wide screens: full chronological transcript, auto-scrolled. */}
+                <div
+                  ref={transcriptRef}
+                  className="hidden space-y-3 lg:block lg:max-h-[70vh] lg:overflow-y-auto lg:pr-1"
+                >
+                  {history.map(renderHistoryItem)}
+                </div>
+                {/* Narrow screens: last exchange + expandable transcript. */}
+                <div className="lg:hidden">
+                  <div className="space-y-3">
+                    {showFullTranscript
+                      ? history.map(renderHistoryItem)
+                      : lastExchange
+                        ? renderHistoryItem(lastExchange, history.length - 1)
+                        : null}
                   </div>
-                  {recorderState === 'idle' && (
-                    <Button variant="outline" icon="mic" onClick={() => void startRecording()}>
-                      Record
-                    </Button>
-                  )}
-                  {recorderState === 'recording' && (
-                    <Button variant="outline" icon="stop" onClick={() => void stopRecording()}>
-                      Stop
-                    </Button>
-                  )}
-                  {recorderState === 'transcribing' && (
-                    <Icon name="progress_activity" className="animate-spin text-2xl text-primary" />
+                  {history.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowFullTranscript((v) => !v)}
+                      className="mt-3 text-label-bold text-primary hover:underline"
+                    >
+                      {showFullTranscript
+                        ? 'Hide transcript'
+                        : `Show full transcript (${history.length})`}
+                    </button>
                   )}
                 </div>
-                {recorderError && (
-                  <p className="mt-3 rounded-lg bg-error-container p-3 text-body-sm text-on-error-container">
-                    {recorderError}
-                  </p>
-                )}
-                {recordingRef && recorderState === 'idle' && (
-                  <p className="mt-3 text-body-sm text-on-surface-variant">
-                    Recording attached — review the transcript below, edit if needed, then submit.
-                  </p>
-                )}
-              </div>
+              </>
             )}
-
-            <label htmlFor="practice-answer" className="sr-only">
-              Your answer
-            </label>
-            <textarea
-              id="practice-answer"
-              rows={6}
-              className="w-full resize-y rounded-xl border border-outline-variant bg-white p-4 text-body-md text-on-surface outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/10"
-              placeholder={
-                sessionMode === 'voice'
-                  ? 'Your transcribed answer appears here — edit it if needed…'
-                  : 'Type your answer here…'
-              }
-              value={answer}
-              onChange={(e) => setAnswer(e.target.value)}
-              disabled={loading || recorderState === 'transcribing'}
-            />
-
-            {error && (
-              <p className="mt-4 rounded-lg bg-error-container p-3 text-body-md text-on-error-container">
-                {error}
-              </p>
-            )}
-
-            <div className="mt-4 flex justify-end">
-              <Button
-                size="lg"
-                onClick={() => void handleSubmit()}
-                loading={loading}
-                disabled={answer.trim().length === 0}
-                icon="send"
-              >
-                Submit answer
-              </Button>
-            </div>
-          </Card>
-        )}
+          </div>
+        </div>
       </div>
     </PageShell>
   );
