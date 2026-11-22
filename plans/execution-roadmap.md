@@ -22,22 +22,26 @@ all-"Pending", wrong Started/Completed, free-text reason code, dead dashboard).
 Pure employer-web + small API additions; lowest risk, highest demo visibility.
 No infra (orchestrator) rebuild needed.
 
-### Phase B — `plans/admin-credit-topup.md` *(branch `feat/admin-credit-topup`)*
-**Why second:** tiny (3 commits), makes seed/demo data auditable — the wallet
-ledger stops showing unexplained jumps. Quick win before the bigger practice
-work. Requires `api` image rebuild before scripts use the endpoint.
+### Phase B — `plans/employer-invite-ui-and-email.md` *(branch `feat/employer-invite-ui`)*
+**Why second:** the dashboard fix (Phase A) makes the employer shell feel alive;
+this completes the employer story while that context is hot — the Candidates
+page becomes the invite hub (single + bulk CSV, kit/version pickers,
+copy-link-once) with a real invite email, and the roster shows real statuses.
+Pure API + employer-web; no orchestrator, no AI behavior changes.
 
-### Phase C — `plans/practice-interview-ux-and-live-wiring.md` *(branch `fix/practice-interview-ux-live-wiring`)*
-**Why third:** the biggest one (7 commits, two services + two web apps).
+### Phase C — `plans/admin-credit-topup.md` *(branch `feat/admin-credit-topup`)*
+**Why third:** tiny (3 commits) but requires an `api` image rebuild and re-runs
+of the seed scripts — better done after the employer-visible work is merged and
+stable. Makes seed/demo wallet data auditable (no more unexplained balance
+jumps in the ledger).
+
+### Phase D — `plans/practice-interview-ux-and-live-wiring.md` *(branch `fix/practice-interview-ux-live-wiring`)*
+**Why last:** the biggest one (7 commits, two services + two web apps).
 Orchestrator rebuild is slow (~3 min amd64) and Step 1/1b change live AI
-behavior (real STT, real media analysis). Do it once A and B are already
-proving stable. Includes the `CORRUPT_MEDIA` probe fix + DLQ redrive backfill —
-after this, browser-recorded async-video answers show real measurements.
-
-### Phase D — `plans/employer-invite-ui-and-email.md` *(branch `feat/employer-invite-ui`)*
-**Why last of the four:** largest UI surface (new dialog, roster rewrite,
-email). Independent of A–C; lands when the demo-critical fixes are done.
-Optionally defer if a demo is near — it adds rather than fixes.
+behavior (real STT, real media analysis) — do it when nothing demo-critical is
+in flight and there's time to smoke the full voice/video practice flows.
+Includes the `CORRUPT_MEDIA` probe fix + DLQ redrive backfill — after this,
+browser-recorded async-video answers show real measurements.
 
 ### On hold (do not start)
 - `plans/password-auth-and-team-management.md`
