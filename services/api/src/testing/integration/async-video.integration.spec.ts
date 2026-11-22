@@ -282,6 +282,12 @@ describe.runIf(INTEGRATION_AVAILABLE)('Async video interviews', () => {
     expect(reportBody.report.overallRecommendation).toBeGreaterThanOrEqual(1);
     expect(reportBody.report.overallRecommendation).toBeLessThanOrEqual(5);
     expect(reportBody.scores).toHaveLength(2);
+
+    const sessionRow = await test.db.query(
+      `SELECT ended_at FROM interview_session WHERE id = $1`,
+      [created.sessionId],
+    );
+    expect((sessionRow.rows[0] as { ended_at: unknown }).ended_at).not.toBeNull();
   });
 
   it('refunds async video credits only before any answer is uploaded', async () => {

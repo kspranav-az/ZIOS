@@ -133,14 +133,41 @@ export function metricsSummary(metrics: CommunicationMetrics): string {
   return parts.join(' · ');
 }
 
-export function sortTimelineStages(currentStatus: SessionStatus): {
+export interface TimelineStage {
   label: string;
   status: 'done' | 'active' | 'pending';
-}[] {
+}
+
+/**
+ * Map a session status onto the 5-stage candidate timeline.
+ *
+ * Terminal "good" statuses (completed/scoring/reported/reviewed) are past every
+ * stage — a bare `indexOf` lookup leaves everything Pending because those
+ * statuses were never in the stage array. Abandoned sessions show the stages
+ * reached before the candidate dropped (startedAt distinguishes mid-interview
+ * abandonment from never-started).
+ */
+export function sortTimelineStages(
+  currentStatus: SessionStatus,
+  opts?: { startedAt?: string | null },
+): TimelineStage[] {
   const stages: SessionStatus[] = ['invited', 'consented', 'preflight', 'live', 'completed'];
+  const doneThrough: Record<string, number> = {
+    completed: 4,
+    scoring: 4,
+    reported: 4,
+    reviewed: 4,
+    abandoned: opts?.startedAt ? 3 : 1,
+  };
   const currentIndex = stages.indexOf(currentStatus);
 
   return stages.map((stage, index) => {
+    if (currentStatus in doneThrough) {
+      return {
+        label: SESSION_STATUS_LABELS[stage],
+        status: index <= (doneThrough[currentStatus] ?? -1) ? ('done' as const) : ('pending' as const),
+      };
+    }
     if (stage === currentStatus)
       return { label: SESSION_STATUS_LABELS[stage], status: 'active' as const };
     if (currentIndex !== -1 && index < currentIndex)

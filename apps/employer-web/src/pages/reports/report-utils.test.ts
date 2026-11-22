@@ -117,6 +117,24 @@ describe('sortTimelineStages', () => {
     expect(stages[3]?.status).toBe('active');
     expect(stages[4]?.status).toBe('pending');
   });
+
+  it.each(['completed', 'scoring', 'reported', 'reviewed'] as const)(
+    'marks every stage done for terminal status %s',
+    (status) => {
+      const stages = sortTimelineStages(status);
+      expect(stages.every((s) => s.status === 'done')).toBe(true);
+    },
+  );
+
+  it('marks stages up to live done for an abandoned session that started', () => {
+    const stages = sortTimelineStages('abandoned', { startedAt: '2026-11-22T13:37:00Z' });
+    expect(stages.map((s) => s.status)).toEqual(['done', 'done', 'done', 'done', 'pending']);
+  });
+
+  it('marks only invited/consented done for an abandoned session that never started', () => {
+    const stages = sortTimelineStages('abandoned', { startedAt: null });
+    expect(stages.map((s) => s.status)).toEqual(['done', 'done', 'pending', 'pending', 'pending']);
+  });
 });
 
 describe('scoreForDisplay', () => {

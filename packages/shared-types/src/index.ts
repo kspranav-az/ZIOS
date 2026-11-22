@@ -1302,6 +1302,16 @@ export interface EvidenceSpan {
   quoteText: string;
 }
 
+/** Valid reason codes for a human score override (single source for UI + API). */
+export const OVERRIDE_REASON_CODES = [
+  'disagree_with_evidence',
+  'candidate_clarified',
+  'rubric_misapplied',
+  'technical_misunderstanding',
+  'other',
+] as const;
+export type OverrideReasonCode = (typeof OVERRIDE_REASON_CODES)[number];
+
 export interface ScoreOverride {
   id: string;
   reportId: string;
@@ -1405,6 +1415,37 @@ export interface DashboardListResponse {
   pageSize: number;
   total: number;
   totalPages: number;
+}
+
+/** A session the candidate has not finished yet — drives the dashboard's awaiting list. */
+export interface DashboardAwaitingItem {
+  sessionId: string;
+  candidateName: string;
+  mode: InterviewMode;
+  status: SessionStatus;
+  createdAt: string;
+}
+
+export interface DashboardSummaryResponse {
+  stats: {
+    totalCandidates: number;
+    activeJobs: number;
+    totalInterviews: number;
+    pendingReviews: number;
+    liveNow: number;
+  };
+  /** Cumulative counts over session statuses (sourced ⊇ applied ⊇ … ⊇ offers). */
+  pipeline: {
+    sourced: number;
+    applied: number;
+    screening: number;
+    technical: number;
+    final: number;
+    offers: number;
+  };
+  /** Avg days invite→interview end over finished sessions; null when none. */
+  timeToHireDays: number | null;
+  awaiting: DashboardAwaitingItem[];
 }
 
 export interface PublicReportResponse {

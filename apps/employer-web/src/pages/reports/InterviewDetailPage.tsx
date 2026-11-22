@@ -9,6 +9,7 @@ import type {
   ScoreOverride,
   SessionTranscript,
 } from '@zios/shared-types';
+import { OVERRIDE_REASON_CODES, type OverrideReasonCode } from '@zios/shared-types';
 import { Badge, Button, Card, Icon } from '@zios/ui';
 import { dashboardApi } from '../../lib/dashboard-api';
 import { integrityApi } from '../../lib/integrity-api';
@@ -32,6 +33,14 @@ import { downloadReportPdf } from './report-pdf';
 
 /** /interviews/:sessionId — evidence-linked report, transcript, overrides, PDF and share. */
 
+const OVERRIDE_REASON_LABELS: Record<OverrideReasonCode, string> = {
+  disagree_with_evidence: 'Disagree with evidence',
+  candidate_clarified: 'Candidate clarified',
+  rubric_misapplied: 'Rubric misapplied',
+  technical_misunderstanding: 'Technical misunderstanding',
+  other: 'Other',
+};
+
 interface DetailState {
   report: EvaluationReport;
   scores: EvaluationScore[];
@@ -44,6 +53,8 @@ interface DetailState {
   sessionStatus: import('@zios/shared-types').SessionStatus;
   sessionMode: import('@zios/shared-types').InterviewMode;
   sessionConductor: import('@zios/shared-types').SessionConductor;
+  sessionStartedAt: string | null;
+  sessionEndedAt: string | null;
 }
 
 export function InterviewDetailPage() {
@@ -88,6 +99,8 @@ export function InterviewDetailPage() {
         sessionStatus: row.session.status,
         sessionMode: row.session.mode,
         sessionConductor: row.session.conductor,
+        sessionStartedAt: row.session.startedAt,
+        sessionEndedAt: row.session.endedAt,
       });
     } catch (err) {
       setError(userMessageForError(err));
@@ -202,7 +215,7 @@ export function InterviewDetailPage() {
     sessionMode,
     sessionConductor,
   } = state;
-  const timeline = sortTimelineStages(sessionStatus);
+  const timeline = sortTimelineStages(sessionStatus, { startedAt: state.sessionStartedAt });
   const hasReport = report.status === 'completed';
 
   return (
@@ -327,6 +340,21 @@ export function InterviewDetailPage() {
                   </div>
                 </div>
               )}
+              {!hasReport && sessionStatus === 'abandoned' && (
+                <div className="relative flex items-start gap-3 mt-4">
+                  <div className="z-10 w-5 h-5 rounded-full bg-error text-on-error flex items-center justify-center shrink-0">
+                    <Icon name="close" className="text-xs" />
+                  </div>
+                  <div>
+                    <p className="font-label-bold text-sm text-error">Abandoned</p>
+                    <p className="text-xs text-on-surface-variant">
+                      {state.sessionStartedAt
+                        ? 'The candidate left mid-interview.'
+                        : 'The candidate never started.'}
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
           </Card>
 
@@ -352,11 +380,19 @@ export function InterviewDetailPage() {
               </div>
               <div className="flex justify-between">
                 <dt className="text-on-surface-variant">Started</dt>
-                <dd className="text-on-surface">{formatDateTime(report.startedAt)}</dd>
+                <dd className="text-on-surface">
+                  {state.sessionStartedAt ? formatDateTime(state.sessionStartedAt) : '—'}
+                </dd>
               </div>
               <div className="flex justify-between">
                 <dt className="text-on-surface-variant">Completed</dt>
-                <dd className="text-on-surface">{formatDateTime(report.completedAt)}</dd>
+                <dd className="text-on-surface">
+                  {state.sessionEndedAt
+                    ? formatDateTime(state.sessionEndedAt)
+                    : report.completedAt
+                      ? formatDateTime(report.completedAt)
+                      : '—'}
+                </dd>
               </div>
             </dl>
           </Card>
@@ -670,14 +706,22 @@ function OverrideModal({ score, sessionId, onClose, onOverride }: OverrideModalP
             <label htmlFor="reasonCode" className="text-sm font-bold text-primary block mb-1.5">
               Reason code <span className="text-error">*</span>
             </label>
-            <input
+            <select
               id="reasonCode"
               required
               value={reasonCode}
               onChange={(e) => setReasonCode(e.target.value)}
-              placeholder="e.g. EVIDENCE_MISSED"
               className="w-full bg-white border border-outline-variant rounded-xl px-4 py-3 text-on-surface focus:ring-2 focus:ring-primary/10 outline-none"
-            />
+            >
+              <option value="" disabled>
+                Select a reason…
+              </option>
+              {OVERRIDE_REASON_CODES.map((code) => (
+                <option key={code} value={code}>
+                  {OVERRIDE_REASON_LABELS[code]}
+                </option>
+              ))}
+            </select>
           </div>
           <div>
             <label htmlFor="reasonText" className="text-sm font-bold text-primary block mb-1.5">
