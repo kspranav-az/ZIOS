@@ -1302,6 +1302,16 @@ export interface EvidenceSpan {
   quoteText: string;
 }
 
+/** Valid reason codes for a human score override (single source for UI + API). */
+export const OVERRIDE_REASON_CODES = [
+  'disagree_with_evidence',
+  'candidate_clarified',
+  'rubric_misapplied',
+  'technical_misunderstanding',
+  'other',
+] as const;
+export type OverrideReasonCode = (typeof OVERRIDE_REASON_CODES)[number];
+
 export interface ScoreOverride {
   id: string;
   reportId: string;

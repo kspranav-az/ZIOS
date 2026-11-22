@@ -1,18 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import type { ScoreOverride } from '@zios/shared-types';
+import { OVERRIDE_REASON_CODES, type ScoreOverride } from '@zios/shared-types';
 import { DatabaseService } from '@/modules/database';
 import { ApiException } from '@/common/errors';
 import { EvaluationRepository } from './evaluation.repository';
 import { EvaluationScoreRepository } from './score.repository';
 import { OverrideRepository } from './override.repository';
-
-const VALID_REASON_CODES = [
-  'disagree_with_evidence',
-  'candidate_clarified',
-  'rubric_misapplied',
-  'technical_misunderstanding',
-  'other',
-];
 
 @Injectable()
 export class OverrideService {
@@ -35,11 +27,11 @@ export class OverrideService {
     if (newScore < 1 || newScore > 5) {
       throw new ApiException(400, 'VALIDATION_ERROR', 'score must be between 1 and 5');
     }
-    if (!VALID_REASON_CODES.includes(reasonCode)) {
+    if (!OVERRIDE_REASON_CODES.includes(reasonCode as (typeof OVERRIDE_REASON_CODES)[number])) {
       throw new ApiException(
         400,
         'VALIDATION_ERROR',
-        `reason_code must be one of: ${VALID_REASON_CODES.join(', ')}`,
+        `reason_code must be one of: ${OVERRIDE_REASON_CODES.join(', ')}`,
       );
     }
     if (!(await this.reports.belongsToOrg(reportId, orgId))) {

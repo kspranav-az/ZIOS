@@ -9,6 +9,7 @@ import type {
   ScoreOverride,
   SessionTranscript,
 } from '@zios/shared-types';
+import { OVERRIDE_REASON_CODES, type OverrideReasonCode } from '@zios/shared-types';
 import { Badge, Button, Card, Icon } from '@zios/ui';
 import { dashboardApi } from '../../lib/dashboard-api';
 import { integrityApi } from '../../lib/integrity-api';
@@ -31,6 +32,14 @@ import {
 import { downloadReportPdf } from './report-pdf';
 
 /** /interviews/:sessionId — evidence-linked report, transcript, overrides, PDF and share. */
+
+const OVERRIDE_REASON_LABELS: Record<OverrideReasonCode, string> = {
+  disagree_with_evidence: 'Disagree with evidence',
+  candidate_clarified: 'Candidate clarified',
+  rubric_misapplied: 'Rubric misapplied',
+  technical_misunderstanding: 'Technical misunderstanding',
+  other: 'Other',
+};
 
 interface DetailState {
   report: EvaluationReport;
@@ -697,14 +706,22 @@ function OverrideModal({ score, sessionId, onClose, onOverride }: OverrideModalP
             <label htmlFor="reasonCode" className="text-sm font-bold text-primary block mb-1.5">
               Reason code <span className="text-error">*</span>
             </label>
-            <input
+            <select
               id="reasonCode"
               required
               value={reasonCode}
               onChange={(e) => setReasonCode(e.target.value)}
-              placeholder="e.g. EVIDENCE_MISSED"
               className="w-full bg-white border border-outline-variant rounded-xl px-4 py-3 text-on-surface focus:ring-2 focus:ring-primary/10 outline-none"
-            />
+            >
+              <option value="" disabled>
+                Select a reason…
+              </option>
+              {OVERRIDE_REASON_CODES.map((code) => (
+                <option key={code} value={code}>
+                  {OVERRIDE_REASON_LABELS[code]}
+                </option>
+              ))}
+            </select>
           </div>
           <div>
             <label htmlFor="reasonText" className="text-sm font-bold text-primary block mb-1.5">
