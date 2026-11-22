@@ -101,6 +101,54 @@ export class InvitesRepository {
     return (result.rows as InviteRow[]).map(mapRow);
   }
 
+  /**
+   * Employer roster list: joins candidate identity and kit title/version in
+   * one query (no N+1 detail fetches) and never selects the token hash.
+   */
+  async listByOrgWithCandidate(orgId: string, q: Queryable): Promise<
+    (Omit<Invite, 'tokenHash'> & {
+      candidateName: string;
+      candidateEmail: string;
+      kitId: string;
+      kitTitle: string;
+      kitVersion: number;
+    })[]
+  > {
+    const result = await q.query(
+      `SELECT i.${COLUMNS.replace(/, /g, ', i.')},
+              c.name AS candidate_name,
+              c.email AS candidate_email,
+              k.id AS kit_id,
+              k.title AS kit_title,
+              kv.version AS kit_version_number
+       FROM invite i
+       JOIN candidate c ON c.id = i.candidate_id
+       JOIN kit_version kv ON kv.id = i.kit_version_id
+       JOIN kit k ON k.id = kv.kit_id
+       WHERE i.org_id = $1
+       ORDER BY i.created_at DESC`,
+      [orgId],
+    );
+    return result.rows.map((row) => {
+      const r = row as InviteRow & {
+        candidate_name: string;
+        candidate_email: string;
+        kit_id: string;
+        kit_title: string;
+        kit_version_number: number;
+      };
+      const { tokenHash: _tokenHash, ...invite } = mapRow(r);
+      return {
+        ...invite,
+        candidateName: r.candidate_name,
+        candidateEmail: r.candidate_email,
+        kitId: r.kit_id,
+        kitTitle: r.kit_title,
+        kitVersion: Number(r.kit_version_number),
+      };
+    });
+  }
+
   async update(
     orgId: string,
     id: string,

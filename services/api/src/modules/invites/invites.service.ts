@@ -7,6 +7,7 @@ import type {
   CreateCandidateInviteResponse,
   Invite,
   InviteDetailResponse,
+  InviteListItem,
   ReissueInviteBody,
   RescheduleInviteBody,
   TokenResolveResponse,
@@ -185,8 +186,13 @@ export class InvitesService {
     }
   }
 
-  async list(orgId: string): Promise<Invite[]> {
-    return this.db.withTenant((q) => this.invites.listByOrg(orgId, q));
+  async list(orgId: string): Promise<InviteListItem[]> {
+    const rows = await this.db.withTenant((q) => this.invites.listByOrgWithCandidate(orgId, q));
+    return rows.map((row) => ({
+      ...row,
+      candidate: { name: row.candidateName, email: row.candidateEmail },
+      kit: { id: row.kitId, title: row.kitTitle, version: row.kitVersion },
+    }));
   }
 
   async getDetail(orgId: string, id: string): Promise<InviteDetailResponse> {

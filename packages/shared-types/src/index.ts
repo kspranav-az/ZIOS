@@ -933,8 +933,17 @@ export interface RescheduleInviteBody {
   extendDays?: number;
 }
 
+/**
+ * Invite as listed in the employer roster: candidate identity and kit title
+ * are joined in, and the token hash is never exposed to the client.
+ */
+export type InviteListItem = Omit<Invite, 'tokenHash'> & {
+  candidate: { name: string; email: string };
+  kit: { id: string; title: string; version: number };
+};
+
 export interface InviteListResponse {
-  invites: Invite[];
+  invites: InviteListItem[];
 }
 
 export interface InviteDetailResponse {
