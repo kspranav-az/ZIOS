@@ -202,9 +202,14 @@ export function PracticeReportPage() {
             .map((row: SessionTranscript) => {
               // Several judge scores can cite the same moment (observed live: all
               // eight criteria quoting one identical answer rendered eight
-              // duplicate chips). Show each distinct quote once per turn.
+              // duplicate chips). Show each distinct quote once per turn, and
+              // drop quotes that repeat the full answer verbatim — the answer
+              // is already rendered right above, so the chip duplicates it.
+              const answerNorm = (row.answerText ?? '').trim().replace(/\s+/g, ' ');
               const spans = (spansByTranscript.get(row.id) ?? []).filter(
-                (span, idx, all) => all.findIndex((s) => s.quoteText === span.quoteText) === idx,
+                (span, idx, all) =>
+                  all.findIndex((s) => s.quoteText === span.quoteText) === idx &&
+                  span.quoteText.trim().replace(/\s+/g, ' ') !== answerNorm,
               );
               return (
                 <div
