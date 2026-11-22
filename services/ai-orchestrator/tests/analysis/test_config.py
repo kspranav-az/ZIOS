@@ -16,9 +16,12 @@ from app.analysis.errors import (
 )
 
 
-def test_defaults_are_mock_and_safe() -> None:
+def test_defaults_are_real_adapter_with_safe_fallback() -> None:
+    """Default STT adapter is gcp (real Google Cloud Speech); without a
+    project id the factory degrades to mock with a loud warning, so a bare
+    ``load_settings({})`` still describes a boot-safe configuration."""
     settings = load_settings({})
-    assert settings.stt_adapter == "mock"
+    assert settings.stt_adapter == "gcp"
     assert settings.gcp_project_id is None
     assert settings.gcp_location == "global"
     assert settings.video_analysis_fps == 5.0

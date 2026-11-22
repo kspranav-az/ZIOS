@@ -169,9 +169,11 @@ services:
       MINIO_SECURE: 'false'
       # Share the session cookie across app/API subdomains (e.g., hapkonic.com).
       COOKIE_DOMAIN: ${COOKIE_DOMAIN:-}
-      # Phase 06: LLM provider mode. 'mock' uses deterministic fixtures;
-      # 'gemini' requires GEMINI_API_KEY to be set.
-      LLM_MODE: ${LLM_MODE:-mock}
+      # Phase 06: LLM provider mode. Default 'gemini' (real model);
+      # without GEMINI_API_KEY the gateway logs a warning and registers the
+      # mock fixtures only, so keyless environments still boot. 'mock' forces
+      # deterministic fixtures for hermetic CI runs.
+      LLM_MODE: ${LLM_MODE:-gemini}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-1.5-flash}
     ports:
@@ -276,8 +278,12 @@ services:
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
       MINIO_BUCKET_MEDIA: ${MINIO_BUCKET_MEDIA}
       MINIO_SECURE: 'false'
-      # Phase 14: multimodal analysis pipeline (STT selection + tuning knobs)
-      STT_ADAPTER: ${STT_ADAPTER:-mock}
+      # Phase 14: multimodal analysis pipeline. Default 'gcp' (real Google
+      # Cloud Speech v2); without GCP_PROJECT_ID/credentials the factory logs
+      # a warning and falls back to mock fixtures, so keyless environments
+      # still boot. 'mock' forces scripted fixtures for hermetic CI runs.
+      STT_ADAPTER: ${STT_ADAPTER:-gcp}
+      GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-/run/secrets/gcloud-adc.json}
       GCP_PROJECT_ID: ${GCP_PROJECT_ID:-}
       GCP_LOCATION: ${GCP_LOCATION:-global}
       GCP_STT_CONFIG: ${GCP_STT_CONFIG:-}
@@ -288,15 +294,22 @@ services:
       FILLER_WORDS: ${FILLER_WORDS:-um,uh,erm,like,you know,actually,basically,sort of}
       # Phase 12b: resume PDF text extraction (pypdf = local library; mock = fixture)
       DOCUMENT_EXTRACTION_ADAPTER: ${DOCUMENT_EXTRACTION_ADAPTER:-pypdf}
-      # Phase 12f/13: voice-room TTS (mock = silence fixtures; piper = local
-      # CPU voice baked into the image; gemini = managed cloud voice — the
-      # adapter fails loudly at boot when GEMINI_API_KEY is missing).
-      TTS_ADAPTER: ${TTS_ADAPTER:-mock}
+      # Phase 12f/13: voice-room TTS. Default 'gemini' (managed cloud voice);
+      # without GEMINI_API_KEY the factory logs a warning and falls back to
+      # mock silence, so keyless environments still boot. 'piper' = local CPU
+      # voice baked into the image (fully offline).
+      TTS_ADAPTER: ${TTS_ADAPTER:-gemini}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_TTS_MODEL: ${GEMINI_TTS_MODEL:-gemini-3.8-flash-lite-tts}
       GEMINI_TTS_VOICE: ${GEMINI_TTS_VOICE:-Puck}
     ports:
       - '${ORCHESTRATOR_PORT}:8000'
+    volumes:
+      # Application-default-credentials bind for the default gcp STT adapter.
+      # GOOGLE_ADC_HOST_PATH lets another machine point at its own ADC file;
+      # when the path is absent Docker mounts an empty dir, auth fails, and
+      # the STT factory falls back to mock with a loud warning — boot-safe.
+      - '${GOOGLE_ADC_HOST_PATH:-/Users/pranav/.config/gcloud/application_default_credentials.json}:/run/secrets/gcloud-adc.json:ro'
     healthcheck:
       test:
         [

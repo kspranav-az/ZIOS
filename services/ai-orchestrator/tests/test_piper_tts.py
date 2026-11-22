@@ -74,7 +74,10 @@ async def test_piper_tts_healthcheck() -> None:
 
 
 def test_tts_factory_defaults_to_mock(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Default is gemini; with no key it must fall back to mock regardless of
+    # any key exported in the outer environment.
     monkeypatch.delenv("TTS_ADAPTER", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     assert isinstance(build_tts_adapter(), MockTtsAdapter)
 
 

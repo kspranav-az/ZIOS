@@ -22,7 +22,7 @@ DEFAULT_SLOW_WPM = 100.0
 class AnalysisSettings:
     """Immutable snapshot of analysis-pipeline configuration."""
 
-    stt_adapter: str = "mock"
+    stt_adapter: str = "gcp"
     gcp_project_id: str | None = None
     gcp_location: str = "global"
     # Optional JSON blob with provider-specific recognition options
@@ -67,7 +67,7 @@ def load_settings(env: dict[str, str] | None = None) -> AnalysisSettings:
         temp_dir = tempfile.gettempdir()
 
     return AnalysisSettings(
-        stt_adapter=source.get("STT_ADAPTER", "mock").strip().lower() or "mock",
+        stt_adapter=source.get("STT_ADAPTER", "gcp").strip().lower() or "gcp",
         gcp_project_id=source.get("GCP_PROJECT_ID", "").strip() or None,
         gcp_location=source.get("GCP_LOCATION", "global").strip() or "global",
         gcp_stt_config=gcp_stt_config,

@@ -200,11 +200,26 @@ def test_tts_factory_gemini(monkeypatch: pytest.MonkeyPatch) -> None:
     assert isinstance(adapter, GeminiTtsAdapter)
 
 
-def test_tts_factory_gemini_missing_key_fails_loudly(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_tts_factory_gemini_missing_key_falls_back_to_mock(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """gemini is the default; a keyless environment must still boot (loud
+    warning + mock), not crash — the adapter itself stays fail-loud."""
+    from app.voice.mock_tts import MockTtsAdapter
+
     monkeypatch.setenv("TTS_ADAPTER", "gemini")
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-    with pytest.raises(ValueError, match="GEMINI_API_KEY"):
-        build_tts_adapter()
+    assert isinstance(build_tts_adapter(), MockTtsAdapter)
+
+
+def test_tts_factory_default_is_gemini_with_mock_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.voice.mock_tts import MockTtsAdapter
+
+    monkeypatch.delenv("TTS_ADAPTER", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    assert isinstance(build_tts_adapter(), MockTtsAdapter)
 
 
 @pytest.mark.asyncio
