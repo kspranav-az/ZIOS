@@ -68,9 +68,8 @@ export function PracticeInterviewPage() {
   const [loading, setLoading] = useState(false);
   const [initializing, setInitializing] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  /** Narrow screens: transcript collapses to the last exchange + a toggle. */
-  const [showFullTranscript, setShowFullTranscript] = useState(false);
-  const transcriptRef = useRef<HTMLDivElement | null>(null);
+  /** Completed-answer tile whose Q&A popup is open (null = closed). */
+  const [openTile, setOpenTile] = useState<number | null>(null);
 
   const recoveryToken = loadPracticeRecovery(sessionId);
 
@@ -112,11 +111,15 @@ export function PracticeInterviewPage() {
     recover().finally(() => setInitializing(false));
   }, [recover, recoveryToken]);
 
-  // Auto-scroll the wide-screen transcript pane to the latest exchange.
+  // Close the answer popup with Escape.
   useEffect(() => {
-    const el = transcriptRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [history.length]);
+    if (openTile === null) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpenTile(null);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [openTile]);
 
   const submitAnswer = async (text: string, ref: string | null) => {
     if (!recoveryToken || !text) return;
@@ -249,33 +252,40 @@ export function PracticeInterviewPage() {
     );
   }
 
-  const renderHistoryItem = (item: HistoryItem, index: number) => (
-    <Card key={index} padding="md" radius="xl" className="bg-surface-container-low">
-      <p className="font-bold text-on-surface">{item.prompt}</p>
-      {item.answer && (
-        <p className="mt-2 whitespace-pre-wrap text-body-md text-on-surface-variant">
-          {item.answer}
-        </p>
-      )}
-    </Card>
-  );
-
-  const lastExchange = history[history.length - 1];
+  const openTileItem = openTile !== null ? history[openTile] : undefined;
 
   return (
     <PageShell>
-      <div className="mx-auto w-full max-w-6xl px-4">
-        <div className="mb-4 flex items-center justify-between">
+      <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-4">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h1 className="text-headline-sm text-on-surface">Practice mock</h1>
-          <span className="rounded-full bg-surface-container px-3 py-1 text-label-bold text-on-surface-variant">
-            {history.length + 1}
-            {totalQuestions > 0 ? ` of ~${totalQuestions}` : ''}
-          </span>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <span className="rounded-full bg-surface-container px-3 py-1 text-label-bold text-on-surface-variant">
+              {history.length + 1}
+              {totalQuestions > 0 ? ` of ~${totalQuestions}` : ''}
+            </span>
+            {history.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1" aria-label="Completed answers">
+                {history.map((item, index) => (
+                  <button
+                    key={index}
+                    type="button"
+                    onClick={() => setOpenTile(index)}
+                    title={`Answer ${index + 1} — ${item.prompt.slice(0, 60)}`}
+                    aria-label={`Review answer ${index + 1}`}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-outline-variant bg-surface-container-low text-label-bold text-on-surface transition-colors hover:border-primary hover:bg-primary hover:text-on-primary"
+                  >
+                    {index + 1}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
-        <div className="lg:grid lg:grid-cols-12 lg:gap-6">
-          <div className="lg:col-span-5 lg:sticky lg:top-6 lg:self-start">
-            {turn && (
+        <div className="flex w-full flex-1 flex-col items-center justify-center pb-8">
+          <div className="w-full max-w-2xl">
+{turn && (
               <Card padding="lg" radius="2xl">
                 <div className="mb-4 flex items-start gap-3">
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-container">
@@ -372,49 +382,42 @@ export function PracticeInterviewPage() {
               </Card>
             )}
           </div>
-
-          <div className="mt-6 lg:col-span-7 lg:mt-0">
-            {history.length === 0 ? (
-              <Card padding="md" radius="xl" className="hidden bg-surface-container-lowest lg:block">
-                <p className="text-body-md text-on-surface-variant">
-                  Your previous questions and answers will appear here as the mock progresses.
-                </p>
-              </Card>
-            ) : (
-              <>
-                {/* Wide screens: full chronological transcript, auto-scrolled. */}
-                <div
-                  ref={transcriptRef}
-                  className="hidden space-y-3 lg:block lg:max-h-[70vh] lg:overflow-y-auto lg:pr-1"
-                >
-                  {history.map(renderHistoryItem)}
-                </div>
-                {/* Narrow screens: last exchange + expandable transcript. */}
-                <div className="lg:hidden">
-                  <div className="space-y-3">
-                    {showFullTranscript
-                      ? history.map(renderHistoryItem)
-                      : lastExchange
-                        ? renderHistoryItem(lastExchange, history.length - 1)
-                        : null}
-                  </div>
-                  {history.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => setShowFullTranscript((v) => !v)}
-                      className="mt-3 text-label-bold text-primary hover:underline"
-                    >
-                      {showFullTranscript
-                        ? 'Hide transcript'
-                        : `Show full transcript (${history.length})`}
-                    </button>
-                  )}
-                </div>
-              </>
-            )}
-          </div>
         </div>
       </div>
+
+      {openTileItem && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Answer ${(openTile ?? 0) + 1}`}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setOpenTile(null)}
+        >
+          <div className="w-full max-w-lg" onClick={(event) => event.stopPropagation()}>
+            <Card padding="lg" radius="2xl">
+              <div className="flex items-start justify-between gap-3">
+                <p className="text-label-bold uppercase tracking-wide text-on-surface-variant">
+                  Answer {(openTile ?? 0) + 1}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setOpenTile(null)}
+                  aria-label="Close"
+                  className="rounded-full p-1 text-on-surface-variant transition-colors hover:bg-surface-container"
+                >
+                  <Icon name="close" className="text-xl" />
+                </button>
+              </div>
+              <p className="mt-3 font-bold text-on-surface">{openTileItem.prompt}</p>
+              {openTileItem.answer && (
+                <p className="mt-2 whitespace-pre-wrap text-body-md text-on-surface-variant">
+                  {openTileItem.answer}
+                </p>
+              )}
+            </Card>
+          </div>
+        </div>
+      )}
     </PageShell>
   );
 }
