@@ -896,6 +896,8 @@ export interface CreateCandidateInviteBody {
   otpRequired?: boolean;
   /** ai (default) or human-facilitated interviewer (Phase 09). */
   conductor?: SessionConductor;
+  /** Send the invite email after creation (default true; failure is non-fatal). */
+  notify?: boolean;
   metadata?: Record<string, unknown>;
 }
 
