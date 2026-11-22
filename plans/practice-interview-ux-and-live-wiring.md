@@ -25,6 +25,15 @@ all root-caused on 2026-11-22:
    above the question card → constant scrolling after each answer, ~75% dead
    horizontal margin on wide screens. Both `InterviewPage` (candidate-web) and
    `PracticeInterviewPage` (ascend-web) share this flaw.
+6. **Analysis rejects browser-recorded media**: Chrome MediaRecorder WebM files
+   carry no Duration element in the EBML header, so the orchestrator probe
+   raises `CORRUPT_MEDIA: media has no readable duration` — verified 2026-11-22
+   on a seeded async-video session (both analysis jobs failed 3× into
+   `analysis_job_dlq` while the videos played fine in the employer review;
+   the stored blob probes as `duration=N/A` with valid vp9+opus streams).
+   The employer panel's "Analysis not available yet" is the visible symptom.
+   Any recording made in a browser hits this; only pre-muxed clips ever
+   produced measurements.
 
 Plus one feature gap: **practice setup accepts JD as paste-only text**; no JD
 file (PDF/TXT) upload, even though the orchestrator document-extraction port
@@ -80,6 +89,19 @@ already exists (used by resume upload).
 - Rebuild: `docker compose up -d --build ai-orchestrator` (~3 min, amd64-emulated). Then **verify the fix is in the image**: `docker exec zios-ai-orchestrator grep -n "build_stt_adapter" app/video/router.py` must print a line. Boot log must show `stt_adapter_selected adapter=gcp`.
 - `.env.example`: confirm `STT_ADAPTER`, `GCP_PROJECT_ID`, `GCP_LOCATION`, `GCP_STT_CONFIG` are documented; add if absent.
 - Tests: `pnpm --filter ai-orchestrator test` (or its pytest equivalent — use the repo's orchestrator test command) — the mock-injected tests still pass; nothing asserted the bare default.
+
+## Step 1b — Orchestrator: tolerate missing container duration in the media probe (gap 6)
+
+- `services/ai-orchestrator/app/analysis/media.py` (`probe_media`, lines 74–101):
+  - Current: `fmt.get("duration")` is `None` → raise `CorruptMediaError("media has no readable duration")`.
+  - New fallback chain when `format.duration` is missing:
+    1. Take the max `duration` across `streams[]` (WebM stream durations are often present when the format one is N/A).
+    2. Else remux: `ffmpeg -v error -i <src> -c copy <tmp>` (same dir, `.remux` suffix) and re-probe the remuxed file — ffmpeg writes the Duration element; use its `format.duration` (fall back to its stream durations the same way).
+    3. Only if all of the above fail, raise `CorruptMediaError` (genuinely corrupt media still fails loudly).
+  - Keep `MediaMetadata` shape unchanged.
+- Unit tests (orchestrator media tests): a fixture muxed without a format duration (or a stubbed `subprocess.run` returning no `format.duration` but stream durations) → probe succeeds via fallback; a fixture where even the remux has no duration → `CorruptMediaError`. Existing corrupt-media tests stay green.
+- **After deploy, backfill**: the two DLQ rows from the 2026-11-22 session (and any others) can be re-run via `POST /analysis/dlq/:jobId/redrive` (admin-only redrive, `analysis.controller.ts:19-26` — verified to exist). Add this to the smoke checklist; it's how the already-stored recordings get their measurements.
+- Deliberately **out of scope** here: the capture-side hardening (injecting duration into the WebM in-browser via ts-ebml, or recording `video/mp4`) — the probe fallback fully covers it and works retroactively; revisit only if we ever need duration at upload time for other reasons.
 
 ## Step 2 — Ascend: voice practice auto-submits, no transcript editing (D2)
 
@@ -144,6 +166,7 @@ already exists (used by resume upload).
 Branch `fix/practice-interview-ux-live-wiring` from `main`.
 
 1. `fix(orchestrator): route /video/transcribe through the STT adapter factory` — Step 1. Body: root cause (bare service construction defaulted to MockSttAdapter, ignoring STT_ADAPTER), the boot-time factory pattern copied from voice router, image-verification note.
+1b. `fix(orchestrator): fall back to stream duration and remux when format duration is missing` — Step 1b. Body: Chrome MediaRecorder WebM has no Duration element; probe now falls back to stream durations then an ffmpeg `-c copy` remux before declaring CORRUPT_MEDIA; enables DLQ redrive backfill for existing recordings.
 2. `feat(ascend-web): auto-submit voice practice answers without transcript editing` — Step 2. Body: D2 rationale, test rework note.
 3. `refactor(candidate-web,ascend-web): hide live STT captions in voice and video rooms` — Step 3.
 4. `fix(interview-room): require camera for video-mode rooms with fail-fast error` — Step 4. Body: integrity snapshots depend on a live camera track; voice rooms unchanged.
@@ -158,5 +181,6 @@ husky commit-msg runs on merge commits), push SSH remote.
 ## Risk notes
 
 - **Step 1 is the only behavior change with blast radius beyond practice**: async-video interviews (`AsyncVideoInterviewPage`) share `/video/transcribe` and will now hit real GCP STT — that is the intended fix, but if GCP credentials lack STT scope the failure mode is a thrown error, not a mock transcript. Verify with one async-video submission in the smoke pass.
+- **Step 1b makes the full multimodal pipeline run on real browser recordings for the first time.** Expect analysis jobs to take minutes on this CPU-only Mac (DEMO.md already documents this) — that is normal, not a hang. The seeded 2026-11-22 session's two DLQ rows are the backfill proof: redrive them after deploy and confirm the employer panel shows measurements.
 - **Step 2 changes a tested contract** (transcript-in-textarea). The rework is confined to one test file; keep the submit payload contract (`{answer, recordingRef}`) identical.
 - **Step 4 probe + LiveKit both request camera** — the probe's tracks are stopped immediately, so LiveKit re-acquires; no double-permission prompt in practice (browser caches the grant), but note it in the smoke checklist.
