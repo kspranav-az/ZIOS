@@ -42,6 +42,9 @@ export function setUnauthorizedHandler(handler: UnauthorizedHandler | null): voi
 interface ApiFetchOptions extends Omit<RequestInit, 'body'> {
   /** JSON-serializable request body. */
   json?: unknown;
+  /** Multipart body (file uploads). Sent as-is; no Content-Type is set —
+   * the browser must add the boundary itself. */
+  formData?: FormData;
 }
 
 /**
@@ -50,7 +53,7 @@ interface ApiFetchOptions extends Omit<RequestInit, 'body'> {
  * in JS-reachable storage), parses the ApiError envelope on failure.
  */
 export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): Promise<T> {
-  const { json, headers, ...init } = options;
+  const { json, formData, headers, ...init } = options;
 
   let response: Response;
   try {
@@ -61,7 +64,12 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
         ...(json !== undefined ? { 'Content-Type': 'application/json' } : {}),
         ...headers,
       },
-      body: json !== undefined ? JSON.stringify(json) : undefined,
+      body:
+        formData !== undefined
+          ? formData
+          : json !== undefined
+            ? JSON.stringify(json)
+            : undefined,
     });
   } catch {
     throw new ApiRequestError(
