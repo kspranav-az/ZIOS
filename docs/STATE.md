@@ -56,7 +56,7 @@ Post-M1 extension (not in the frozen PRD §3.4): objective multimodal feature ex
 
 - Generalized `analysis_job` lifecycle (kinds `transcription` / `multimodal_feature_extraction`) + `analysis_job_dlq`; BullMQ `analysis` queue; consent-gated (`CONSENT_MISSING` fails without processing); legacy `transcription_job` path untouched behind `enableAnalysis: false`.
 - Orchestrator `app/analysis/`: streaming ffmpeg preprocessing (16 kHz mono PCM; 5 FPS / ~854 px sequential frames), MediaPipe face/pose/hands (gaze as `camera_gaze_ratio`, head pose via solvePnP, facial activity, posture, gesture frequency, blur/quality), Silero VAD via onnxruntime, librosa pitch/energy (speech regions only), WPM/fillers/repetitions (heuristics flagged), temporal alignment + 3-level aggregation, pydantic schema (`value/valid/reason` — no fake zeros), artifacts in MinIO `analysis/{sessionId}/{questionId|session}/*.json`, typed errors (2xx/4xx/5xx, never 200-with-fake).
-- `STT_ADAPTER=mock|gcp` factory + `GoogleCloudSttAdapter` (Speech v2, word timestamps, normalized internal schema); mock remains the default everywhere.
+- `STT_ADAPTER=mock|gcp` factory + `GoogleCloudSttAdapter` (Speech v2, word timestamps, normalized internal schema); `gcp` is the default since 2026-11-22 (graceful mock fallback when unconfigured).
 - Video-mode capture: hidden subscribe-only LiveKit recorder participant → streaming webm encode → `recordings/{sessionId}/{sha256}.webm` → telemetry (`media_kind`) → analysis enqueue; voice-mode recordings (`...wav`) enqueue audio analysis.
 - Employer review page: `AnalysisFeaturesPanel` per question (objective measurements only, `n/a — reason` for invalid, `heuristic` badges); API `GET /analysis/sessions/:id` + `GET /analysis/sessions/:id/questions/:qid/features`.
 - **No inference:** no emotion/personality/lie/confidence scoring anywhere in the pipeline.
@@ -108,6 +108,36 @@ text-only rung — never fake audio). `httpx` moved to runtime dependencies
 (11) + opt-in live probe (`GEMINI_API_KEY`) green; container boots with
 `tts_adapter_selected adapter=gemini`.
 
+### Real-adapter defaults everywhere (2026-11-22, no tag — follow-up)
+
+The deployment defaults flip from mock to the real Google-backed adapters;
+mock remains the explicit choice for hermetic CI (`*_ADAPTER=mock`):
+
+- **LLM**: compose default `LLM_MODE=gemini` (was `mock`). Without
+  `GEMINI_API_KEY` the gateway already logged a warning and registered mock
+  fixtures only — behavior unchanged there.
+- **TTS**: factory + compose default `TTS_ADAPTER=gemini`; the factory now
+  degrades to mock with a loud warning when the key is missing (was a boot
+  crash), so keyless environments still boot.
+- **STT**: factory + compose default `STT_ADAPTER=gcp` (Google Cloud Speech
+  v2); the factory degrades to mock with a loud warning when
+  `GCP_PROJECT_ID`/credentials are missing (was a boot crash). Compose mounts
+  the host ADC file (`GOOGLE_ADC_HOST_PATH`, default
+  `~/.config/gcloud/application_default_credentials.json`) into the
+  orchestrator at `/run/secrets/gcloud-adc.json` and sets
+  `GOOGLE_APPLICATION_CREDENTIALS` accordingly.
+- `.env` now runs: `LLM_MODE=gemini`, `TTS_ADAPTER=gemini`,
+  `STT_ADAPTER=gcp`, `GCP_PROJECT_ID=promptwars-497703`.
+- **Validated live in-container (2026-11-22)**: boot log shows
+  `stt_adapter_selected adapter=gcp project_id=promptwars-497703` +
+  `tts_adapter_selected adapter=gemini`; round-trip smoke — Gemini TTS spoke
+  "The deadline was tight, but we shipped on time." (145,920 PCM bytes) and
+  the GCP adapter transcribed it back: "the deadline was tight but we shipped
+  on time" (8/9 exact word overlap; punctuation-only delta). Full suite
+  151 passed / 3 skipped; `scripts/verify-live-e2e.js` green.
+- Still mock (no real credentials exist yet): employer Google `OAuthPort`
+  (real Google OAuth app credentials pending — see `plans/external-sso-and-oauth.md`).
+
 ---
 
 ## 3. Mock-credential mode inventory
@@ -117,7 +147,7 @@ Everything below is **fixture-driven mock** today. Feature code is complete; rea
 | Capability                         | Port / adapter                                                                               | Mock behavior                                                                                                                                                  | Real handover item                                   |
 | ---------------------------------- | -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
 | LLM (generation, conductor, judge) | `LlmProvider` → `MockLlmProvider`, `GeminiLlmProvider`                                       | Deterministic fixtures for JD analysis, follow-ups, scores; Gemini adapter (gemini-3.5-flash-lite default) with versioned prompt registry + `MOCK_MODE` toggle | Prompt tuning + cost validation against real traffic |
-| STT                                | `SttPort` → `MockSttAdapter` / `GoogleCloudSttAdapter` (via `STT_ADAPTER=mock\|gcp` factory) | Scripted transcript fixtures; GCP adapter implemented + contract-tested with fakes                                                                             | GCP credentials + WER measurement (adapter ready)    |
+| STT                                | `SttPort` → `MockSttAdapter` / `GoogleCloudSttAdapter` (default `gcp` via factory; graceful mock fallback) | Real Google Cloud Speech v2 validated in-container 2026-11-22 (TTS→STT round-trip); `STT_ADAPTER=mock` for hermetic CI                                     | WER measurement on real traffic                      |
 | TTS                                | Orchestrator contract → `MockTtsAdapter` / `PiperTtsAdapter` / `GeminiTtsAdapter` (`TTS_ADAPTER=mock\|piper\|gemini`)                 | Deterministic silence fixtures; Piper validated 2026-09-24 (local CPU neural voice); Gemini cloud voice validated 2026-11-22 (gemini-3.8-flash-lite-tts)     | Prompt tuning + cost validation against real traffic |
 | Google OAuth                       | `OAuthPort` → `MockOAuthAdapter`                                                             | Accepts any `code` and returns deterministic profile                                                                                                           | Real Google OAuth app + verification                 |
 | Email                              | `EmailSender` → `MailpitAdapter`                                                             | Sends via local SMTP                                                                                                                                           | Production SMTP/SES + deliverability                 |
