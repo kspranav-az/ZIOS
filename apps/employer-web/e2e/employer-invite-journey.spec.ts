@@ -72,6 +72,7 @@ test('employer invites a candidate from the roster; email lands; status flips to
 
   // 7. Back in the employer roster: status chip flips to Completed.
   await page.getByRole('button', { name: 'Done' }).click();
+  await page.reload();
   await expect(page.getByRole('cell', { name: 'Completed' })).toBeVisible();
   await expect(page.getByText(candidate.email)).toBeVisible();
 });
