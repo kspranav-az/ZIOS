@@ -138,6 +138,31 @@ mock remains the explicit choice for hermetic CI (`*_ADAPTER=mock`):
 - Still mock (no real credentials exist yet): employer Google `OAuthPort`
   (real Google OAuth app credentials pending — see `plans/external-sso-and-oauth.md`).
 
+### Post-M1: Employer invite UI + invite email (2026-11-22, branch `feat/employer-invite-ui`)
+
+The candidate-invite backend existed and was tested, but no employer UI called
+it — the only "send a link" surface was the machine-facing `POST /v1/interviews`
+API. Now the Candidates page is the invite hub (see
+`plans/employer-invite-ui-and-email.md`):
+
+- **`GET /invites` enriched in place** (same `{invites}` envelope): each
+  `InviteListItem` joins candidate `{name, email}` and kit `{id, title,
+  version}` in one query (`listByOrgWithCandidate`); token hash is never
+  selected.
+- **Invite email via the `EMAIL_SENDER` port** (Mailpit in dev): single create
+  (default on, `notify: false` opts out), reissue (always — the candidate must
+  get the replacement link), every successful bulk row. Sent strictly
+  after commit and always non-fatal (`sendSafely`) — a down email adapter
+  never blocks or rolls back an invite; the response still carries the link.
+- **Employer UI**: Candidates page roster (real statuses, search, expiry
+  highlight, reissue with invalidation confirm, +7d extend, detail slide-over)
+  + a two-tab Send-interview dialog (single / bulk CSV with template
+  download). The raw token is shown copy-once — hash-only storage means an
+  old link can never be re-displayed, only reissued. `VITE_CANDIDATE_BASE_URL`
+  (default `http://localhost:5174`) builds the copyable link client-side.
+- The `/i/start` reminders fallback note stays — email delivery is best-effort
+  by design (D5).
+
 ---
 
 ## 3. Mock-credential mode inventory
