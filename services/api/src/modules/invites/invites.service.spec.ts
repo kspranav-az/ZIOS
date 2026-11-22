@@ -85,7 +85,7 @@ describe('InvitesService invite email (candidate invites)', () => {
     const { service, email } = makeService();
     const res = await service.create('org-1', createBody);
     expect(email.send).toHaveBeenCalledTimes(1);
-    const msg = email.send.mock.calls[0][0] as { to: string; subject: string; text: string };
+    const msg = email.send.mock.calls[0]![0] as { to: string; subject: string; text: string };
     expect(msg.to).toBe('ada@example.com');
     expect(msg.subject).toContain(kitTitle);
     expect(msg.text).toContain(`/?token=${encodeURIComponent(res.token)}`);
@@ -111,7 +111,7 @@ describe('InvitesService invite email (candidate invites)', () => {
     const { service, email } = makeService();
     const res = await service.reissue('org-1', 'inv-1', {});
     expect(email.send).toHaveBeenCalledTimes(1);
-    const msg = email.send.mock.calls[0][0] as { text: string };
+    const msg = email.send.mock.calls[0]![0] as { text: string };
     expect(msg.text).toContain(`/?token=${encodeURIComponent(res.token)}`);
   });
 

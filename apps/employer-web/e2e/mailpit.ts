@@ -44,6 +44,19 @@ export async function waitForInviteToken(email: string, timeoutMs = 15_000): Pro
   return waitForMatch(email, extractInviteToken, timeoutMs, 'invite');
 }
 
+/**
+ * Polls Mailpit until the newest email to `email` contains a candidate
+ * entry link (`/?token=…`, invite-email format); returns the raw token.
+ */
+export async function waitForInviteEmail(email: string, timeoutMs = 15_000): Promise<string> {
+  return waitForMatch(email, extractCandidateEntryToken, timeoutMs, 'candidate invite');
+}
+
+function extractCandidateEntryToken(text: string): string | null {
+  const match = text.match(/\/?token=([^\s]+)/);
+  return match ? decodeURIComponent(match[1]!) : null;
+}
+
 /** Extracts the first 6-digit code from a message body. */
 function extractCode(text: string): string | null {
   const match = text.match(/\b(\d{6})\b/);
