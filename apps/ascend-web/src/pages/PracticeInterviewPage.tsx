@@ -109,22 +109,21 @@ export function PracticeInterviewPage() {
     recover().finally(() => setInitializing(false));
   }, [recover, recoveryToken]);
 
-  const handleSubmit = async () => {
-    if (!recoveryToken) return;
-    const text = answer.trim();
-    if (!text) return;
+  const submitAnswer = async (text: string, ref: string | null) => {
+    if (!recoveryToken || !text) return;
     setLoading(true);
     setError(null);
     try {
       const response = await submitPracticeTurn(sessionId, recoveryToken, {
         answer: text,
-        ...(recordingRef ? { recordingRef } : {}),
+        ...(ref ? { recordingRef: ref } : {}),
       });
       if (turn) {
         setHistory((prev) => [...prev, { prompt: turn.text, answer: text }]);
       }
       setAnswer('');
       setRecordingRef(null);
+      setRecorderError(null);
       if (response.turn.type === 'wrapup') {
         clearPracticeRecovery(sessionId);
         navigate(`/practice/${sessionId}/report`, { replace: true });
@@ -140,6 +139,12 @@ export function PracticeInterviewPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSubmit = () => {
+    const text = answer.trim();
+    if (!text) return;
+    void submitAnswer(text, recordingRef);
   };
 
   /* ---- voice recorder (Phase 12b: record → transcribe → submit) ---- */
@@ -188,9 +193,10 @@ export function PracticeInterviewPage() {
         audioBase64,
         contentType: blob.type || 'audio/webm',
       });
-      setAnswer(result.transcript);
-      setRecordingRef(result.objectName);
       setRecorderState('idle');
+      // D2: the transcript is never shown for editing — submit immediately
+      // with the recording ref so scoring keeps the audio evidence link.
+      void submitAnswer(result.transcript, result.objectName);
     } catch (err) {
       setRecorderState('idle');
       setRecorderError(
@@ -276,10 +282,12 @@ export function PracticeInterviewPage() {
                         ? 'Recording… speak your answer, then stop.'
                         : recorderState === 'transcribing'
                           ? 'Transcribing your answer…'
-                          : 'Record your answer — we transcribe it and you can edit before submitting.'}
+                          : loading
+                            ? 'Submitting your answer…'
+                            : 'Record your answer — we transcribe it and submit it for you.'}
                     </p>
                   </div>
-                  {recorderState === 'idle' && (
+                  {recorderState === 'idle' && !loading && (
                     <Button variant="outline" icon="mic" onClick={() => void startRecording()}>
                       Record
                     </Button>
@@ -289,7 +297,7 @@ export function PracticeInterviewPage() {
                       Stop
                     </Button>
                   )}
-                  {recorderState === 'transcribing' && (
+                  {(recorderState === 'transcribing' || loading) && (
                     <Icon name="progress_activity" className="animate-spin text-2xl text-primary" />
                   )}
                 </div>
@@ -298,30 +306,34 @@ export function PracticeInterviewPage() {
                     {recorderError}
                   </p>
                 )}
-                {recordingRef && recorderState === 'idle' && (
+                {recorderError && (
                   <p className="mt-3 text-body-sm text-on-surface-variant">
-                    Recording attached — review the transcript below, edit if needed, then submit.
+                    Type your answer below and submit it instead.
                   </p>
                 )}
               </div>
             )}
 
-            <label htmlFor="practice-answer" className="sr-only">
-              Your answer
-            </label>
-            <textarea
-              id="practice-answer"
-              rows={6}
-              className="w-full resize-y rounded-xl border border-outline-variant bg-white p-4 text-body-md text-on-surface outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/10"
-              placeholder={
-                sessionMode === 'voice'
-                  ? 'Your transcribed answer appears here — edit it if needed…'
-                  : 'Type your answer here…'
-              }
-              value={answer}
-              onChange={(e) => setAnswer(e.target.value)}
-              disabled={loading || recorderState === 'transcribing'}
-            />
+            {(sessionMode !== 'voice' || recorderError !== null) && (
+              <>
+                <label htmlFor="practice-answer" className="sr-only">
+                  Your answer
+                </label>
+                <textarea
+                  id="practice-answer"
+                  rows={6}
+                  className="w-full resize-y rounded-xl border border-outline-variant bg-white p-4 text-body-md text-on-surface outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/10"
+                  placeholder={
+                    sessionMode === 'voice'
+                      ? 'Type your answer here…'
+                      : 'Type your answer here…'
+                  }
+                  value={answer}
+                  onChange={(e) => setAnswer(e.target.value)}
+                  disabled={loading || recorderState === 'transcribing'}
+                />
+              </>
+            )}
 
             {error && (
               <p className="mt-4 rounded-lg bg-error-container p-3 text-body-md text-on-error-container">
@@ -332,7 +344,7 @@ export function PracticeInterviewPage() {
             <div className="mt-4 flex justify-end">
               <Button
                 size="lg"
-                onClick={() => void handleSubmit()}
+                onClick={handleSubmit}
                 loading={loading}
                 disabled={answer.trim().length === 0}
                 icon="send"
