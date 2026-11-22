@@ -32,7 +32,10 @@ test('full candidate invite → consent → interview → completion flow', asyn
   await expect(page.getByRole('heading', { name: /Ready to start/i })).toBeVisible();
   await page.getByRole('button', { name: /Start interview/i }).click();
 
-  // Interview: answer the first question, then the second question and its fixed follow-up.
+  // Interview: answer the first question, then the second question and (when
+  // the conductor produces one) its follow-up. Follow-up generation is
+  // LLM-judged on the real-adapter stack — the conductor may wrap up instead,
+  // so both outcomes are valid.
   await expect(page.getByText(/Tell us about a challenging project/i)).toBeVisible();
   await page.getByLabel(/Your answer/i).fill('I led a migration project with a tight timeline.');
   await page.getByRole('button', { name: /Submit answer/i }).click();
@@ -41,9 +44,16 @@ test('full candidate invite → consent → interview → completion flow', asyn
   await page.getByLabel(/Your answer/i).fill('I prioritise and communicate blockers early.');
   await page.getByRole('button', { name: /Submit answer/i }).click();
 
-  await expect(page.getByText(/Give a concrete example/i)).toBeVisible();
-  await page.getByLabel(/Your answer/i).fill('We refactored the payment module over two sprints.');
-  await page.getByRole('button', { name: /Submit answer/i }).click();
+  const followUp = page.getByText(/Give a concrete example/i);
+  const thanked = page.getByRole('heading', { name: /Thank you/i });
+  const followUpShown = await Promise.race([
+    thanked.waitFor({ state: 'visible', timeout: 30_000 }).then(() => false),
+    followUp.waitFor({ state: 'visible', timeout: 30_000 }).then(() => true),
+  ]);
+  if (followUpShown) {
+    await page.getByLabel(/Your answer/i).fill('We refactored the payment module over two sprints.');
+    await page.getByRole('button', { name: /Submit answer/i }).click();
+  }
 
   // Completion screen.
   await expect(page.getByRole('heading', { name: /Thank you/i })).toBeVisible();
