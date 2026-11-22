@@ -95,6 +95,19 @@ Follow-up on 12e (no new tag). Spec: `phases/phase-12f-piper-local-tts.md`. TTS 
 - Validation: host probe `chunks=7 samples=102539 peak=32767 seconds=4.27`; linux/amd64 image parity probe green (`status: healthy, provider: piper` inside the built image). `.env.host` (untracked) sets `TTS_ADAPTER=piper`; compose/CI default stays mock.
 - ~~**Known gap recorded:** the voice room STT is still `MockSttAdapter()` constructed directly in `app/voice/router.py` — `STT_ADAPTER` applies only to the analysis pipeline.~~ **Resolved 2026-09-24** (branch `feat/live-room-gcp-stt`): the room STT is factory-driven like TTS, the frontend streams real 16 kHz mic audio (`packages/interview-room/mic-capture.ts`), and the socket is multi-turn (`awaiting_answer` / `interview_complete`). The GCP adapter's batch `transcribe_stream` (one final per turn, no partials, 60 s internal chunking) serves the room; a true streaming GCP adapter remains a procurement-era nicety.
 
+### Post-M1: Gemini TTS adapter (2026-11-22, no tag — follow-up on 12f)
+
+`TTS_ADAPTER=gemini` adds a third voice-room TTS option: `app/voice/gemini_tts.py`
+implements `TtsPort` against `gemini-3.8-flash-lite-tts` (Gemini API
+`generateContent` speech endpoint, 30 curated voices via `GEMINI_TTS_VOICE`).
+Same sentence-buffering semantics as Piper; WAV responses are parsed and
+resampled to the 24000 Hz wire rate only when the provider rate differs; HTTP
+errors and malformed payloads raise (the voice service degrades to the
+text-only rung — never fake audio). `httpx` moved to runtime dependencies
+(was dev-only, missing from the `--no-dev` image). Hermetic contract tests
+(11) + opt-in live probe (`GEMINI_API_KEY`) green; container boots with
+`tts_adapter_selected adapter=gemini`.
+
 ---
 
 ## 3. Mock-credential mode inventory
@@ -105,7 +118,7 @@ Everything below is **fixture-driven mock** today. Feature code is complete; rea
 | ---------------------------------- | -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
 | LLM (generation, conductor, judge) | `LlmProvider` → `MockLlmProvider`, `GeminiLlmProvider`                                       | Deterministic fixtures for JD analysis, follow-ups, scores; Gemini adapter (gemini-3.5-flash-lite default) with versioned prompt registry + `MOCK_MODE` toggle | Prompt tuning + cost validation against real traffic |
 | STT                                | `SttPort` → `MockSttAdapter` / `GoogleCloudSttAdapter` (via `STT_ADAPTER=mock\|gcp` factory) | Scripted transcript fixtures; GCP adapter implemented + contract-tested with fakes                                                                             | GCP credentials + WER measurement (adapter ready)    |
-| TTS                                | Orchestrator contract → `MockTtsAdapter` / `PiperTtsAdapter` (`TTS_ADAPTER=mock\|piper`)                                     | Deterministic silence fixtures; Piper validated 2026-09-24 (local CPU neural voice, MIT model)                                                                 | Prompt tuning + cost validation against real traffic |
+| TTS                                | Orchestrator contract → `MockTtsAdapter` / `PiperTtsAdapter` / `GeminiTtsAdapter` (`TTS_ADAPTER=mock\|piper\|gemini`)                 | Deterministic silence fixtures; Piper validated 2026-09-24 (local CPU neural voice); Gemini cloud voice validated 2026-11-22 (gemini-3.8-flash-lite-tts)     | Prompt tuning + cost validation against real traffic |
 | Google OAuth                       | `OAuthPort` → `MockOAuthAdapter`                                                             | Accepts any `code` and returns deterministic profile                                                                                                           | Real Google OAuth app + verification                 |
 | Email                              | `EmailSender` → `MailpitAdapter`                                                             | Sends via local SMTP                                                                                                                                           | Production SMTP/SES + deliverability                 |
 | Storage                            | `S3Client` → `MinIOAdapter`                                                                  | Local S3-compatible buckets                                                                                                                                    | AWS S3/GCS + lifecycle policies                      |

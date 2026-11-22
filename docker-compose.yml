@@ -288,6 +288,13 @@ services:
       FILLER_WORDS: ${FILLER_WORDS:-um,uh,erm,like,you know,actually,basically,sort of}
       # Phase 12b: resume PDF text extraction (pypdf = local library; mock = fixture)
       DOCUMENT_EXTRACTION_ADAPTER: ${DOCUMENT_EXTRACTION_ADAPTER:-pypdf}
+      # Phase 12f/13: voice-room TTS (mock = silence fixtures; piper = local
+      # CPU voice baked into the image; gemini = managed cloud voice — the
+      # adapter fails loudly at boot when GEMINI_API_KEY is missing).
+      TTS_ADAPTER: ${TTS_ADAPTER:-mock}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_TTS_MODEL: ${GEMINI_TTS_MODEL:-gemini-3.8-flash-lite-tts}
+      GEMINI_TTS_VOICE: ${GEMINI_TTS_VOICE:-Puck}
     ports:
       - '${ORCHESTRATOR_PORT}:8000'
     healthcheck:
