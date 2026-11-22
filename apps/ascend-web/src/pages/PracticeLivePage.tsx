@@ -57,6 +57,17 @@ export function PracticeLivePage() {
   const connRef = useRef<OrchestratorConnection | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const videoElementRef = useRef<HTMLVideoElement | null>(null);
+  // The <video> element only mounts after connecting clears (the connecting
+  // screen replaces the room layout), so connectRoomSession may attach the
+  // camera track to null. Re-attach via the ref callback when it mounts —
+  // this is what makes the local preview actually play.
+  const videoElementCallbackRef = (el: HTMLVideoElement | null) => {
+    videoElementRef.current = el;
+    const track = sessionRef.current?.localVideoTrack;
+    if (el && track) {
+      track.attach(el);
+    }
+  };
   /** Set once we navigate away (poll → report / close → text handoff). */
   const finishedRef = useRef(false);
 
@@ -265,7 +276,7 @@ export function PracticeLivePage() {
 
           <div className="relative overflow-hidden rounded-xl bg-surface-container-low">
             <video
-              ref={videoElementRef}
+              ref={videoElementCallbackRef}
               autoPlay
               playsInline
               muted

@@ -119,8 +119,32 @@ describe('PracticeReportPage', () => {
     );
   });
 
-  it('renders the failed state without throwing', async () => {
+  it('omits replay chips that repeat the full answer verbatim', async () => {
     vi.mocked(fetchPracticeReport).mockResolvedValue({
+      ...completedDetail,
+      evidenceSpans: [
+        {
+          id: 'es-1',
+          reportId: 'pr-1',
+          transcriptId: 't-1',
+          questionId: 'q1',
+          start: 0,
+          end: 46,
+          quoteText: 'I grew the team to twelve people across two sites.',
+        },
+      ],
+    });
+    renderReport();
+    await waitFor(() =>
+      expect(
+        screen.getByText('I grew the team to twelve people across two sites.'),
+      ).toBeInTheDocument(),
+    );
+    // The answer itself renders once; no “…” quote chip duplicating it.
+    expect(screen.queryByText('“I grew the team to twelve people across two sites.”')).not.toBeInTheDocument();
+  });
+
+  it('renders the failed state without throwing', async () => {    vi.mocked(fetchPracticeReport).mockResolvedValue({
       ...completedDetail,
       report: {
         ...completedDetail.report,
