@@ -48,7 +48,12 @@ test('candidate runs a voice practice mock and gets a coaching report', async ({
 
   // --- Voice interview: record → stop → auto-submit, until wrapup ---
   // (D2: the transcript is submitted directly — no editable box in the happy path.)
+  // With mock STT the fixture transcript auto-submits. With real STT the fake
+  // device audio transcribes empty → the UI offers the typed fallback, which
+  // we use to keep the journey hermetic either way.
   await expect(page).toHaveURL(/\/interview$/);
+  const typedAnswer =
+    'In my last role I owned the checkout migration end to end. The situation was a legacy monolith blocking releases, my task was to de-risk payments, I moved traffic gradually behind feature flags, and the result was a forty percent drop in failed transactions over one quarter.';
   for (let turn = 0; turn < 14; turn += 1) {
     if (page.url().includes('/report')) break;
     const record = page.getByRole('button', { name: /^record$/i });
@@ -57,12 +62,31 @@ test('candidate runs a voice practice mock and gets a coaching report', async ({
     await page.waitForTimeout(1200); // let the fake device produce some audio
     await page.getByRole('button', { name: /^stop$/i }).click();
 
-    // The mock STT transcript is auto-submitted; wait for the next question
-    // (Record back) or the report route.
-    await expect(page).toHaveURL(/\/interview$|\/report$/, { timeout: 30_000 });
-    await expect
-      .poll(async () => page.url().includes('/report') || (await record.isVisible().catch(() => false)))
-      .toBe(true, { timeout: 30_000 });
+    // Auto-submit path: next Record (or the report) appears. Real-STT empty
+    // transcript path: the typed fallback appears.
+    const outcome = await Promise.race([
+      page.waitForURL(/\/report$/, { timeout: 30_000 }).then(() => 'report' as const),
+      record
+        .waitFor({ state: 'visible', timeout: 30_000 })
+        .then(() => 'auto-submitted' as const),
+      page
+        .getByLabel(/your answer/i)
+        .waitFor({ state: 'visible', timeout: 30_000 })
+        .then(() => 'typed-fallback' as const),
+    ]);
+    if (outcome === 'report') break;
+    if (outcome === 'typed-fallback') {
+      await page.getByLabel(/your answer/i).fill(typedAnswer);
+      await page.getByRole('button', { name: /submit answer/i }).click();
+      await expect
+        .poll(
+          async () =>
+            page.url().includes('/report') || (await record.isVisible().catch(() => false)),
+          { timeout: 30_000 },
+        )
+        .toBe(true);
+      if (page.url().includes('/report')) break;
+    }
   }
 
   // --- Report renders; voice debit is exactly 2 (50 → 48) ---

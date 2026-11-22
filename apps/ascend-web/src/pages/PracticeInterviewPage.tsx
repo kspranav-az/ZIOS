@@ -205,6 +205,14 @@ export function PracticeInterviewPage() {
       setRecorderState('idle');
       // D2: the transcript is never shown for editing — submit immediately
       // with the recording ref so scoring keeps the audio evidence link.
+      // An empty transcript (inaudible/noise-only recording) must surface the
+      // typed fallback instead of silently doing nothing.
+      if (!result.transcript.trim()) {
+        setRecorderError(
+          'We could not hear anything in that recording. Check your microphone and try again, or type your answer below.',
+        );
+        return;
+      }
       void submitAnswer(result.transcript, result.objectName);
     } catch (err) {
       setRecorderState('idle');

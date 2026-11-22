@@ -221,5 +221,21 @@ describe('PracticeInterviewPage', () => {
       expect(screen.getByLabelText(/your answer/i)).toHaveValue('Typed after failure.');
       expect(submitPracticeTurn).not.toHaveBeenCalled();
     });
+
+    it('surfaces the typed fallback when the transcript comes back empty', async () => {
+      const user = userEvent.setup();
+      vi.mocked(submitPracticeAudio).mockResolvedValue({
+        transcript: '',
+        objectName: 'practice-recordings/ps-1/abc/checksum.webm',
+      });
+      renderInterview('rec-1');
+
+      await user.click(await screen.findByRole('button', { name: /^record$/i }));
+      await user.click(screen.getByRole('button', { name: /^stop$/i }));
+
+      expect(await screen.findByText(/could not hear anything/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/your answer/i)).toBeInTheDocument();
+      expect(submitPracticeTurn).not.toHaveBeenCalled();
+    });
   });
 });
