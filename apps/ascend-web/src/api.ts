@@ -15,6 +15,7 @@ import type {
   PracticeConsentBody,
   PracticeCreateBody,
   PracticeCreateResponse,
+  PracticeExtractJdResponse,
   PracticeFromJdBody,
   PracticeLibraryPack,
   PracticeLiveTokenResponse,
@@ -287,6 +288,14 @@ export function matchResume(jdText: string): Promise<ResumeJdMatchResponse> {
 
 export function createPracticeFromJd(body: PracticeFromJdBody): Promise<PracticeCreateResponse> {
   return request('POST', '/cand/practice/from-jd', body, true);
+}
+
+/** JD file upload for practice setup (D6): extract plain text from a .pdf/.txt JD. */
+export function extractPracticeJd(body: {
+  fileName: string;
+  contentBase64: string;
+}): Promise<PracticeExtractJdResponse> {
+  return request('POST', '/cand/practice/extract-jd', body, true);
 }
 
 /* ---- practice recovery token (tab-scoped like the auth token, D12) ---- */

@@ -346,6 +346,16 @@ export interface PracticeFromJdBody {
   mode: PracticeMode;
 }
 
+/** JD file upload for practice setup (D6): extract plain text from a .pdf/.txt. */
+export interface PracticeExtractJdBody {
+  fileName: string;
+  contentBase64: string;
+}
+
+export interface PracticeExtractJdResponse {
+  text: string;
+}
+
 export interface ParsedResumeProfile {
   name: string | null;
   email: string | null;

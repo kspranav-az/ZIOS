@@ -14,6 +14,6 @@ import { ResumeService } from './resume.service';
   imports: [AuthModule, CandidateAccountsModule, LlmGatewayModule],
   controllers: [ResumeController],
   providers: [CandidateResumeRepository, ResumeService, DocumentExtractionClient, StorageClient],
-  exports: [ResumeService],
+  exports: [ResumeService, DocumentExtractionClient],
 })
 export class ResumeModule {}

@@ -6,6 +6,7 @@ import {
   ApiErrorResponse,
   createPractice,
   createPracticeFromJd,
+  extractPracticeJd,
   fetchPracticeLibrary,
   storePracticeRecovery,
   type PracticeLibraryResponse,
@@ -18,6 +19,8 @@ export function PracticeSetupPage() {
   const [packId, setPackId] = useState<string | null>(null);
   const [mode, setMode] = useState<PracticeMode>('text');
   const [jdText, setJdText] = useState('');
+  const [jdExtracting, setJdExtracting] = useState(false);
+  const [jdNotice, setJdNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -42,6 +45,40 @@ export function PracticeSetupPage() {
       return 'You are out of practice credits. Credits are granted during the closed beta — contact support.';
     }
     return err instanceof Error ? err.message : 'Could not start the mock. Please try again.';
+  };
+
+  const fileToBase64 = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string;
+        resolve(result.slice(result.indexOf(',') + 1));
+      };
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
+
+  const handleJdFile = async (file: File) => {
+    setError(null);
+    setJdNotice(null);
+    const lower = file.name.toLowerCase();
+    if (!lower.endsWith('.pdf') && !lower.endsWith('.txt')) {
+      setError('Upload a .txt or .pdf JD — or paste the plain text below.');
+      return;
+    }
+    setJdExtracting(true);
+    try {
+      const { text } = await extractPracticeJd({
+        fileName: file.name,
+        contentBase64: await fileToBase64(file),
+      });
+      setJdText(text);
+      setJdNotice('JD extracted — review and edit the text below if needed.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not read that file. Paste the JD text instead.');
+    } finally {
+      setJdExtracting(false);
+    }
   };
 
   const handleStart = async () => {
@@ -119,9 +156,44 @@ export function PracticeSetupPage() {
       <Card padding="lg" radius="2xl" className="mt-8">
         <h2 className="text-title-md text-on-surface">Or target a real job description</h2>
         <p className="mt-1 text-body-sm text-on-surface-variant">
-          Paste a JD and we will generate questions for it — if you have a resume on file, one
-          question will probe the biggest gap.
+          Upload or paste a JD and we will generate questions for it — if you have a resume on
+          file, one question will probe the biggest gap.
         </p>
+
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <input
+            id="jd-file"
+            type="file"
+            accept=".pdf,.txt"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) void handleJdFile(file);
+              e.target.value = '';
+            }}
+          />
+          <label
+            htmlFor="jd-file"
+            className={`inline-flex cursor-pointer items-center gap-2 rounded-xl border border-outline-variant bg-surface-container-low px-4 py-2 text-body-md font-bold text-on-surface transition-colors hover:bg-surface-container ${
+              jdExtracting ? 'pointer-events-none opacity-60' : ''
+            }`}
+          >
+            {jdExtracting ? (
+              <Icon name="progress_activity" className="animate-spin text-xl text-primary" />
+            ) : (
+              <Icon name="upload_file" className="text-xl text-primary" />
+            )}
+            {jdExtracting ? 'Extracting…' : 'Upload JD (.pdf or .txt)'}
+          </label>
+          <span className="text-body-sm text-on-surface-variant">
+            Extracts the text for you — nothing is stored.
+          </span>
+        </div>
+        {jdNotice && (
+          <p className="mt-3 rounded-lg bg-primary-container/40 p-3 text-body-sm text-on-surface">
+            {jdNotice}
+          </p>
+        )}
         <label htmlFor="jd-paste" className="sr-only">
           Job description
         </label>
