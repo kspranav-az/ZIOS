@@ -150,18 +150,18 @@ async function main() {
   const me = await getJson('/auth/me', auth);
   const orgId = me.body.org.id;
 
-  // Credits for wallet/debits (grant path; Branch 4 adds the admin tool).
-  const { withClient } = await import('./lib/local-db-client.js');
-  const dbUrl =
-    process.env.DATABASE_URL ?? 'postgresql://interviewos:interviewos_dev@localhost:55432/interviewos';
-  process.env.DATABASE_URL = dbUrl;
-  await withClient(async (client) => {
-    await client.query(
-      `UPDATE credit_account SET balance = 500 WHERE holder_type = 'org' AND holder_id = $1`,
-      [orgId],
-    );
-    await client.query(`UPDATE org SET credits_balance = 500 WHERE id = $1`, [orgId]);
-  });
+  // Credits for wallet/debits via the audited admin top-up path
+  // (plans/admin-credit-topup.md): the org is fresh (welcome grant = 100),
+  // so +400 lands the balance at 500 as before — now with a credit_ledger
+  // row instead of a raw UPDATE.
+  const topupRes = await postJson(
+    '/credits/admin/topup',
+    { amount: 400, note: 'seed-integration-sandbox' },
+    auth,
+  );
+  if (topupRes.status !== 201) {
+    throw new Error(`admin topup failed: ${JSON.stringify(topupRes.body)}`);
+  }
 
   const sample = JSON.stringify(
     {

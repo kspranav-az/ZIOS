@@ -213,13 +213,11 @@ async function main() {
 
   console.log('1. Creating admin + org (email OTP via Mailpit)...');
   const { token: adminToken, orgId } = await signupAdmin(adminEmail);
-  await dbQuery(
-    `UPDATE credit_account SET balance = balance + $1 WHERE holder_type = 'org' AND holder_id = $2`,
-    [1000, orgId],
-  );
-  await dbQuery(
-    `UPDATE org SET credits_balance = credits_balance + $1 WHERE id = $2`,
-    [1000, orgId],
+  // postJson throws on non-2xx, so a failure here aborts the seed.
+  await postJson(
+    '/credits/admin/topup',
+    { amount: 1000, note: 'seed-multimodal-analysis-validation' },
+    { authorization: `Bearer ${adminToken}` },
   );
   console.log(`   admin: ${adminEmail} (org ${orgId}, +1000 credits)`);
 
