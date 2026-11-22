@@ -32,6 +32,9 @@ export function InterviewPage() {
   const [history, setHistory] = useState<Array<{ prompt: string; answer: string | null }>>([]);
   const [initializing, setInitializing] = useState(true);
   const [recoveredFromStorage, setRecoveredFromStorage] = useState(false);
+  /** Narrow screens: transcript collapses to the last exchange + a toggle. */
+  const [showFullTranscript, setShowFullTranscript] = useState(false);
+  const transcriptRef = useRef<HTMLDivElement | null>(null);
   const draftLoaded = useRef(false);
   const skipPersistRef = useRef(false);
 
@@ -110,6 +113,12 @@ export function InterviewPage() {
       navigate('/complete', { replace: true });
     }
   }, [turn, navigate]);
+
+  // Auto-scroll the wide-screen transcript pane to the latest exchange.
+  useEffect(() => {
+    const el = transcriptRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [history.length]);
 
   // Reset structured answer state whenever the question changes.
   useEffect(() => {
@@ -282,9 +291,22 @@ export function InterviewPage() {
 
   if (initializing) return <LoadingState message="Recovering your interview…" />;
 
+  const renderHistoryItem = (item: { prompt: string; answer: string | null }, index: number) => (
+    <Card key={index} padding="md" radius="xl" className="bg-surface-container-low">
+      <p className="font-bold text-on-surface">{item.prompt}</p>
+      {item.answer && (
+        <p className="mt-2 whitespace-pre-wrap text-body-md text-on-surface-variant">
+          {item.answer}
+        </p>
+      )}
+    </Card>
+  );
+
+  const lastExchange = history[history.length - 1];
+
   return (
     <PageShell>
-      <div className="mx-auto w-full max-w-3xl">
+      <div className="mx-auto w-full max-w-6xl px-4">
         <div className="mb-4 flex items-center justify-between">
           <h1 className="text-headline-sm text-on-surface">Interview in progress</h1>
           <span className="rounded-full bg-surface-container px-3 py-1 text-label-bold text-on-surface-variant">
@@ -292,56 +314,86 @@ export function InterviewPage() {
           </span>
         </div>
 
-        {history.length > 0 && (
-          <div className="mb-6 space-y-3">
-            {history.map((item, index) => (
-              <Card key={index} padding="md" radius="xl" className="bg-surface-container-low">
-                <p className="font-bold text-on-surface">{item.prompt}</p>
-                {item.answer && (
-                  <p className="mt-2 whitespace-pre-wrap text-body-md text-on-surface-variant">
-                    {item.answer}
-                  </p>
-                )}
-              </Card>
-            ))}
-          </div>
-        )}
+        <div className="lg:grid lg:grid-cols-12 lg:gap-6">
+          <div className="lg:col-span-5 lg:sticky lg:top-6 lg:self-start">
+            <Card padding="lg" radius="2xl">
+              {turn && (
+                <div className="mb-4 flex items-start gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-container">
+                    <Icon name="smart_toy" className="text-xl text-on-primary" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold uppercase tracking-wide text-on-surface-variant">
+                      {turn.type === 'followup' ? 'Follow-up' : 'Question'}
+                    </p>
+                    <p className="mt-1 text-body-lg text-on-surface">{turn.text}</p>
+                  </div>
+                </div>
+              )}
 
-        <Card padding="lg" radius="2xl">
-          {turn && (
-            <div className="mb-4 flex items-start gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-container">
-                <Icon name="smart_toy" className="text-xl text-on-primary" />
-              </div>
-              <div>
-                <p className="text-sm font-bold uppercase tracking-wide text-on-surface-variant">
-                  {turn.type === 'followup' ? 'Follow-up' : 'Question'}
+              {renderInput()}
+
+              {error && (
+                <p className="mt-4 rounded-lg bg-error-container p-3 text-body-md text-on-error-container">
+                  {error}
                 </p>
-                <p className="mt-1 text-body-lg text-on-surface">{turn.text}</p>
+              )}
+
+              <div className="mt-4 flex justify-end">
+                <Button
+                  size="lg"
+                  onClick={handleSubmit}
+                  loading={loading}
+                  disabled={!isAnswerReady()}
+                  icon="send"
+                >
+                  Submit answer
+                </Button>
               </div>
-            </div>
-          )}
-
-          {renderInput()}
-
-          {error && (
-            <p className="mt-4 rounded-lg bg-error-container p-3 text-body-md text-on-error-container">
-              {error}
-            </p>
-          )}
-
-          <div className="mt-4 flex justify-end">
-            <Button
-              size="lg"
-              onClick={handleSubmit}
-              loading={loading}
-              disabled={!isAnswerReady()}
-              icon="send"
-            >
-              Submit answer
-            </Button>
+            </Card>
           </div>
-        </Card>
+
+          <div className="mt-6 lg:col-span-7 lg:mt-0">
+            {history.length === 0 ? (
+              <Card padding="md" radius="xl" className="hidden bg-surface-container-lowest lg:block">
+                <p className="text-body-md text-on-surface-variant">
+                  Your previous questions and answers will appear here as the interview progresses.
+                </p>
+              </Card>
+            ) : (
+              <>
+                {/* Wide screens: full chronological transcript, auto-scrolled. */}
+                <div
+                  ref={transcriptRef}
+                  className="hidden space-y-3 lg:block lg:max-h-[70vh] lg:overflow-y-auto lg:pr-1"
+                >
+                  {history.map(renderHistoryItem)}
+                </div>
+                {/* Narrow screens: last exchange + expandable transcript. */}
+                <div className="lg:hidden">
+                  <div className="space-y-3">
+                    {showFullTranscript
+                      ? history.map(renderHistoryItem)
+                      : lastExchange
+                        ? renderHistoryItem(lastExchange, history.length - 1)
+                        : null}
+                  </div>
+                  {history.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowFullTranscript((v) => !v)}
+                      className="mt-3 text-label-bold text-primary hover:underline"
+                    >
+                      {showFullTranscript
+                        ? 'Hide transcript'
+                        : `Show full transcript (${history.length})`}
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       </div>
     </PageShell>
   );
