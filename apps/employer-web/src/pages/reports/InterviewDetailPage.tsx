@@ -44,6 +44,8 @@ interface DetailState {
   sessionStatus: import('@zios/shared-types').SessionStatus;
   sessionMode: import('@zios/shared-types').InterviewMode;
   sessionConductor: import('@zios/shared-types').SessionConductor;
+  sessionStartedAt: string | null;
+  sessionEndedAt: string | null;
 }
 
 export function InterviewDetailPage() {
@@ -88,6 +90,8 @@ export function InterviewDetailPage() {
         sessionStatus: row.session.status,
         sessionMode: row.session.mode,
         sessionConductor: row.session.conductor,
+        sessionStartedAt: row.session.startedAt,
+        sessionEndedAt: row.session.endedAt,
       });
     } catch (err) {
       setError(userMessageForError(err));
@@ -202,7 +206,7 @@ export function InterviewDetailPage() {
     sessionMode,
     sessionConductor,
   } = state;
-  const timeline = sortTimelineStages(sessionStatus);
+  const timeline = sortTimelineStages(sessionStatus, { startedAt: state.sessionStartedAt });
   const hasReport = report.status === 'completed';
 
   return (
@@ -323,6 +327,21 @@ export function InterviewDetailPage() {
                     <p className="font-label-bold text-sm text-primary">Report</p>
                     <p className="text-xs text-on-surface-variant">
                       Scored {formatDateTime(report.completedAt)}
+                    </p>
+                  </div>
+                </div>
+              )}
+              {!hasReport && sessionStatus === 'abandoned' && (
+                <div className="relative flex items-start gap-3 mt-4">
+                  <div className="z-10 w-5 h-5 rounded-full bg-error text-on-error flex items-center justify-center shrink-0">
+                    <Icon name="close" className="text-xs" />
+                  </div>
+                  <div>
+                    <p className="font-label-bold text-sm text-error">Abandoned</p>
+                    <p className="text-xs text-on-surface-variant">
+                      {state.sessionStartedAt
+                        ? 'The candidate left mid-interview.'
+                        : 'The candidate never started.'}
                     </p>
                   </div>
                 </div>
