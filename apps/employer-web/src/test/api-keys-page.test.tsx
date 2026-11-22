@@ -103,9 +103,12 @@ describe('ApiKeysPage', () => {
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Rotate' })).toBeInTheDocument());
     await user.click(screen.getByRole('button', { name: 'Rotate' }));
+    // A confirmation popup gates the action.
+    await user.click(await screen.findByRole('button', { name: 'Rotate key' }));
     await waitFor(() => expect(mockedRotate).toHaveBeenCalledWith('key-1'));
 
     await user.click(screen.getByRole('button', { name: 'Revoke' }));
+    await user.click(await screen.findByRole('button', { name: 'Revoke key' }));
     await waitFor(() => expect(mockedRevoke).toHaveBeenCalledWith('key-1'));
   });
 });

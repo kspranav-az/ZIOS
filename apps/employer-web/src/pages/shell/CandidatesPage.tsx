@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button, Card, Icon } from '@zios/ui';
 import type { InviteListItem, InviteStatus } from '@zios/shared-types';
 import { useToast } from '../../components/Toast';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { userMessageForError } from '../../lib/errors';
 import { invitesApi } from '../../lib/invites-api';
 import { SendInterviewDialog, LinkSuccess } from './SendInterviewDialog';
@@ -61,8 +62,10 @@ export function CandidatesPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<InviteStatus | 'all'>('all');
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [confirmingReissueId, setConfirmingReissueId] = useState<string | null>(null);
-  const [reissuing, setReissuing] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<
+    { type: 'extend' | 'reissue'; invite: InviteListItem } | null
+  >(null);
+  const [actionBusy, setActionBusy] = useState(false);
   const [reissued, setReissued] = useState<ReissuedLink | null>(null);
   const [detailFor, setDetailFor] = useState<InviteListItem | null>(null);
   const [detailText, setDetailText] = useState<string>();
@@ -97,27 +100,40 @@ export function CandidatesPage() {
   }, [invites, search, statusFilter]);
 
   async function handleExtend(invite: InviteListItem) {
+    setActionBusy(true);
     try {
       await invitesApi.reschedule(invite.id, { extendDays: 7 });
       toast(`Link for ${invite.candidate.name} extended by 7 days.`, 'success');
       await load();
     } catch (err) {
       toast(userMessageForError(err), 'error');
+    } finally {
+      setActionBusy(false);
+      setConfirmAction(null);
     }
   }
 
   async function handleReissueConfirm(invite: InviteListItem) {
-    setReissuing(true);
+    setActionBusy(true);
     try {
       const res = await invitesApi.reissue(invite.id);
-      setConfirmingReissueId(null);
+      setConfirmAction(null);
       setReissued({ email: res.candidate.email, token: res.token });
       toast(`New link issued for ${res.candidate.name}.`, 'success');
       await load();
     } catch (err) {
       toast(userMessageForError(err), 'error');
     } finally {
-      setReissuing(false);
+      setActionBusy(false);
+    }
+  }
+
+  function runConfirmAction() {
+    if (!confirmAction) return;
+    if (confirmAction.type === 'extend') {
+      void handleExtend(confirmAction.invite);
+    } else {
+      void handleReissueConfirm(confirmAction.invite);
     }
   }
 
@@ -276,50 +292,32 @@ export function CandidatesPage() {
                       </span>
                     </td>
                     <td className="px-6 py-4">
-                      {confirmingReissueId === invite.id ? (
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-on-surface-variant max-w-[16rem]">
-                            The old link stops working. The candidate gets a new email.
-                          </span>
-                          <Button
-                            size="sm"
-                            loading={reissuing}
-                            onClick={() => void handleReissueConfirm(invite)}
-                          >
-                            Confirm
-                          </Button>
-                          <Button size="sm" variant="ghost" onClick={() => setConfirmingReissueId(null)}>
-                            Cancel
-                          </Button>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-1">
-                          <button
-                            type="button"
-                            title="Issue a new link (invalidates the old one)"
-                            onClick={() => setConfirmingReissueId(invite.id)}
-                            className="p-2 rounded-lg text-on-surface-variant hover:text-primary hover:bg-surface-container transition-colors"
-                          >
-                            <Icon name="link" />
-                          </button>
-                          <button
-                            type="button"
-                            title="Extend expiry by 7 days"
-                            onClick={() => void handleExtend(invite)}
-                            className="p-2 rounded-lg text-on-surface-variant hover:text-primary hover:bg-surface-container transition-colors"
-                          >
-                            <Icon name="schedule" />
-                          </button>
-                          <button
-                            type="button"
-                            title="View details"
-                            onClick={() => void openDetail(invite)}
-                            className="p-2 rounded-lg text-on-surface-variant hover:text-primary hover:bg-surface-container transition-colors"
-                          >
-                            <Icon name="visibility" />
-                          </button>
-                        </div>
-                      )}
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          title="Issue a new link (invalidates the old one)"
+                          onClick={() => setConfirmAction({ type: 'reissue', invite })}
+                          className="p-2 rounded-lg text-on-surface-variant hover:text-primary hover:bg-surface-container transition-colors"
+                        >
+                          <Icon name="link" />
+                        </button>
+                        <button
+                          type="button"
+                          title="Extend expiry by 7 days"
+                          onClick={() => setConfirmAction({ type: 'extend', invite })}
+                          className="p-2 rounded-lg text-on-surface-variant hover:text-primary hover:bg-surface-container transition-colors"
+                        >
+                          <Icon name="schedule" />
+                        </button>
+                        <button
+                          type="button"
+                          title="View details"
+                          onClick={() => void openDetail(invite)}
+                          className="p-2 rounded-lg text-on-surface-variant hover:text-primary hover:bg-surface-container transition-colors"
+                        >
+                          <Icon name="visibility" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -330,6 +328,25 @@ export function CandidatesPage() {
       </Card>
 
       <SendInterviewDialog open={dialogOpen} onClose={() => setDialogOpen(false)} onSent={() => void load()} />
+
+      {/* Lifecycle action confirmation (extend / reissue) */}
+      <ConfirmDialog
+        open={confirmAction !== null}
+        title={
+          confirmAction?.type === 'extend'
+            ? `Extend link for ${confirmAction.invite.candidate.name}?`
+            : `Issue a new link for ${confirmAction?.invite.candidate.name ?? ''}?`
+        }
+        description={
+          confirmAction?.type === 'extend'
+            ? 'The invite link stays valid for 7 more days. The candidate uses the same link.'
+            : 'The old link stops working immediately and the candidate gets a new link by email.'
+        }
+        confirmLabel={confirmAction?.type === 'extend' ? 'Extend by 7 days' : 'Issue new link'}
+        busy={actionBusy}
+        onConfirm={runConfirmAction}
+        onCancel={() => setConfirmAction(null)}
+      />
 
       {/* Reissue → copy-once new link (D4) */}
       {reissued && (

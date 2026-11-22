@@ -1,5 +1,10 @@
 import { Controller, Get, Query } from '@nestjs/common';
-import type { AppUser, DashboardListResponse, DashboardSummaryResponse } from '@zios/shared-types';
+import type {
+  AppUser,
+  DashboardAnalyticsResponse,
+  DashboardListResponse,
+  DashboardSummaryResponse,
+} from '@zios/shared-types';
 import { CurrentUser } from '@/common/decorators';
 import { DatabaseService } from '@/modules/database';
 
@@ -202,6 +207,93 @@ export class DashboardController {
         mode: row.mode as DashboardSummaryResponse['awaiting'][number]['mode'],
         status: row.status as DashboardSummaryResponse['awaiting'][number]['status'],
         createdAt: row.created_at.toISOString(),
+      })),
+    };
+  }
+
+  /**
+   * Analytics page payload: timeframe KPIs, the same cumulative pipeline as
+   * the summary, and a per-day scheduled/completed volume series generated
+   * over the whole window (zero days included) so the chart never has gaps.
+   */
+  @Get('analytics')
+  async analytics(
+    @CurrentUser() user: AppUser,
+    @Query('days') days: string | undefined,
+  ): Promise<DashboardAnalyticsResponse> {
+    const orgId = user.orgId;
+    const windowDays = Math.min(90, Math.max(1, Number(days ?? 30) || 30));
+    const scoped =
+      'FROM interview_session s JOIN invite i ON i.id = s.invite_id WHERE i.org_id = $1';
+    const count = async (sql: string): Promise<number> => {
+      const result = await this.db.query(sql, [orgId]);
+      return Number((result.rows[0] as { n: string }).n);
+    };
+
+    const [totalCandidates, activeJobs, pendingReviews, liveNow, byStatus, windowCounts, series] =
+      await Promise.all([
+        count(`SELECT COUNT(DISTINCT i.candidate_id) AS n FROM invite i WHERE i.org_id = $1`),
+        count(`SELECT COUNT(*) AS n FROM kit k WHERE k.org_id = $1`),
+        count(`SELECT COUNT(*) AS n ${scoped} AND s.status = 'reported'`),
+        count(`SELECT COUNT(*) AS n ${scoped} AND s.status = 'live'`),
+        this.db.query(`SELECT s.status, COUNT(*)::int AS n ${scoped} GROUP BY s.status`, [orgId]),
+        this.db.query(
+          `SELECT
+             COUNT(*) FILTER (WHERE s.created_at >= CURRENT_DATE - ($2::int - 1))::int AS scheduled,
+             COUNT(*) FILTER (WHERE s.ended_at IS NOT NULL AND s.ended_at >= CURRENT_DATE - ($2::int - 1))::int AS completed
+           ${scoped}`,
+          [orgId, windowDays],
+        ),
+        this.db.query(
+          `SELECT to_char(d.day, 'YYYY-MM-DD') AS day,
+                  COALESCE(c.created_n, 0)::int AS created,
+                  COALESCE(e.completed_n, 0)::int AS completed
+           FROM generate_series(CURRENT_DATE - ($2::int - 1), CURRENT_DATE, interval '1 day') AS d(day)
+           LEFT JOIN (
+             SELECT s.created_at::date AS day, COUNT(*)::int AS created_n
+             ${scoped} AND s.created_at >= CURRENT_DATE - ($2::int - 1)
+             GROUP BY 1
+           ) c ON c.day = d.day
+           LEFT JOIN (
+             SELECT s.ended_at::date AS day, COUNT(*)::int AS completed_n
+             ${scoped} AND s.ended_at IS NOT NULL AND s.ended_at >= CURRENT_DATE - ($2::int - 1)
+             GROUP BY 1
+           ) e ON e.day = d.day
+           ORDER BY d.day`,
+          [orgId, windowDays],
+        ),
+      ]);
+
+    const statusCounts = new Map<string, number>(
+      (byStatus.rows as { status: string; n: number }[]).map((r) => [r.status, Number(r.n)]),
+    );
+    const cumulative = (fromIndex: number): number =>
+      PIPELINE_ORDER.slice(fromIndex).reduce((sum, status) => sum + (statusCounts.get(status) ?? 0), 0);
+
+    const wc = windowCounts.rows[0] as { scheduled: number; completed: number };
+
+    return {
+      days: windowDays,
+      kpis: {
+        totalCandidates,
+        activeJobs,
+        scheduled: Number(wc.scheduled),
+        completed: Number(wc.completed),
+        pendingReviews,
+        liveNow,
+      },
+      pipeline: {
+        sourced: cumulative(0),
+        applied: cumulative(1),
+        screening: cumulative(2),
+        technical: cumulative(3),
+        final: cumulative(4),
+        offers: cumulative(7),
+      },
+      volume: (series.rows as { day: string; created: number; completed: number }[]).map((r) => ({
+        day: r.day,
+        created: Number(r.created),
+        completed: Number(r.completed),
       })),
     };
   }

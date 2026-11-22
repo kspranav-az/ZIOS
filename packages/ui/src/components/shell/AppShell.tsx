@@ -50,13 +50,16 @@ export function AppShell({ navItems, user, orgName, onLogout, children, actions 
       />
 
       <main className="lg:ml-64 pt-24 px-4 sm:px-8 pb-12 overflow-x-hidden">
+        {/* Entry animation is opacity-only, never transform: a non-none
+            transform (or will-change: transform) on this wrapper makes it the
+            containing block for every fixed-position descendant — page-level
+            dialogs like SendInterviewDialog then center against the full page
+            height instead of the viewport and get clipped top/bottom. */}
         <div
           key={location.pathname}
-          className="will-change-transform"
           style={{
             opacity: contentVisible ? 1 : 0,
-            transform: contentVisible ? 'translateX(0)' : 'translateX(16px)',
-            transition: 'opacity 220ms ease, transform 220ms ease',
+            transition: 'opacity 220ms ease',
           }}
         >
           {children}

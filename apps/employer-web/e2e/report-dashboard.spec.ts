@@ -74,7 +74,7 @@ test.describe('report dashboard', () => {
     await firstOverrideButton.click();
     await expect(page.getByRole('heading', { name: 'Override score' })).toBeVisible();
     await page.getByRole('button', { name: '2' }).click();
-    await page.getByLabel(/Reason code/i).fill('disagree_with_evidence');
+    await page.getByLabel(/Reason code/i).selectOption('disagree_with_evidence');
     await page.getByRole('button', { name: 'Save override' }).click();
     await expect(page.getByText(/Overridden/i).first()).toBeVisible();
 

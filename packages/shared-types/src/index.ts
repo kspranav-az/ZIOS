@@ -1469,6 +1469,31 @@ export interface DashboardSummaryResponse {
   awaiting: DashboardAwaitingItem[];
 }
 
+/**
+ * Employer analytics (timeframed): KPI cards, pipeline funnel and a
+ * per-day scheduled-vs-completed volume series. `days` is the requested
+ * window (clamped 1–90); volume buckets cover the whole window, oldest
+ * first, including zero days.
+ */
+export interface DashboardAnalyticsResponse {
+  days: number;
+  kpis: {
+    totalCandidates: number;
+    activeJobs: number;
+    /** Sessions created inside the window ("scheduled"). */
+    scheduled: number;
+    /** Sessions ended inside the window ("completed"). */
+    completed: number;
+    /** Sessions currently awaiting a human score review. */
+    pendingReviews: number;
+    /** Sessions live right now. */
+    liveNow: number;
+  };
+  /** Cumulative counts over session statuses (sourced ⊇ applied ⊇ …). */
+  pipeline: DashboardSummaryResponse['pipeline'];
+  volume: Array<{ day: string; created: number; completed: number }>;
+}
+
 export interface PublicReportResponse {
   report: EvaluationReport;
   scores: EvaluationScore[];

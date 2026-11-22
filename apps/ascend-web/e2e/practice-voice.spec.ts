@@ -35,7 +35,7 @@ test('candidate runs a voice practice mock and gets a coaching report', async ({
   await expect(page.getByTestId('wallet-balance')).toHaveText('50');
 
   // --- Start a VOICE practice mock ---
-  await page.getByRole('button', { name: /start a practice mock/i }).click();
+  await page.getByRole('button', { name: /practice now/i }).click();
   await expect(page).toHaveURL(/\/practice$/);
   await page.getByText(/HR Screening/i).first().click();
   await page.getByRole('button', { name: /^voice/i }).click();
