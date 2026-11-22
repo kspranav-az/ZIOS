@@ -46,7 +46,8 @@ test('candidate runs a voice practice mock and gets a coaching report', async ({
   await page.getByTestId('consent-recording').check();
   await page.getByRole('button', { name: /i consent — start the mock/i }).click();
 
-  // --- Voice interview: record → stop → transcript → submit, until wrapup ---
+  // --- Voice interview: record → stop → auto-submit, until wrapup ---
+  // (D2: the transcript is submitted directly — no editable box in the happy path.)
   await expect(page).toHaveURL(/\/interview$/);
   for (let turn = 0; turn < 14; turn += 1) {
     if (page.url().includes('/report')) break;
@@ -56,11 +57,12 @@ test('candidate runs a voice practice mock and gets a coaching report', async ({
     await page.waitForTimeout(1200); // let the fake device produce some audio
     await page.getByRole('button', { name: /^stop$/i }).click();
 
-    // The mock STT transcript lands in the editable box.
-    const box = page.getByLabel(/your answer/i);
-    await expect(box).not.toHaveValue('', { timeout: 30_000 });
-    await page.getByRole('button', { name: /submit answer/i }).click();
-    await page.waitForTimeout(500);
+    // The mock STT transcript is auto-submitted; wait for the next question
+    // (Record back) or the report route.
+    await expect(page).toHaveURL(/\/interview$|\/report$/, { timeout: 30_000 });
+    await expect
+      .poll(async () => page.url().includes('/report') || (await record.isVisible().catch(() => false)))
+      .toBe(true, { timeout: 30_000 });
   }
 
   // --- Report renders; voice debit is exactly 2 (50 → 48) ---
