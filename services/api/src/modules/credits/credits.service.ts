@@ -193,6 +193,31 @@ export class CreditsService {
     return account.balance;
   }
 
+  /**
+   * Admin top-up (plans/admin-credit-topup.md, D1/D2): grants credits to the
+   * admin's own org with a fixed `admin_grant` ledger reason. Balance, org
+   * cache, and ledger row commit in one transaction — never raw-UPDATE the
+   * account outside this path.
+   */
+  async adminTopup(
+    orgId: string,
+    amount: number,
+    grantedByUserId: string,
+    note?: string,
+  ): Promise<{ balance: number; ledgerEntryId: string }> {
+    return this.db.transaction(async (q) => {
+      const accountId = await this.ensureAccount('org', orgId, q);
+      const { balanceAfter, entryId } = await this.credit(
+        accountId,
+        amount,
+        'admin_grant',
+        q,
+        { metadata: { grantedByUserId, ...(note ? { note } : {}) } },
+      );
+      return { balance: balanceAfter, ledgerEntryId: entryId };
+    });
+  }
+
   /** Append-only ledger, newest first (credits wallet UI, FR-E14). */
   async listLedger(accountId: string, limit = 100): Promise<LedgerEntry[]> {
     const result = await this.db.query(
