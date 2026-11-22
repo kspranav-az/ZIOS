@@ -70,8 +70,8 @@ def download_object(storage: StorageClient, object_name: str, dest_dir: Path) ->
     return dest
 
 
-def probe_media(path: Path) -> MediaMetadata:
-    """ffprobe the media file; corrupt/unreadable media raises CORRUPT_MEDIA."""
+def _probe(path: Path) -> dict:
+    """Run ffprobe -show_format -show_streams and return the parsed JSON."""
     require_ffmpeg()
     cmd = [
         "ffprobe",
@@ -89,16 +89,72 @@ def probe_media(path: Path) -> MediaMetadata:
             f"ffprobe could not read media: {result.stderr.decode('utf-8', 'ignore')[:200]}"
         )
     try:
-        info = json.loads(result.stdout.decode("utf-8"))
+        return json.loads(result.stdout.decode("utf-8"))
     except json.JSONDecodeError as exc:
         raise CorruptMediaError("ffprobe returned unparseable output") from exc
 
-    streams = info.get("streams") or []
+
+def _parse_duration_value(value: object) -> str | None:
+    """ffprobe emits missing durations as the string "N/A" — treat those as
+    absent, not as a value."""
+    if value is None:
+        return None
+    text = str(value).strip()
+    return None if not text or text.upper() == "N/A" else text
+
+
+def _extract_duration(info: dict) -> str | None:
+    """Best-effort duration from a probe result: format first, then the max
+    across streams (WebM stream durations are often present when the format
+    one is N/A). Returns the raw string so callers keep float parsing in one
+    place; None means "not found anywhere"."""
     fmt = info.get("format") or {}
-    duration_raw = fmt.get("duration")
+    format_duration = _parse_duration_value(fmt.get("duration"))
+    if format_duration is not None:
+        return format_duration
+    stream_durations = [
+        parsed
+        for parsed in (
+            _parse_duration_value(s.get("duration")) for s in (info.get("streams") or [])
+        )
+        if parsed is not None
+    ]
+    if stream_durations:
+        return max(stream_durations, key=lambda d: float(d))
+    return None
+
+
+def probe_media(path: Path) -> MediaMetadata:
+    """ffprobe the media file; corrupt/unreadable media raises CORRUPT_MEDIA.
+
+    Chrome MediaRecorder WebM files carry no Duration element in the EBML
+    header, so ``format.duration`` is N/A even for perfectly valid media.
+    Fallback chain: format duration → max stream duration → an ffmpeg
+    ``-c copy`` remux (ffmpeg writes the Duration element) re-probed the
+    same way. Only when all three fail is the media genuinely corrupt.
+    """
+    info = _probe(path)
+    duration_raw = _extract_duration(info)
+    if duration_raw is None:
+        remux_path = path.with_name(f"{path.name}.remux{path.suffix}")
+        try:
+            remux = subprocess.run(
+                ["ffmpeg", "-v", "error", "-y", "-i", str(path), "-c", "copy", str(remux_path)],
+                capture_output=True,
+                check=False,
+            )
+            if remux.returncode == 0 and remux_path.exists():
+                duration_raw = _extract_duration(_probe(remux_path))
+                if duration_raw is not None:
+                    logger.info("media_duration_recovered_via_remux", path=str(path))
+        finally:
+            remux_path.unlink(missing_ok=True)
     if duration_raw is None:
         raise CorruptMediaError("media has no readable duration")
     duration = float(duration_raw)
+
+    streams = info.get("streams") or []
+    fmt = info.get("format") or {}
 
     video_stream = next((s for s in streams if s.get("codec_type") == "video"), None)
     audio_stream = next((s for s in streams if s.get("codec_type") == "audio"), None)
