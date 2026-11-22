@@ -7,6 +7,7 @@ import type {
   CreateCandidateInviteResponse,
   Invite,
   InviteDetailResponse,
+  InviteListItem,
   ReissueInviteBody,
   RescheduleInviteBody,
   TokenResolveResponse,
@@ -17,6 +18,7 @@ import { ApiException, assertValidEmail } from '@/common/errors';
 import { DatabaseService, type Queryable } from '@/modules/database';
 import { KitVersionsRepository } from '@/modules/kits';
 import { CsvParserService, type ParsedCsvRow } from './csv-parser.service';
+import { InviteEmailService } from './invite-email.service';
 import { InvitesRepository } from './invites.repository';
 
 const DEFAULT_INVITE_TTL_DAYS = 7;
@@ -30,6 +32,7 @@ export class InvitesService {
     private readonly invites: InvitesRepository,
     private readonly kitVersions: KitVersionsRepository,
     private readonly csvParser: CsvParserService,
+    private readonly inviteEmail: InviteEmailService,
   ) {}
 
   private defaultExpiry(): Date {
@@ -88,7 +91,7 @@ export class InvitesService {
       body?.conductor === 'human' || body?.conductor === 'ai' ? body.conductor : 'ai';
 
     return this.db.transaction(async (q) => {
-      await this.loadVersionForWrite(orgId, kitVersionId, q);
+      const version = await this.loadVersionForWrite(orgId, kitVersionId, q);
       const candidate = await this.candidates.insert({ orgId, name, email, phone, externalRef }, q);
       const rawToken = TokenService.generateRaw();
       const invite = await this.invites.insert(
@@ -104,7 +107,20 @@ export class InvitesService {
         },
         q,
       );
-      return { invite, candidate, token: rawToken };
+      return { invite, candidate, token: rawToken, kitTitle: version.snapshot.kit.title };
+    }).then(({ invite, candidate, token, kitTitle }) => {
+      // Email goes out only after the transaction commits, and never blocks
+      // the invite when the adapter is down (D5).
+      if (body?.notify !== false) {
+        this.inviteEmail.sendSafely({
+          to: candidate.email,
+          candidateName: candidate.name,
+          kitTitle,
+          token,
+          expiresAt: invite.expiresAt,
+        });
+      }
+      return { invite, candidate, token };
     });
   }
 
@@ -134,19 +150,37 @@ export class InvitesService {
     const results: BulkInviteRowResult[] = [];
     let successes = 0;
     let errors = 0;
+    let kitTitle = '';
+    const emailed: Array<{ to: string; candidateName: string; token: string; expiresAt: string }> = [];
 
     await this.db.transaction(async (q) => {
-      await this.loadVersionForWrite(orgId, kitVersionId, q);
+      const version = await this.loadVersionForWrite(orgId, kitVersionId, q);
+      kitTitle = version.snapshot.kit.title;
       for (const row of parsed) {
         const rowResult = await this.processBulkRow(orgId, kitVersionId, row, q);
         results.push(rowResult);
         if (rowResult.error) {
           errors += 1;
+        } else if (rowResult.invite && rowResult.candidate && rowResult.token) {
+          successes += 1;
+          // Narrow to success rows (those carry a raw token).
+          emailed.push({
+            to: rowResult.candidate.email,
+            candidateName: rowResult.candidate.name,
+            token: rowResult.token,
+            expiresAt: new Date(rowResult.invite.expiresAt).toISOString(),
+          });
         } else {
           successes += 1;
         }
       }
     });
+
+    // Post-commit, fire-and-forget per candidate; one failing adapter call
+    // must not prevent the remaining emails or affect the response.
+    for (const { to, candidateName, token, expiresAt } of emailed) {
+      this.inviteEmail.sendSafely({ to, candidateName, kitTitle, token, expiresAt });
+    }
 
     return { total: parsed.length, successes, errors, results };
   }
@@ -185,8 +219,13 @@ export class InvitesService {
     }
   }
 
-  async list(orgId: string): Promise<Invite[]> {
-    return this.db.withTenant((q) => this.invites.listByOrg(orgId, q));
+  async list(orgId: string): Promise<InviteListItem[]> {
+    const rows = await this.db.withTenant((q) => this.invites.listByOrgWithCandidate(orgId, q));
+    return rows.map((row) => ({
+      ...row,
+      candidate: { name: row.candidateName, email: row.candidateEmail },
+      kit: { id: row.kitId, title: row.kitTitle, version: row.kitVersion },
+    }));
   }
 
   async getDetail(orgId: string, id: string): Promise<InviteDetailResponse> {
@@ -216,7 +255,7 @@ export class InvitesService {
     id: string,
     body: ReissueInviteBody,
   ): Promise<{ invite: Invite; candidate: Candidate; token: string }> {
-    return this.db.withTenant(async (q) => {
+    const { invite, candidate, token, kitTitle } = await this.db.withTenant(async (q) => {
       const invite = await this.invites.findById(orgId, id, q);
       if (!invite) {
         throw new ApiException(404, 'INVITE_NOT_FOUND', 'invite not found');
@@ -228,6 +267,7 @@ export class InvitesService {
       if (!candidate) {
         throw new ApiException(404, 'CANDIDATE_NOT_FOUND', 'candidate not found');
       }
+      const version = await this.kitVersions.findById(invite.kitVersionId, q);
       const rawToken = TokenService.generateRaw();
       const updated = await this.invites.update(
         orgId,
@@ -243,8 +283,22 @@ export class InvitesService {
       if (!updated) {
         throw new ApiException(404, 'INVITE_NOT_FOUND', 'invite not found');
       }
-      return { invite: updated, candidate, token: rawToken };
+      return {
+        invite: updated,
+        candidate,
+        token: rawToken,
+        kitTitle: version?.snapshot.kit.title ?? '',
+      };
     });
+    // A reissued link replaces the old one — always notify (D5).
+    this.inviteEmail.sendSafely({
+      to: candidate.email,
+      candidateName: candidate.name,
+      kitTitle,
+      token,
+      expiresAt: invite.expiresAt,
+    });
+    return { invite, candidate, token };
   }
 
   async reschedule(orgId: string, id: string, body: RescheduleInviteBody): Promise<Invite> {

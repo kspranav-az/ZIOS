@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import type { DashboardInterviewItem, SessionStatus } from '@zios/shared-types';
 import { Badge, Button, Card, Icon } from '@zios/ui';
 import { dashboardApi, filterDashboardInterviews } from '../../lib/dashboard-api';
@@ -144,6 +144,15 @@ export function InterviewsListPage() {
               ? 'Invite candidates to a kit to see them here.'
               : 'Try a different search term or status filter.'}
           </p>
+          {items.length === 0 && (
+            <Link
+              to="/candidates"
+              className="mt-2 inline-flex items-center gap-1 text-sm font-bold text-primary hover:underline"
+            >
+              Go to Candidates to send an invite
+              <Icon name="arrow_forward" className="text-base" />
+            </Link>
+          )}
         </Card>
       ) : (
         <Card padding="none" className="overflow-hidden">

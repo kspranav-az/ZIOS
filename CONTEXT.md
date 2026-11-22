@@ -132,6 +132,8 @@ MediaPipe pinned **0.10.21** (1.0.1 SIGABRTs on macOS/arm64, no linux/aarch64 wh
 - First OTP for a brand-new email can be rejected → hit **Resend** (known quirk).
 - Toolchain on this machine: `nvm` (Node LTS jod v22.22.2, satisfies `>=22`); pnpm 11.1.1 via corepack, shim symlinked to `~/.local/bin/pnpm` so husky/commitlint works in any shell (verified 2026-09-22).
 - hapkonic.com Cloudflare tunnel exists for LAN/remote access (livekit.hapkonic.com etc.) from earlier human-mode validation.
+- **Image rebuild trap (2026-11-22):** `docker compose up -d --build <svc>` can silently keep the stale image. Working procedure: `docker compose build <svc>` → verify with `docker run --rm zios-<svc>:latest sh -c 'grep -c <marker> <file-in-image>'` → `docker compose up -d --force-recreate <svc>`. A stale `index-*.css` 404 in the browser means the frontend image was NOT rebuilt — rebuild before debugging UI.
+- **shared-types is consumed from `dist/`:** after editing `packages/shared-types/src`, run `pnpm --filter shared-types build` or api tests fail at runtime with `undefined`.
 
 ### 7.1 Native orchestrator dev loop (recommended on this ARM Mac)
 

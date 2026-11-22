@@ -177,7 +177,7 @@ Question shape: `{ type: open_ended|mcq_single|mcq_multi|rating_scale, prompt, t
 
 ### Invites & candidates — `/invites`
 
-`POST /invites` · `POST /invites/bulk` · `GET /invites` · `GET /invites/:id` · `POST /invites/:id/reissue` (new token, old dies) · `POST /invites/:id/reschedule` · `POST /invites/-/reminders/run` (ops cron).
+`POST /invites` (optional `notify` on the body defaults true — sends the candidate an email with the entry link after commit; failure is non-fatal and the response still carries the link) · `POST /invites/bulk` (multipart `file` + `?kitVersionId=`; every successful row is emailed) · `GET /invites` (enriched roster: each item adds `candidate: {name, email}` and `kit: {id, title, version}`, newest first; token hash never exposed) · `GET /invites/:id` · `POST /invites/:id/reissue` (new token, old dies, always emailed) · `POST /invites/:id/reschedule` · `POST /invites/-/reminders/run` (ops cron).
 
 Candidate side (public): `GET /invites/by-token/:token` (session + status, no PII beyond name), `POST …/otp/request|verify` (if `otp_required`), `POST …/consent` `{ name, email }` → creates `interview_session` + `consent_record`, returns `{ session, recoveryToken }` — **the recovery token drives everything live from here**. `GET /invites/unsubscribe`.
 

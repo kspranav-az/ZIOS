@@ -10,6 +10,7 @@ import { CandidateOtpRepository } from './candidate-otp.repository';
 import { CandidateOtpService } from './candidate-otp.service';
 import { CsvParserService } from './csv-parser.service';
 import { InvitesController } from './invites.controller';
+import { InviteEmailService } from './invite-email.service';
 import { InvitesRepository } from './invites.repository';
 import { InvitesService } from './invites.service';
 import { RemindersCron } from './reminders.cron';
@@ -30,6 +31,7 @@ import { RemindersService } from './reminders.service';
     CandidateOtpRepository,
     CandidateOtpService,
     CsvParserService,
+    InviteEmailService,
     InvitesRepository,
     InvitesService,
     RemindersCron,

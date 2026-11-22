@@ -205,6 +205,8 @@ services:
         # Build-time API URL baked into the bundle (browser calls the api
         # container published on the host — see apps/employer-web/README.md)
         VITE_API_URL: ${VITE_API_URL:-http://localhost:3000}
+        # Candidate SPA base used to build copyable invite links (D9)
+        VITE_CANDIDATE_BASE_URL: ${VITE_CANDIDATE_BASE_URL:-http://localhost:5174}
     container_name: zios-employer-web
     ports:
       - '${EMPLOYER_WEB_PORT}:80'

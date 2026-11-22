@@ -896,6 +896,8 @@ export interface CreateCandidateInviteBody {
   otpRequired?: boolean;
   /** ai (default) or human-facilitated interviewer (Phase 09). */
   conductor?: SessionConductor;
+  /** Send the invite email after creation (default true; failure is non-fatal). */
+  notify?: boolean;
   metadata?: Record<string, unknown>;
 }
 
@@ -933,8 +935,17 @@ export interface RescheduleInviteBody {
   extendDays?: number;
 }
 
+/**
+ * Invite as listed in the employer roster: candidate identity and kit title
+ * are joined in, and the token hash is never exposed to the client.
+ */
+export type InviteListItem = Omit<Invite, 'tokenHash'> & {
+  candidate: { name: string; email: string };
+  kit: { id: string; title: string; version: number };
+};
+
 export interface InviteListResponse {
-  invites: Invite[];
+  invites: InviteListItem[];
 }
 
 export interface InviteDetailResponse {

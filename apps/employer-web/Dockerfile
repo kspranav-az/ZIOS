@@ -27,6 +27,9 @@ COPY apps/employer-web apps/employer-web
 ARG VITE_API_URL=http://localhost:3000
 ENV VITE_API_URL=$VITE_API_URL
 
+ARG VITE_CANDIDATE_BASE_URL=http://localhost:5174
+ENV VITE_CANDIDATE_BASE_URL=$VITE_CANDIDATE_BASE_URL
+
 RUN pnpm --filter @zios/shared-types build && pnpm --filter employer-web build
 
 FROM nginx:1.27-alpine AS serve
