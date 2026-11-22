@@ -830,7 +830,7 @@ export class AsyncVideoInterviewsService {
         q,
       );
 
-      session = await this.advanceStatus(q, session, 'scoring');
+      session = await this.advanceStatus(q, session, 'scoring', { endedAt: new Date() });
       session = await this.advanceStatus(q, session, 'reported');
 
       return this.reports.findById(report.id, q);

@@ -371,11 +371,19 @@ export function InterviewDetailPage() {
               </div>
               <div className="flex justify-between">
                 <dt className="text-on-surface-variant">Started</dt>
-                <dd className="text-on-surface">{formatDateTime(report.startedAt)}</dd>
+                <dd className="text-on-surface">
+                  {state.sessionStartedAt ? formatDateTime(state.sessionStartedAt) : '—'}
+                </dd>
               </div>
               <div className="flex justify-between">
                 <dt className="text-on-surface-variant">Completed</dt>
-                <dd className="text-on-surface">{formatDateTime(report.completedAt)}</dd>
+                <dd className="text-on-surface">
+                  {state.sessionEndedAt
+                    ? formatDateTime(state.sessionEndedAt)
+                    : report.completedAt
+                      ? formatDateTime(report.completedAt)
+                      : '—'}
+                </dd>
               </div>
             </dl>
           </Card>
