@@ -67,7 +67,7 @@ describe('invitesApi.create / reissue / reschedule', () => {
       expect.stringContaining('/invites/inv-1/reissue|POST'),
       expect.stringContaining('/invites/inv-1/reschedule|POST'),
     ]);
-    const headers = new Headers((fetchMock.mock.calls[0][1] as RequestInit).headers);
+    const headers = new Headers((fetchMock.mock.calls[0]![1] as RequestInit).headers);
     expect(headers.get('Content-Type')).toBe('application/json');
   });
 });

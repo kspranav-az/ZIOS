@@ -64,6 +64,13 @@ export function SendInterviewDialog({ open, onClose, onSent }: SendInterviewDial
     [versions],
   );
 
+  // The reset effect must react to `open` ONLY: parents pass inline
+  // onClose/onSent arrows, so depending on them re-runs the reset on every
+  // parent render (e.g. the roster refetch after create) and wipes the
+  // copy-once success state.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   useEffect(() => {
     if (!open) return undefined;
     setTab('single');
@@ -94,14 +101,14 @@ export function SendInterviewDialog({ open, onClose, onSent }: SendInterviewDial
       });
 
     function onEscape(event: KeyboardEvent) {
-      if (event.key === 'Escape') onClose();
+      if (event.key === 'Escape') onCloseRef.current();
     }
     document.addEventListener('keydown', onEscape);
     return () => {
       cancelled = true;
       document.removeEventListener('keydown', onEscape);
     };
-  }, [open, onClose]);
+  }, [open]);
 
   // Version picker follows the kit picker (D3: published versions only —
   // the versions endpoint only lists published snapshots).
