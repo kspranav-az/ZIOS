@@ -1,15 +1,17 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Card, Icon } from '@zios/ui';
+import type { DashboardSummaryResponse } from '@zios/shared-types';
 import { useAuth } from '../../auth/AuthContext';
 import { InviteDialog } from './InviteDialog';
+import { dashboardApi } from '../../lib/dashboard-api';
+import { SESSION_STATUS_LABELS, formatDate } from '../reports/report-utils';
 
 /**
  * Dashboard — structure ported from the reference's
  * pages/Recruiter/Recruiterdashboard.jsx (welcome header, stat cards,
- * pipeline overview, upcoming interviews, quick actions). Live data arrives
- * with the candidates/interviews phases; until then sections render their
- * empty states against the signed-in org.
+ * pipeline overview, upcoming interviews, quick actions). All numbers come
+ * from GET /dashboard/summary; empty states render when the org has no data.
  */
 
 const STAT_CARDS = [
@@ -53,8 +55,14 @@ const PIPELINE_STAGES = [
   { id: 'screening', label: 'AI Screening', bg: 'bg-primary-container', inverse: true },
   { id: 'technical', label: 'Technical', bg: 'bg-surface-container-highest', inverse: false },
   { id: 'final', label: 'Final', bg: 'bg-surface-variant', inverse: false },
-  { id: 'offer', label: 'Offers', bg: 'bg-secondary-container', inverse: true },
+  { id: 'offers', label: 'Offers', bg: 'bg-secondary-container', inverse: true },
 ] as const;
+
+const MODE_ICONS: Record<string, string> = {
+  text: 'chat',
+  voice: 'mic',
+  video: 'videocam',
+};
 
 function greeting(): string {
   const hour = new Date().getHours();
@@ -67,9 +75,42 @@ export function DashboardPage() {
   const { state } = useAuth();
   const navigate = useNavigate();
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [summary, setSummary] = useState<DashboardSummaryResponse | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    dashboardApi
+      .getSummary()
+      .then((data) => {
+        if (!cancelled) setSummary(data);
+      })
+      .catch(() => {
+        // Summary failure is non-fatal — sections render their empty states.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const firstName = state.status === 'authenticated' ? state.user.name.split(' ')[0] : '';
   const isAdmin = state.status === 'authenticated' && state.user.role === 'admin';
+  const stats = summary?.stats;
+  const pipeline = summary?.pipeline;
+  const statValues: Record<(typeof STAT_CARDS)[number]['id'], string> = {
+    candidates: String(stats?.totalCandidates ?? 0),
+    jobs: String(stats?.activeJobs ?? 0),
+    interviews: String(stats?.totalInterviews ?? 0),
+    tth: summary?.timeToHireDays != null ? `${summary.timeToHireDays}d` : '—',
+  };
+  const pipelineValues: Record<(typeof PIPELINE_STAGES)[number]['id'], number> = {
+    sourced: pipeline?.sourced ?? 0,
+    applied: pipeline?.applied ?? 0,
+    screening: pipeline?.screening ?? 0,
+    technical: pipeline?.technical ?? 0,
+    final: pipeline?.final ?? 0,
+    offers: pipeline?.offers ?? 0,
+  };
+  const pipelineBase = Math.max(pipelineValues.sourced, 1);
 
   return (
     <div>
@@ -80,7 +121,9 @@ export function DashboardPage() {
             {greeting()}, {firstName}
           </h2>
           <p className="font-body-lg text-body-lg text-on-surface-variant mt-2">
-            You have 0 interviews scheduled for today and 0 pending score reviews.
+            You have {stats?.pendingReviews ?? 0} interview
+            {(stats?.pendingReviews ?? 0) === 1 ? '' : 's'} pending score review and{' '}
+            {stats?.liveNow ?? 0} in progress.
           </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-3 self-start md:self-auto">
@@ -110,9 +153,14 @@ export function DashboardPage() {
             <p className="text-on-surface-variant text-sm font-label-bold uppercase tracking-wider">
               {stat.label}
             </p>
-            <h3 className="text-headline-md font-headline-md text-primary mt-1.5">0</h3>
+            <h3 className="text-headline-md font-headline-md text-primary mt-1.5">
+              {statValues[stat.id]}
+            </h3>
             <div className="mt-4 h-1 w-full bg-surface-container rounded-full overflow-hidden">
-              <div className={`h-full ${stat.barColor}`} style={{ width: '0%' }} />
+              <div
+                className={`h-full ${stat.barColor}`}
+                style={{ width: `${stat.id === 'tth' ? 0 : Math.min(100, (Number(statValues[stat.id]) / pipelineBase) * 100)}%` }}
+              />
             </div>
           </Card>
         ))}
@@ -141,7 +189,7 @@ export function DashboardPage() {
               <span
                 className={`text-2xl font-bold ${stage.inverse ? 'text-on-primary' : 'text-primary'}`}
               >
-                0
+                {pipelineValues[stage.id]}
               </span>
               <p
                 className={`text-xs font-label-bold uppercase mt-1 ${
@@ -161,20 +209,53 @@ export function DashboardPage() {
           <div className="p-6 border-b border-surface-variant/50 flex justify-between items-center">
             <h4 className="font-headline-sm text-headline-sm text-primary">Upcoming Interviews</h4>
             <span className="bg-secondary/10 text-secondary px-3 py-1 rounded-full text-xs font-label-bold">
-              0 Today
+              {(summary?.awaiting.length ?? 0)} Awaiting candidate
             </span>
           </div>
-          <div className="p-12 flex flex-col items-center text-center gap-3">
-            <div className="w-14 h-14 rounded-full bg-surface-container-low flex items-center justify-center">
-              <Icon name="event_available" className="text-2xl text-outline" />
+          {summary && summary.awaiting.length > 0 ? (
+            <ul className="divide-y divide-surface-variant/50">
+              {summary.awaiting.map((item) => (
+                <li key={item.sessionId}>
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/interviews/${item.sessionId}`)}
+                    className="w-full flex items-center gap-4 px-6 py-4 text-left hover:bg-surface-container-low transition-colors"
+                  >
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-container/20">
+                      <Icon
+                        name={MODE_ICONS[item.mode] ?? 'chat'}
+                        className="text-primary-container"
+                      />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-label-bold text-primary truncate">
+                        {item.candidateName}
+                      </p>
+                      <p className="text-sm text-on-surface-variant">
+                        {SESSION_STATUS_LABELS[item.status]} · invited{' '}
+                        {formatDate(item.createdAt)}
+                      </p>
+                    </div>
+                    <Icon name="chevron_right" className="text-outline" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="p-12 flex flex-col items-center text-center gap-3">
+              <div className="w-14 h-14 rounded-full bg-surface-container-low flex items-center justify-center">
+                <Icon name="event_available" className="text-2xl text-outline" />
+              </div>
+              <div>
+                <p className="font-label-bold text-label-bold text-primary">
+                  No interviews awaiting candidates
+                </p>
+                <p className="text-sm text-on-surface-variant mt-1">
+                  Nothing in progress right now. Schedule one to get started.
+                </p>
+              </div>
             </div>
-            <div>
-              <p className="font-label-bold text-label-bold text-primary">No interviews today</p>
-              <p className="text-sm text-on-surface-variant mt-1">
-                Nothing on the calendar for today yet. Schedule one to get started.
-              </p>
-            </div>
-          </div>
+          )}
         </Card>
 
         <div className="bg-primary text-white p-8 rounded-3xl shadow-xl flex flex-col justify-between relative overflow-hidden group">

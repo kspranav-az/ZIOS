@@ -1,6 +1,7 @@
 import type {
   DashboardInterviewItem,
   DashboardListResponse,
+  DashboardSummaryResponse,
   SessionStatus,
 } from '@zios/shared-types';
 import { apiFetch } from './api';
@@ -25,6 +26,9 @@ export const dashboardApi = {
     const qs = params.toString();
     return apiFetch<DashboardListResponse>(`/dashboard/interviews${qs ? `?${qs}` : ''}`);
   },
+
+  /** Aggregate stats, pipeline, time-to-hire, and awaiting candidates for the landing page. */
+  getSummary: () => apiFetch<DashboardSummaryResponse>('/dashboard/summary'),
 };
 
 /** Client-side filter used when the backend only paginates and the UI still

@@ -1417,6 +1417,37 @@ export interface DashboardListResponse {
   totalPages: number;
 }
 
+/** A session the candidate has not finished yet — drives the dashboard's awaiting list. */
+export interface DashboardAwaitingItem {
+  sessionId: string;
+  candidateName: string;
+  mode: InterviewMode;
+  status: SessionStatus;
+  createdAt: string;
+}
+
+export interface DashboardSummaryResponse {
+  stats: {
+    totalCandidates: number;
+    activeJobs: number;
+    totalInterviews: number;
+    pendingReviews: number;
+    liveNow: number;
+  };
+  /** Cumulative counts over session statuses (sourced ⊇ applied ⊇ … ⊇ offers). */
+  pipeline: {
+    sourced: number;
+    applied: number;
+    screening: number;
+    technical: number;
+    final: number;
+    offers: number;
+  };
+  /** Avg days invite→interview end over finished sessions; null when none. */
+  timeToHireDays: number | null;
+  awaiting: DashboardAwaitingItem[];
+}
+
 export interface PublicReportResponse {
   report: EvaluationReport;
   scores: EvaluationScore[];

@@ -1,10 +1,22 @@
 import { Controller, Get, Query } from '@nestjs/common';
-import type { AppUser, DashboardListResponse } from '@zios/shared-types';
+import type { AppUser, DashboardListResponse, DashboardSummaryResponse } from '@zios/shared-types';
 import { CurrentUser } from '@/common/decorators';
 import { DatabaseService } from '@/modules/database';
 
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 100;
+
+/** State-machine order used for cumulative pipeline counts ('abandoned' excluded). */
+const PIPELINE_ORDER = [
+  'invited',
+  'consented',
+  'preflight',
+  'live',
+  'completed',
+  'scoring',
+  'reported',
+  'reviewed',
+] as const;
 
 @Controller('dashboard')
 export class DashboardController {
@@ -110,5 +122,87 @@ export class DashboardController {
 
     const totalPages = Math.ceil(total / size);
     return { items, page: pageNum, pageSize: size, total, totalPages };
+  }
+
+  /**
+   * Dashboard aggregates: stat cards, cumulative pipeline counts, avg
+   * time-to-hire, and sessions still awaiting the candidate. Org-scoped;
+   * powers the employer dashboard landing page.
+   */
+  @Get('summary')
+  async summary(@CurrentUser() user: AppUser): Promise<DashboardSummaryResponse> {
+    const orgId = user.orgId;
+    const count = async (sql: string): Promise<number> => {
+      const result = await this.db.query(sql, [orgId]);
+      return Number((result.rows[0] as { n: string }).n);
+    };
+    const scoped =
+      'FROM interview_session s JOIN invite i ON i.id = s.invite_id WHERE i.org_id = $1';
+
+    const [totalCandidates, activeJobs, totalInterviews, pendingReviews, liveNow, tth, byStatus, awaiting] =
+      await Promise.all([
+        count(`SELECT COUNT(DISTINCT i.candidate_id) AS n FROM invite i WHERE i.org_id = $1`),
+        count(`SELECT COUNT(*) AS n FROM kit k WHERE k.org_id = $1`),
+        count(`SELECT COUNT(*) AS n ${scoped}`),
+        count(`SELECT COUNT(*) AS n ${scoped} AND s.status = 'reported'`),
+        count(`SELECT COUNT(*) AS n ${scoped} AND s.status = 'live'`),
+        this.db.query(
+          `SELECT AVG(s.ended_at::date - i.created_at::date) AS n ${scoped} AND s.ended_at IS NOT NULL`,
+          [orgId],
+        ),
+        this.db.query(
+          `SELECT s.status, COUNT(*)::int AS n ${scoped} GROUP BY s.status`,
+          [orgId],
+        ),
+        this.db.query(
+          `SELECT s.id, c.name, s.mode, s.status, s.created_at
+           FROM interview_session s
+           JOIN invite i ON i.id = s.invite_id
+           JOIN candidate c ON c.id = i.candidate_id
+           WHERE i.org_id = $1 AND s.status IN ('invited', 'consented', 'preflight')
+           ORDER BY s.created_at DESC LIMIT 5`,
+          [orgId],
+        ),
+      ]);
+
+    const statusCounts = new Map<string, number>(
+      (byStatus.rows as { status: string; n: number }[]).map((r) => [r.status, Number(r.n)]),
+    );
+    const cumulative = (fromIndex: number): number =>
+      PIPELINE_ORDER.slice(fromIndex).reduce((sum, status) => sum + (statusCounts.get(status) ?? 0), 0);
+
+    const tthRow = (tth.rows[0] as { n: string | null } | undefined)?.n;
+
+    return {
+      stats: {
+        totalCandidates,
+        activeJobs,
+        totalInterviews,
+        pendingReviews,
+        liveNow,
+      },
+      pipeline: {
+        sourced: cumulative(0),
+        applied: cumulative(1),
+        screening: cumulative(2),
+        technical: cumulative(3),
+        final: cumulative(4),
+        offers: cumulative(7),
+      },
+      timeToHireDays: tthRow === null || tthRow === undefined ? null : Math.round(Number(tthRow)),
+      awaiting: (awaiting.rows as {
+        id: string;
+        name: string;
+        mode: string;
+        status: string;
+        created_at: Date;
+      }[]).map((row) => ({
+        sessionId: row.id,
+        candidateName: row.name,
+        mode: row.mode as DashboardSummaryResponse['awaiting'][number]['mode'],
+        status: row.status as DashboardSummaryResponse['awaiting'][number]['status'],
+        createdAt: row.created_at.toISOString(),
+      })),
+    };
   }
 }
