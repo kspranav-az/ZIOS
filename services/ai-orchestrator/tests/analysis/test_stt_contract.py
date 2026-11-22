@@ -186,9 +186,20 @@ def test_factory_unknown_adapter_raises() -> None:
         build_stt_adapter(load_settings({"STT_ADAPTER": "bogus"}))
 
 
-def test_factory_gcp_requires_project_id() -> None:
+def test_factory_gcp_without_project_id_falls_back_to_mock() -> None:
+    """gcp is the default real adapter; a keyless environment must still boot
+    (loud warning + mock), not crash — the adapter itself stays fail-loud."""
     from app.analysis.config import load_settings
     from app.analysis.stt.factory import build_stt_adapter
 
-    with pytest.raises(SttError, match="GCP_PROJECT_ID"):
-        build_stt_adapter(load_settings({"STT_ADAPTER": "gcp"}))
+    adapter = build_stt_adapter(load_settings({"STT_ADAPTER": "gcp"}))
+    assert isinstance(adapter, MockSttAdapter)
+
+
+def test_factory_defaults_to_gcp_with_mock_fallback() -> None:
+    from app.analysis.config import load_settings
+    from app.analysis.stt.factory import build_stt_adapter
+
+    adapter = build_stt_adapter(load_settings({}))
+    # No GCP_PROJECT_ID in the empty source: graceful mock fallback.
+    assert isinstance(adapter, MockSttAdapter)

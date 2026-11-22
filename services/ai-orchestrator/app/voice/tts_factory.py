@@ -1,9 +1,10 @@
 """Selects the concrete ``TtsPort`` implementation from ``TTS_ADAPTER``.
 
-Mirrors ``app/analysis/stt/factory.py``: mock is the hermetic default for
-tests/CI; piper is the real local neural voice; gemini is the managed cloud
-voice (``gemini-3.8-flash-lite-tts``, requires ``GEMINI_API_KEY``). Unknown
-values fail loudly at build time, not mid-turn.
+Mirrors ``app/analysis/stt/factory.py``: gemini is the default real voice
+(``gemini-3.8-flash-lite-tts``, requires ``GEMINI_API_KEY``); piper is the
+local offline neural voice; mock is synthetic silence for tests/CI. Gemini
+without a key degrades to mock with a loud warning so hermetic environments
+still boot. Unknown values fail loudly at build time, not mid-turn.
 """
 
 from __future__ import annotations
@@ -23,7 +24,7 @@ _VALID = ("mock", "piper", "gemini")
 
 
 def build_tts_adapter() -> TtsPort:
-    name = os.environ.get("TTS_ADAPTER", "mock").strip().lower() or "mock"
+    name = os.environ.get("TTS_ADAPTER", "gemini").strip().lower() or "gemini"
     if name == "mock":
         logger.info("tts_adapter_selected", adapter="mock")
         return MockTtsAdapter()
@@ -31,6 +32,13 @@ def build_tts_adapter() -> TtsPort:
         logger.info("tts_adapter_selected", adapter="piper")
         return PiperTtsAdapter()
     if name == "gemini":
+        try:
+            adapter = GeminiTtsAdapter()
+        except ValueError as exc:
+            # Gemini is the default: a keyless environment (CI, fresh clone)
+            # must still boot — loudly, not silently.
+            logger.warning("tts_gemini_unavailable_falling_back_to_mock", error=str(exc))
+            return MockTtsAdapter()
         logger.info("tts_adapter_selected", adapter="gemini")
-        return GeminiTtsAdapter()
+        return adapter
     raise ValueError(f"unknown TTS_ADAPTER {name!r}; expected one of: {', '.join(_VALID)}")
