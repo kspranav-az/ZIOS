@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Badge, Button, Card, Icon } from '@zios/ui';
 import { useAuth } from '../../auth/AuthContext';
 import { useToast } from '../../components/Toast';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
 import {
   createApiKey,
   listApiKeys,
@@ -73,7 +74,12 @@ export function ApiKeysPage() {
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [newKind, setNewKind] = useState<'test' | 'live'>('test');
+  const [newLabel, setNewLabel] = useState('');
   const [reveal, setReveal] = useState<CreatedApiKeyView | null>(null);
+  const [confirmKey, setConfirmKey] = useState<{ action: 'rotate' | 'revoke'; key: ApiKeyView } | null>(
+    null,
+  );
+  const [actionBusy, setActionBusy] = useState(false);
   const isAdmin = state.status === 'authenticated' && state.user.role === 'admin';
 
   const reload = useCallback(async () => {
@@ -93,8 +99,10 @@ export function ApiKeysPage() {
   async function handleCreate() {
     setCreating(true);
     try {
-      const created = await createApiKey({ kind: newKind });
+      const label = newLabel.trim();
+      const created = await createApiKey({ kind: newKind, ...(label ? { label } : {}) });
       setReveal(created);
+      setNewLabel('');
       await reload();
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Failed to create key', 'error');
@@ -104,22 +112,39 @@ export function ApiKeysPage() {
   }
 
   async function handleRotate(key: ApiKeyView) {
+    setActionBusy(true);
     try {
       const rotated = await rotateApiKey(key.id);
       setReveal(rotated);
       await reload();
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Failed to rotate key', 'error');
+    } finally {
+      setActionBusy(false);
+      setConfirmKey(null);
     }
   }
 
   async function handleRevoke(key: ApiKeyView) {
+    setActionBusy(true);
     try {
       await revokeApiKey(key.id);
       toast(`Key ${key.prefix}… revoked`, 'success');
       await reload();
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Failed to revoke key', 'error');
+    } finally {
+      setActionBusy(false);
+      setConfirmKey(null);
+    }
+  }
+
+  function runConfirmKeyAction() {
+    if (!confirmKey) return;
+    if (confirmKey.action === 'rotate') {
+      void handleRotate(confirmKey.key);
+    } else {
+      void handleRevoke(confirmKey.key);
     }
   }
 
@@ -135,7 +160,15 @@ export function ApiKeysPage() {
           </p>
         </div>
         {isAdmin && (
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <input
+              type="text"
+              value={newLabel}
+              onChange={(event) => setNewLabel(event.target.value)}
+              placeholder="Label (e.g. Greenhouse ATS)"
+              aria-label="Key label"
+              className="min-w-56 rounded-full border-none bg-surface-container-low px-4 py-2.5 text-sm text-on-surface outline-none placeholder:text-on-surface-variant/60 focus:ring-2 focus:ring-primary/10"
+            />
             <select
               value={newKind}
               onChange={(event) => setNewKind(event.target.value as 'test' | 'live')}
@@ -243,14 +276,14 @@ export function ApiKeysPage() {
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
-                          onClick={() => void handleRotate(key)}
+                          onClick={() => setConfirmKey({ action: 'rotate', key })}
                           className="text-primary hover:text-primary/80 text-sm font-label-bold"
                         >
                           Rotate
                         </button>
                         <button
                           type="button"
-                          onClick={() => void handleRevoke(key)}
+                          onClick={() => setConfirmKey({ action: 'revoke', key })}
                           className="text-error hover:text-error/80 text-sm font-label-bold"
                         >
                           Revoke
@@ -266,6 +299,21 @@ export function ApiKeysPage() {
       </Card>
 
       {reveal && <KeyRevealModal created={reveal} onClose={() => setReveal(null)} />}
+
+      <ConfirmDialog
+        open={confirmKey !== null}
+        title={confirmKey?.action === 'rotate' ? 'Rotate this API key?' : 'Revoke this API key?'}
+        description={
+          confirmKey?.action === 'rotate'
+            ? `A new key replaces ${confirmKey.key.prefix}… immediately. The full new key is shown once — update your integration right away.`
+            : `Key ${confirmKey?.key.prefix ?? ''}… stops working immediately. Integrations using it will fail.`
+        }
+        confirmLabel={confirmKey?.action === 'rotate' ? 'Rotate key' : 'Revoke key'}
+        tone={confirmKey?.action === 'revoke' ? 'danger' : 'primary'}
+        busy={actionBusy}
+        onConfirm={runConfirmKeyAction}
+        onCancel={() => setConfirmKey(null)}
+      />
     </div>
   );
 }

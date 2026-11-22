@@ -13,10 +13,11 @@ vi.mock('../api', () => ({
   fetchWallet: vi.fn(),
   fetchMe: vi.fn(),
   fetchReadiness: vi.fn(),
+  fetchHistory: vi.fn(),
   logout: vi.fn(),
 }));
 
-import { fetchMe, fetchReadiness } from '../api';
+import { fetchHistory, fetchMe, fetchReadiness, fetchWallet } from '../api';
 import { HomePage } from './HomePage';
 
 const account = {
@@ -40,6 +41,15 @@ function renderPage() {
 describe('HomePage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(fetchHistory).mockResolvedValue({
+      practice: { sessions: [], trends: [], streak: { current: 0 }, dailyCap: 3 },
+      company: [],
+    });
+    vi.mocked(fetchWallet).mockResolvedValue({
+      balance: 25,
+      lowBalanceThreshold: 5,
+      ledger: [],
+    });
   });
 
   it('shows the readiness empty state before any judged mock', async () => {

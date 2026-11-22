@@ -1,4 +1,5 @@
 import type {
+  DashboardAnalyticsResponse,
   DashboardInterviewItem,
   DashboardListResponse,
   DashboardSummaryResponse,
@@ -29,6 +30,10 @@ export const dashboardApi = {
 
   /** Aggregate stats, pipeline, time-to-hire, and awaiting candidates for the landing page. */
   getSummary: () => apiFetch<DashboardSummaryResponse>('/dashboard/summary'),
+
+  /** Timeframed KPIs + daily volume series for the Analytics page. */
+  getAnalytics: (days: number) =>
+    apiFetch<DashboardAnalyticsResponse>(`/dashboard/analytics?days=${days}`),
 };
 
 /** Client-side filter used when the backend only paginates and the UI still
