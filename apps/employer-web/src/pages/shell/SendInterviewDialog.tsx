@@ -504,7 +504,7 @@ export function SendInterviewDialog({ open, onClose, onSent }: SendInterviewDial
 }
 
 /** Copy-once link display shared by single and bulk success states (D4). */
-function LinkSuccess({
+export function LinkSuccess({
   title,
   description,
   links,
